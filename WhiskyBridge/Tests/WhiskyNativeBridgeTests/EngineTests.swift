@@ -241,6 +241,13 @@ private func containerParam(_ fixture: EngineFixture) -> [String: JSONValue] {
     let fixture = try EngineFixture()
     defer { fixture.remove() }
     let service = engineService(fixture: fixture)
+    // Reach the busy check without depending on an installed managed runtime.
+    let registered = try await service.call(
+        "wine.engines.register",
+        params: ["path": .string(fixture.engineRoot.path)],
+        workspace: fixture.workspace
+    )
+    let engineID = try #require(registered.object?["id"]?.string)
 
     // Hold a lifecycle job open so `hasLifecycleOperation` is true.
     let gate = JobGate()
@@ -251,7 +258,7 @@ private func containerParam(_ fixture: EngineFixture) -> [String: JSONValue] {
     #expect(service.jobs.hasLifecycleOperation)
 
     var params = containerParam(fixture)
-    params["id"] = .string(WineEngine.managedID)
+    params["id"] = .string(engineID)
     do {
         _ = try await service.call("wine.engines.select", params: params, workspace: fixture.workspace)
         Issue.record("select on a busy container must fail")
@@ -259,6 +266,10 @@ private func containerParam(_ fixture: EngineFixture) -> [String: JSONValue] {
         #expect(error.code == "container_busy")
     }
     await gate.open()
+    let selection = try await service.call(
+        "wine.engines.selection", params: containerParam(fixture), workspace: fixture.workspace
+    )
+    #expect(selection.object?["engineID"] == .string(WineEngine.managedID))
 }
 
 /// A thread-safe capture for the injected probe.

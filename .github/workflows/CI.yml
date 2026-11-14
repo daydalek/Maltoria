@@ -92,18 +92,18 @@ jobs:
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
       
-      # Cache includes WhiskyKit/.build because swift build/test creates
-      # build artifacts there (unlike xcodebuild which uses DerivedData)
+      # Swift/Clang modules embed absolute checkout and toolchain paths.
+      # Cache downloaded dependencies only, never compiled .build products.
       - name: Cache SPM Dependencies
         uses: actions/cache@v5
         with:
           path: |
-            ~/Library/Developer/Xcode/DerivedData/*/SourcePackages
-            .build
-            WhiskyKit/.build
-          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+            WhiskyKit/.build/checkouts
+            WhiskyKit/.build/repositories
+            WhiskyKit/.build/artifacts
+          key: ${{ runner.os }}-${{ runner.arch }}-spm-sources-v2-${{ hashFiles('**/Package.resolved') }}
           restore-keys: |
-            ${{ runner.os }}-spm-
+            ${{ runner.os }}-${{ runner.arch }}-spm-sources-v2-
       
       - name: Show Swift version
         run: swift --version
