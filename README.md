@@ -18,6 +18,8 @@
 
 目前提供面向macOS(aarch64)和Linux(x86_64)用户的安装包,点击下方链接即可直接下载最新版本
 
+当前版本：[**v0.6.0（预发布）**](https://github.com/daydalek/Maltoria/releases/tag/v0.6.0) · [官网与界面预览](https://daydalek.github.io/Maltoria/)
+
 <!-- 每次发布新版本后,请同步更新下表中的版本号与直链. -->
 | 平台 | 安装包 |
 | --- | --- |

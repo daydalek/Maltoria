@@ -6,6 +6,7 @@ on:
     paths-ignore: &docs-paths
       - '**.md'
       - 'docs/**'
+      - 'dist/pages/**'
       - 'images/**'
       - 'LICENSE'
   pull_request:
