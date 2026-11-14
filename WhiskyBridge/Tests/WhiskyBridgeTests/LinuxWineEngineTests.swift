@@ -49,6 +49,31 @@ struct LinuxWineEngineTests {
         exclusive.release()
     }
 
+    #if os(Linux)
+    @Test func terminationEscalatesWhenChildIgnoresSIGTERM() async throws {
+        let process = LinuxManagedProcess()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        let ready = Pipe()
+        process.arguments = ["-c", "trap '' TERM; printf ready; sleep 6"]
+        process.standardOutput = ready.fileHandleForWriting
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        defer {
+            if process.isRunning { _ = Glibc.kill(process.processIdentifier, SIGKILL) }
+        }
+        try ready.fileHandleForWriting.close()
+        defer { try? ready.fileHandleForReading.close() }
+        #expect(try ready.fileHandleForReading.read(upToCount: 5) == Data("ready".utf8))
+        process.terminate()
+        let deadline = ContinuousClock.now + .seconds(3)
+        while process.isRunning, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(!process.isRunning)
+        #expect(process.terminationStatus == SIGKILL)
+    }
+    #endif
+
     private static func currentHostArchitecture() -> String {
         var name = utsname()
         guard uname(&name) == 0 else { return "x86_64" }

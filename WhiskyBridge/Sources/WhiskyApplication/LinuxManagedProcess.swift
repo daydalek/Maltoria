@@ -170,9 +170,20 @@ public final class LinuxManagedProcess: @unchecked Sendable {
     }
 
     public func terminate() {
-        lock.withLock {
-            guard _isRunning, _processIdentifier > 0 else { return }
+        let child: Int32? = lock.withLock {
+            guard _isRunning, _processIdentifier > 0 else { return nil }
             _ = Glibc.kill(_processIdentifier, SIGTERM)
+            return _processIdentifier
+        }
+        guard let child else { return }
+        // A Wine helper can ignore SIGTERM. Bound cancellation without killing
+        // unrelated processes: the same lock serializes escalation with reaping.
+        Task.detached { [self] in
+            try? await Task.sleep(for: .seconds(1))
+            lock.withLock {
+                guard _isRunning, _processIdentifier == child else { return }
+                _ = Glibc.kill(child, SIGKILL)
+            }
         }
     }
 
