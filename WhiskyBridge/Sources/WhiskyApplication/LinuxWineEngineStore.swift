@@ -267,7 +267,13 @@ public final class LinuxWineEngineStore {
         list().engines.contains { $0.available }
     }
 
-    public func resolveHost(for container: URL) throws -> (engine: LinuxWineEngine, host: LinuxWineHost, overrides: [String: String]) {
+    public struct ResolvedHost: Sendable {
+        public let engine: LinuxWineEngine
+        public let host: LinuxWineHost
+        public let overrides: [String: String]
+    }
+
+    public func resolveHost(for container: URL) throws -> ResolvedHost {
         let binding = try ConfigurationFile.wineEngineBinding(
             at: container.appendingPathComponent("Metadata.plist")
         )
@@ -278,7 +284,7 @@ public final class LinuxWineEngineStore {
                 engine.error ?? "The Wine runtime cannot run on this host"
             )
         }
-        return (engine, host, binding.featureOverrides)
+        return ResolvedHost(engine: engine, host: host, overrides: binding.featureOverrides)
     }
 
     public func acquireSharedLease(for engineID: String) throws -> LinuxWineEngineLease {
@@ -356,15 +362,15 @@ public final class LinuxWineEngineStore {
             at: lockURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        let fd = open(lockURL.path, O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, mode_t(0o600))
-        guard fd >= 0 else {
+        let descriptor = open(lockURL.path, O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, mode_t(0o600))
+        guard descriptor >= 0 else {
             throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
         }
         defer {
-            _ = flock(fd, LOCK_UN)
-            close(fd)
+            _ = flock(descriptor, LOCK_UN)
+            close(descriptor)
         }
-        guard flock(fd, (exclusive ? LOCK_EX : LOCK_SH) | LOCK_NB) == 0 else {
+        guard flock(descriptor, (exclusive ? LOCK_EX : LOCK_SH) | LOCK_NB) == 0 else {
             let err = errno
             if err == EWOULDBLOCK || err == EAGAIN {
                 throw BridgeFailure("engine_busy", "Wine engine registry is busy", retryable: true)

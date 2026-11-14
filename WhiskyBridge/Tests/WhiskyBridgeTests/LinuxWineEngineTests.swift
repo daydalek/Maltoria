@@ -29,6 +29,26 @@ import Darwin
 
 @Suite("Linux custom Wine engines")
 struct LinuxWineEngineTests {
+    @Test func sharedEngineLeaseBlocksMutationUntilConcurrentReleaseCompletes() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let lease = try LinuxWineEngineLease.acquireShared(engineID: "test", locksDirectory: directory)
+        do {
+            _ = try LinuxWineEngineLease.acquireExclusive(engineID: "test", locksDirectory: directory)
+            Issue.record("A shared lease must block exclusive mutation")
+        } catch let failure as BridgeFailure {
+            #expect(failure.code == "engine_busy")
+        }
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0 ..< 100 {
+                group.addTask { lease.release() }
+            }
+        }
+        let exclusive = try LinuxWineEngineLease.acquireExclusive(engineID: "test", locksDirectory: directory)
+        exclusive.release()
+        exclusive.release()
+    }
+
     private static func currentHostArchitecture() -> String {
         var name = utsname()
         guard uname(&name) == 0 else { return "x86_64" }
@@ -154,7 +174,8 @@ struct LinuxWineEngineTests {
         let scriptRoot = temp.appendingPathComponent("script-engine", isDirectory: true)
         try Self.makeELFEngineTree(at: scriptRoot)
         try Data("#!/bin/sh\nexit 0\n".utf8).write(to: scriptRoot.appendingPathComponent("bin/wine"))
-        #expect(throws: LinuxWineEngineError.invalidBinary(scriptRoot.appendingPathComponent("bin/wine").resolvingSymlinksInPath())) {
+        #expect(throws: LinuxWineEngineError
+            .invalidBinary(scriptRoot.appendingPathComponent("bin/wine").resolvingSymlinksInPath())) {
             _ = try LinuxWineEngine.detect(id: "bad-script", at: scriptRoot)
         }
 
@@ -189,7 +210,10 @@ struct LinuxWineEngineTests {
         let store = await MainActor.run {
             LinuxWineEngineStore(
                 registryURL: registryURL,
-                managedProvider: { LinuxWineEngineStore.ManagedRuntimeState(runtimeURL: nil, defaultPath: temp.appendingPathComponent("managed")) },
+                managedProvider: { LinuxWineEngineStore.ManagedRuntimeState(
+                    runtimeURL: nil,
+                    defaultPath: temp.appendingPathComponent("managed")
+                ) },
                 environmentProvider: { ["PATH": "/usr/bin:/bin"] }
             )
         }
@@ -222,6 +246,8 @@ struct LinuxWineEngineTests {
         }
     }
 
+    // This scenario intentionally retains one registry and bottle across the lifecycle.
+    // swiftlint:disable:next function_body_length
     @Test func bridgeEngineLifecycleSelectionOverridesAndLaunchGating() async throws {
         let temp = FileManager.default.temporaryDirectory
             .appendingPathComponent("linux-engine-bridge-\(UUID())", isDirectory: true)
@@ -340,8 +366,9 @@ struct LinuxWineEngineTests {
         }
 
         // Launch config gates unconfirmed esync & dxvkAsync.
-        let (resolvedEngine, _, unconfirmedOverrides) = await MainActor.run {
-            try! store.resolveHost(for: bottle)
+        let (resolvedEngine, _, unconfirmedOverrides) = try await MainActor.run {
+            let resolved = try store.resolveHost(for: bottle)
+            return (resolved.engine, resolved.host, resolved.overrides)
         }
         let gatedConfig = LinuxLaunchConfiguration.compose(
             values: [
@@ -390,8 +417,9 @@ struct LinuxWineEngineTests {
                 .object?["choices"]?.object?["esync"]?.object?["disabled"] == .bool(false)
         )
 
-        let (_, _, updatedOverrides) = await MainActor.run {
-            try! store.resolveHost(for: bottle)
+        let (_, _, updatedOverrides) = try await MainActor.run {
+            let resolved = try store.resolveHost(for: bottle)
+            return (resolved.engine, resolved.host, resolved.overrides)
         }
         let esyncOnlyConfig = LinuxLaunchConfiguration.compose(
             values: [
@@ -419,8 +447,9 @@ struct LinuxWineEngineTests {
             ],
             workspace: workspace
         )
-        let (_, _, fullOverrides) = await MainActor.run {
-            try! store.resolveHost(for: bottle)
+        let (_, _, fullOverrides) = try await MainActor.run {
+            let resolved = try store.resolveHost(for: bottle)
+            return (resolved.engine, resolved.host, resolved.overrides)
         }
         let enabledConfig = LinuxLaunchConfiguration.compose(
             values: [
@@ -442,8 +471,9 @@ struct LinuxWineEngineTests {
         updatedHeader.append(contentsOf: [0x90, 0x90])
         try updatedHeader.write(to: wineBinary)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wineBinary.path)
-        let (mutatedEngine, _, staleOverrides) = await MainActor.run {
-            try! store.resolveHost(for: bottle)
+        let (mutatedEngine, _, staleOverrides) = try await MainActor.run {
+            let resolved = try store.resolveHost(for: bottle)
+            return (resolved.engine, resolved.host, resolved.overrides)
         }
         #expect(mutatedEngine.fingerprint != fingerprint)
         #expect(!mutatedEngine.featureEnabled(.esync, overrides: staleOverrides))

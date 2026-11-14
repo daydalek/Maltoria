@@ -79,7 +79,9 @@ public enum InstalledPrograms {
             options: [.skipsHiddenFiles]
         ) {
             let preferredNames = Set(preferredFolders.map { $0.lowercased() })
-            for child in topLevel.sorted(by: { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }) {
+            for child in topLevel
+                .sorted(by: { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+                }) {
                 let lower = child.lastPathComponent.lowercased()
                 guard !preferredNames.contains(lower), !excludedRootFolders.contains(lower) else { continue }
                 guard let values = try? child.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),

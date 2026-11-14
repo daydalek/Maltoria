@@ -128,7 +128,7 @@ public final class LinuxWinetricksService {
         let resolvedHost: LinuxWineHost
         let lease: LinuxWineEngineLease?
         if let engineStore {
-            let resolved: (engine: LinuxWineEngine, host: LinuxWineHost, overrides: [String: String])
+            let resolved: LinuxWineEngineStore.ResolvedHost
             do {
                 resolved = try engineStore.resolveHost(for: container)
             } catch let error as LinuxWineEngineStoreError {

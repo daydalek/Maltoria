@@ -231,23 +231,7 @@ public struct LinuxLaunchConfiguration: Sendable, Equatable {
             environment["LC_ALL"] = language
         }
 
-        if !overrides.isEmpty {
-            var order: [String] = []
-            var modes: [String: String] = [:]
-            for (dll, mode) in overrides {
-                if modes[dll] == nil {
-                    order.append(dll)
-                }
-                modes[dll] = mode
-            }
-            let composed = order.map { "\($0)=\(modes[$0] ?? "")" }
-            if let existing = environment["WINEDLLOVERRIDES"], !existing.isEmpty {
-                // A user-written variable stays authoritative for its DLLs.
-                environment["WINEDLLOVERRIDES"] = (composed + [existing]).joined(separator: ";")
-            } else {
-                environment["WINEDLLOVERRIDES"] = composed.joined(separator: ";")
-            }
-        }
+        Self.applyDLLOverrides(overrides, to: &environment)
 
         let arguments = splitArguments(program["arguments"] as? String ?? "")
         var result = Self(environment: environment, arguments: arguments)
@@ -266,6 +250,29 @@ public struct LinuxLaunchConfiguration: Sendable, Equatable {
             result.desktopResolution = ContainerConfiguration.virtualDesktopResolution(from: display)
         }
         return result
+    }
+
+    private static func applyDLLOverrides(
+        _ overrides: [(String, String)],
+        to environment: inout [String: String]
+    ) {
+        if !overrides.isEmpty {
+            var order: [String] = []
+            var modes: [String: String] = [:]
+            for (dll, mode) in overrides {
+                if modes[dll] == nil {
+                    order.append(dll)
+                }
+                modes[dll] = mode
+            }
+            let composed = order.map { "\($0)=\(modes[$0] ?? "")" }
+            if let existing = environment["WINEDLLOVERRIDES"], !existing.isEmpty {
+                // A user-written variable stays authoritative for its DLLs.
+                environment["WINEDLLOVERRIDES"] = (composed + [existing]).joined(separator: ";")
+            } else {
+                environment["WINEDLLOVERRIDES"] = composed.joined(separator: ";")
+            }
+        }
     }
 
     func wineArguments(for executable: URL) -> [String] {

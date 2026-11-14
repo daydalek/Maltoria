@@ -171,6 +171,23 @@ struct FolderDiscoveryTests {
         }
     }
 
+    @Test func nestedInstallersAndFakeExecutablesDoNotHideStandaloneGame() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bottle = root.appendingPathComponent("Bottle")
+        let game = root.appendingPathComponent("Game")
+        let tools = game.appendingPathComponent("Tools")
+        try FileManager.default.createDirectory(at: tools, withIntermediateDirectories: true)
+        try Data([0x4D, 0x5A]).write(to: game.appendingPathComponent("game.exe"))
+        try Data([0x4D, 0x5A]).write(to: tools.appendingPathComponent("setup.exe"))
+        try Data("not a PE executable".utf8).write(to: tools.appendingPathComponent("fake.exe"))
+        var library = FolderGameLibrary()
+        library.roots = [game.path]
+        #expect(library.scan(bottleURL: bottle, steamDirectories: []).map(\.name) == ["Game"])
+        try Data([0x4D, 0x5A]).write(to: tools.appendingPathComponent("another-game.exe"))
+        #expect(library.scan(bottleURL: bottle, steamDirectories: []).map(\.name) == ["Tools"])
+    }
+
     @Test func containerRootWithStrayInstallerDoesNotCollapseSubfolders() throws {
         let bottle = FileManager.default.temporaryDirectory
             .resolvingSymlinksInPath()

@@ -223,64 +223,7 @@ public final class LinuxApplicationServices: NativeApplicationServices {
         case "winetricks":
             return try await winetricks.call(method, params: params, workspace: workspace)
         case "setup":
-            if let wineSetup, wineSetup.externalRuntime == nil || bottleCreation == nil || method != "setup.status" {
-                if method == "setup.status" {
-                    return wineSetup.status(anyEngineAvailable: engineStore?.anyEngineAvailable() ?? false)
-                }
-                return try wineSetup.call(method, params: params) { [weak self] in
-                    guard let self else { return }
-                    let host = self.engineStore?.managedEngine().makeHost(environment: self.engineStore?.environment ?? ProcessInfo.processInfo.environment) ?? self.wineHost
-                    guard let host, host.canExecute else { return }
-                    for container in try workspace.containers() {
-                        if self.engineStore != nil, !self.containerUsesManagedEngine(container) {
-                            continue
-                        }
-                        if await host.serverRunning(prefix: container) {
-                            throw BridgeFailure(
-                                "runtime_busy",
-                                "Close running Wine applications before updating the runtime"
-                            )
-                        }
-                    }
-                }
-            }
-            guard method == "setup.status", let bottleCreation else {
-                throw BridgeFailure("method_unavailable", "Setup method is unavailable")
-            }
-            let anyEngine = engineStore?.anyEngineAvailable() ?? false
-            guard let host = bottleCreation.host, let runtimeURL = bottleCreation.runtimeURL else {
-                return .object([
-                    "installed": .bool(false),
-                    "managedInstalled": .bool(false),
-                    "anyEngineAvailable": .bool(anyEngine),
-                    "version": .null,
-                    "path": .string(wineSetup?.root.appendingPathComponent("current").path ?? LinuxWineSetupService.defaultRoot().appendingPathComponent("current").path),
-                    "canExecute": .bool(false),
-                    "translation": .null,
-                    "rosettaInstalled": .bool(false),
-                    "appleSilicon": .bool(false)
-                ])
-            }
-            let version = await bottleCreation.wineVersion()
-            let detail: String? = switch (version, host.translation) {
-            case let (version?, .native): version
-            case let (version?, .binfmt(name)): "\(version) (\(host.architecture) via \(name))"
-            case let (version?, .emulator(url)): "\(version) (\(host.architecture) via \(url.lastPathComponent))"
-            case (_, .unavailable): "无法执行（需 \(host.architecture) 转译器）"
-            case (nil, _): nil
-            }
-            return .object([
-                "installed": .bool(true),
-                "managedInstalled": .bool(true),
-                "anyEngineAvailable": .bool(true),
-                "version": detail.map(JSONValue.string) ?? .null,
-                "path": .string(runtimeURL.path),
-                "canExecute": .bool(host.canExecute),
-                "translation": .string(host.translationDescription),
-                "runtimeArchitecture": .string(host.architecture),
-                "rosettaInstalled": .bool(false),
-                "appleSilicon": .bool(false)
-            ])
+            return try await setupCall(method, params: params, workspace: workspace)
         case "runtime":
             guard let runtimeService else {
                 throw BridgeFailure("method_unavailable", "Runtime method is unavailable")
@@ -289,6 +232,74 @@ public final class LinuxApplicationServices: NativeApplicationServices {
         default:
             throw BridgeFailure("method_unavailable", "Native method is unavailable")
         }
+    }
+
+    private func setupCall(
+        _ method: String,
+        params: [String: JSONValue],
+        workspace: ApplicationWorkspace
+    ) async throws -> JSONValue {
+        if let wineSetup, wineSetup.externalRuntime == nil || bottleCreation == nil || method != "setup.status" {
+            if method == "setup.status" {
+                return wineSetup.status(anyEngineAvailable: engineStore?.anyEngineAvailable() ?? false)
+            }
+            return try wineSetup.call(method, params: params) { [weak self] in
+                guard let self else { return }
+                let host = self.engineStore?.managedEngine()
+                    .makeHost(environment: self.engineStore?.environment ?? ProcessInfo.processInfo.environment) ??
+                    self.wineHost
+                guard let host, host.canExecute else { return }
+                for container in try workspace.containers() {
+                    if self.engineStore != nil, !self.containerUsesManagedEngine(container) {
+                        continue
+                    }
+                    if await host.serverRunning(prefix: container) {
+                        throw BridgeFailure(
+                            "runtime_busy",
+                            "Close running Wine applications before updating the runtime"
+                        )
+                    }
+                }
+            }
+        }
+        guard method == "setup.status", let bottleCreation else {
+            throw BridgeFailure("method_unavailable", "Setup method is unavailable")
+        }
+        let anyEngine = engineStore?.anyEngineAvailable() ?? false
+        guard let host = bottleCreation.host, let runtimeURL = bottleCreation.runtimeURL else {
+            return .object([
+                "installed": .bool(false),
+                "managedInstalled": .bool(false),
+                "anyEngineAvailable": .bool(anyEngine),
+                "version": .null,
+                "path": .string(wineSetup?.root.appendingPathComponent("current").path ?? LinuxWineSetupService
+                    .defaultRoot().appendingPathComponent("current").path),
+                "canExecute": .bool(false),
+                "translation": .null,
+                "rosettaInstalled": .bool(false),
+                "appleSilicon": .bool(false)
+            ])
+        }
+        let version = await bottleCreation.wineVersion()
+        let detail: String? = switch (version, host.translation) {
+        case let (version?, .native): version
+        case let (version?, .binfmt(name)): "\(version) (\(host.architecture) via \(name))"
+        case let (version?, .emulator(url)): "\(version) (\(host.architecture) via \(url.lastPathComponent))"
+        case (_, .unavailable): "无法执行（需 \(host.architecture) 转译器）"
+        case (nil, _): nil
+        }
+        return .object([
+            "installed": .bool(true),
+            "managedInstalled": .bool(true),
+            "anyEngineAvailable": .bool(true),
+            "version": detail.map(JSONValue.string) ?? .null,
+            "path": .string(runtimeURL.path),
+            "canExecute": .bool(host.canExecute),
+            "translation": .string(host.translationDescription),
+            "runtimeArchitecture": .string(host.architecture),
+            "rosettaInstalled": .bool(false),
+            "appleSilicon": .bool(false)
+        ])
     }
 
     /// Mirrors the macOS adapter's `Wine.killBottle`: deleting (or detaching)
@@ -451,14 +462,20 @@ public final class LinuxApplicationServices: NativeApplicationServices {
         return wineHost
     }
 
+    private struct ContainerHost {
+        let engine: LinuxWineEngine?
+        let host: LinuxWineHost
+        let overrides: [String: String]
+    }
+
     private func resolveContainerHost(
         for container: URL,
         missingCapability: Bool
-    ) throws -> (engine: LinuxWineEngine?, host: LinuxWineHost, overrides: [String: String]) {
+    ) throws -> ContainerHost {
         if let engineStore {
             do {
                 let resolved = try engineStore.resolveHost(for: container)
-                return (resolved.engine, resolved.host, resolved.overrides)
+                return ContainerHost(engine: resolved.engine, host: resolved.host, overrides: resolved.overrides)
             } catch let error as LinuxWineEngineStoreError {
                 throw BridgeFailure("runtime_unavailable", error.localizedDescription)
             }
@@ -472,7 +489,7 @@ public final class LinuxApplicationServices: NativeApplicationServices {
         guard host.canExecute else {
             throw BridgeFailure("runtime_unavailable", host.unavailableReason ?? "The Wine runtime cannot run")
         }
-        return (nil, host, [:])
+        return ContainerHost(engine: nil, host: host, overrides: [:])
     }
 
     private func systemCall(
@@ -527,7 +544,8 @@ public final class LinuxApplicationServices: NativeApplicationServices {
     }
 
     private func locateTool(_ name: String) -> URL? {
-        if let host = wineHost ?? engineStore?.managedEngine().makeHost(environment: engineStore?.environment ?? ProcessInfo.processInfo.environment) {
+        if let host = wineHost ?? engineStore?.managedEngine()
+            .makeHost(environment: engineStore?.environment ?? ProcessInfo.processInfo.environment) {
             if name == "wine" {
                 return host.loader
             }

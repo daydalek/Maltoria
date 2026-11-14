@@ -107,7 +107,7 @@ struct ExecutableSelectionTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let deepDir = root.appendingPathComponent("aaa_redist/sub")
         try FileManager.default.createDirectory(at: deepDir, withIntermediateDirectories: true)
-        for index in 0..<10 {
+        for index in 0 ..< 10 {
             try Data([0x4D, 0x5A]).write(to: deepDir.appendingPathComponent("helper_\(index).exe"))
         }
         let mainExe = root.appendingPathComponent("Game.exe")

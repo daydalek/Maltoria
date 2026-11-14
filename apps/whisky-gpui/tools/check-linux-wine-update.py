@@ -141,12 +141,19 @@ def main():
         bridge = start()
         methods = bridge.call('bridge.describe', {})['result']['methods']
         assert {'setup.status', 'setup.install', 'setup.checkUpdate'}.issubset(methods)
-        assert 'runtime.launch' not in methods
+        # Runtime RPCs stay registered so newly installed or custom engines
+        # become usable without recreating the bridge. Availability is dynamic.
+        assert {'runtime.launch', 'wine.engines.list'}.issubset(methods)
+        engines = bridge.call('wine.engines.list', {})['result']['engines']
+        assert len(engines) == 1 and engines[0]['id'] == 'managed'
+        assert engines[0]['available'] is False
         assert bridge.call('setup.status', {})['result']['installed'] is False
         assert result('setup.checkUpdate')['result']['remoteVersion'] == '0.1.6'
         assert result('setup.install')['result']['version'] == '0.1.6'
         original = Path(bridge.call('setup.status', {})['result']['path'])
         assert original.is_dir()
+        engines = bridge.call('wine.engines.list', {})['result']['engines']
+        assert engines[0]['id'] == 'managed' and engines[0]['available'] is True
         bridge.close()
         bridge = start()
         assert 'runtime.launch' in bridge.call('bridge.describe', {})['result']['methods']

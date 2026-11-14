@@ -253,13 +253,14 @@ public struct FolderGameLibrary: Codable, Sendable {
                 at: directory,
                 includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
                 options: [.skipsHiddenFiles]
-            ) else { return false }
+            )
+            else { return false }
             return nested.contains { item in
                 guard let values = try? item.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
                       values.isSymbolicLink != true,
                       values.isDirectory != true
                 else { return false }
-                return item.pathExtension.lowercased() == "exe"
+                return isStandaloneGameExecutable(item)
             }
         }
     }

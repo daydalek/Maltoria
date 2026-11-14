@@ -100,7 +100,7 @@ public final class LinuxManagedProcess: @unchecked Sendable {
         let spawnError: Int32 = withExtendedLifetime((inHandle, outHandle, errHandle)) {
             executableURL.path.withCString { execPtr in
                 if let workingDirectory {
-                    return workingDirectory.withCString { dirPtr in
+                    workingDirectory.withCString { dirPtr in
                         argv.withUnsafeMutableBufferPointer { argvBuf in
                             envp.withUnsafeMutableBufferPointer { envpBuf in
                                 whisky_linux_spawn(
@@ -117,7 +117,7 @@ public final class LinuxManagedProcess: @unchecked Sendable {
                         }
                     }
                 } else {
-                    return argv.withUnsafeMutableBufferPointer { argvBuf in
+                    argv.withUnsafeMutableBufferPointer { argvBuf in
                         envp.withUnsafeMutableBufferPointer { envpBuf in
                             whisky_linux_spawn(
                                 execPtr,

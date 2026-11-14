@@ -189,26 +189,33 @@ public final class LinuxWineRuntimeDriver: LibraryRuntimeDriver {
         return host
     }
 
-    private func resolveLaunchContext(for container: URL) throws -> (
-        host: LinuxWineHost,
-        engine: LinuxWineEngine?,
-        overrides: [String: String],
-        lease: LinuxWineEngineLease?
-    ) {
+    private struct LaunchContext {
+        let host: LinuxWineHost
+        let engine: LinuxWineEngine?
+        let overrides: [String: String]
+        let lease: LinuxWineEngineLease?
+    }
+
+    private func resolveLaunchContext(for container: URL) throws -> LaunchContext {
         if let engineStore {
-            let resolved: (engine: LinuxWineEngine, host: LinuxWineHost, overrides: [String: String])
+            let resolved: LinuxWineEngineStore.ResolvedHost
             do {
                 resolved = try engineStore.resolveHost(for: container)
             } catch let error as LinuxWineEngineStoreError {
                 throw BridgeFailure("runtime_unavailable", error.localizedDescription)
             }
             let lease = try engineStore.acquireSharedLease(for: resolved.engine.id)
-            return (resolved.host, resolved.engine, resolved.overrides, lease)
+            return LaunchContext(
+                host: resolved.host,
+                engine: resolved.engine,
+                overrides: resolved.overrides,
+                lease: lease
+            )
         }
         guard let host else {
             throw BridgeFailure("runtime_unavailable", "The Wine runtime is unavailable")
         }
-        return (host, nil, [:], nil)
+        return LaunchContext(host: host, engine: nil, overrides: [:], lease: nil)
     }
 
     private func launchTarget(_ request: LibraryLaunchRequest, host: LinuxWineHost) throws -> URL {

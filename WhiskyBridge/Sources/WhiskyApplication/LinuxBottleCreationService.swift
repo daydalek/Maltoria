@@ -35,7 +35,8 @@ public final class LinuxBottleCreationService {
     private var cachedWineVersion: String?
 
     public var host: LinuxWineHost? {
-        fallbackHost ?? engineStore?.managedEngine().makeHost(environment: engineStore?.environment ?? ProcessInfo.processInfo.environment)
+        fallbackHost ?? engineStore?.managedEngine()
+            .makeHost(environment: engineStore?.environment ?? ProcessInfo.processInfo.environment)
     }
 
     public var runtimeURL: URL? {

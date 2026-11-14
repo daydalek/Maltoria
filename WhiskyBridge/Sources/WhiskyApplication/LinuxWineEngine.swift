@@ -179,12 +179,22 @@ public struct LinuxWineEngine: Identifiable, Codable, Sendable, Equatable {
         }
     }
 
+    public struct EffectiveFeatureState: Sendable {
+        public let state: LinuxWineEngineFeatureState
+        public let reason: String?
+        public let canOverride: Bool
+        public let enabled: Bool
+    }
+
     public func effectiveState(
         for feature: LinuxWineEngineFeature,
         overrides: [String: String]
-    ) -> (state: LinuxWineEngineFeatureState, reason: String?, canOverride: Bool, enabled: Bool) {
+    ) -> EffectiveFeatureState {
         let status = featureStatus(feature)
-        return (status.state, status.reason, status.canOverride, featureEnabled(feature, overrides: overrides))
+        return EffectiveFeatureState(
+            state: status.state, reason: status.reason, canOverride: status.canOverride,
+            enabled: featureEnabled(feature, overrides: overrides)
+        )
     }
 
     public func fieldPolicy(overrides: [String: String]) -> [String: JSONValue] {
@@ -532,6 +542,7 @@ public struct LinuxWineEngine: Identifiable, Codable, Sendable, Equatable {
 /// Non-blocking POSIX `flock` lease serializing launches (`shared`) against
 /// engine rebinding and confirmation mutations (`exclusive`) across processes.
 public final class LinuxWineEngineLease: @unchecked Sendable {
+    private let lock = NSLock()
     private var descriptor: Int32?
 
     private init(_ descriptor: Int32) {
@@ -543,6 +554,8 @@ public final class LinuxWineEngineLease: @unchecked Sendable {
     }
 
     public func release() {
+        lock.lock()
+        defer { lock.unlock() }
         guard let descriptor else { return }
         self.descriptor = nil
         _ = flock(descriptor, LOCK_UN)
@@ -571,13 +584,13 @@ public final class LinuxWineEngineLease: @unchecked Sendable {
     ) throws -> LinuxWineEngineLease {
         try FileManager.default.createDirectory(at: locksDirectory, withIntermediateDirectories: true)
         let lockURL = lockFileURL(for: engineID, in: locksDirectory)
-        let fd = open(lockURL.path, O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, mode_t(0o600))
-        guard fd >= 0 else {
+        let descriptor = open(lockURL.path, O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, mode_t(0o600))
+        guard descriptor >= 0 else {
             throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
         }
-        guard flock(fd, (exclusive ? LOCK_EX : LOCK_SH) | LOCK_NB) == 0 else {
+        guard flock(descriptor, (exclusive ? LOCK_EX : LOCK_SH) | LOCK_NB) == 0 else {
             let err = errno
-            close(fd)
+            close(descriptor)
             if err == EWOULDBLOCK || err == EAGAIN {
                 throw BridgeFailure(
                     "engine_busy",
@@ -587,6 +600,6 @@ public final class LinuxWineEngineLease: @unchecked Sendable {
             }
             throw POSIXError(POSIXErrorCode(rawValue: err) ?? .EIO)
         }
-        return LinuxWineEngineLease(fd)
+        return LinuxWineEngineLease(descriptor)
     }
 }
