@@ -2,7 +2,7 @@ name: Build and release Maltoria app
 
 on:
   push:
-    tags: ['v*', 'app-v*', 'vn-v*']
+    tags: ['app-v*', 'vn-v*']
   workflow_dispatch:
     inputs:
       version:

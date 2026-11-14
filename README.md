@@ -21,10 +21,10 @@
 <!-- 每次发布新版本后,请同步更新下表中的版本号与直链. -->
 | 平台 | 安装包 |
 | --- | --- |
-| macOS (Apple Silicon) | [Maltoria-0.5.0-arm64.zip](https://github.com/daydalek/Maltoria/releases/download/vn-v0.5.0/Maltoria-0.5.0-arm64.zip) |
-| Linux · deb (Ubuntu 24.04) | [whisky_0.5.0_amd64.deb](https://github.com/daydalek/Maltoria/releases/download/linux-v0.5.0/whisky_0.5.0_amd64.deb) |
-| Linux · rpm (Fedora 44) | [whisky-0.5.0-1.x86_64.rpm](https://github.com/daydalek/Maltoria/releases/download/linux-v0.5.0/whisky-0.5.0-1.x86_64.rpm) |
-| Linux · AppImage | [Maltoria-0.5.0-x86_64.AppImage](https://github.com/daydalek/Maltoria/releases/download/linux-v0.5.0/Maltoria-0.5.0-x86_64.AppImage) |
+| macOS (Apple Silicon) | [Maltoria-0.6.0-arm64.zip](https://github.com/daydalek/Maltoria/releases/download/v0.6.0/Maltoria-0.6.0-arm64.zip) |
+| Linux · deb (Ubuntu 24.04) | [whisky_0.6.0_amd64.deb](https://github.com/daydalek/Maltoria/releases/download/v0.6.0/whisky_0.6.0_amd64.deb) |
+| Linux · rpm (Fedora 44) | [whisky-0.6.0-1.x86_64.rpm](https://github.com/daydalek/Maltoria/releases/download/v0.6.0/whisky-0.6.0-1.x86_64.rpm) |
+| Linux · AppImage | [Maltoria-0.6.0-x86_64.AppImage](https://github.com/daydalek/Maltoria/releases/download/v0.6.0/Maltoria-0.6.0-x86_64.AppImage) |
 
 由于缺少Apple开发者证书,目前应用以ad-hoc方式签名,打开时会提示无法验证应用安全性,请至设置-隐私与安全性中信任应用.
 

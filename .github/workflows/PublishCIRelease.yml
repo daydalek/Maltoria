@@ -1,0 +1,35 @@
+name: Publish verified CI packages
+on:
+  workflow_run:
+    workflows: [CI]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful main push CI run to publish
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: publish-ci-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Validate release promotion logic
+        run: python3 -m unittest discover -s scripts/distribution -p test_ci_release.py -v
+      - name: Publish immutable packages from successful CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_RUN_ID: ${{ inputs.run_id || github.event.workflow_run.id }}
+        run: python3 scripts/distribution/publish-ci-release.py --repository "$GITHUB_REPOSITORY" --run-id "$CI_RUN_ID"

@@ -6,7 +6,8 @@ This document describes the current release paths for `daydalek/Maltoria` and it
 
 | Stream | Repository | Tags | Main artifact |
 | --- | --- | --- | --- |
-| Whisky app | `daydalek/Maltoria` | `vn-vX.Y.Z`, `app-vX.Y.Z`, or `vX.Y.Z` | `Whisky-X.Y.Z-arm64.zip` |
+| Maltoria (all platforms) | `daydalek/Maltoria` | `vX.Y.Z`, from successful CI | macOS ZIP, Linux deb/rpm/AppImage |
+| macOS legacy stream | `daydalek/Maltoria` | `vn-vX.Y.Z`, `app-vX.Y.Z` | `Maltoria-X.Y.Z-arm64.zip` |
 | Whisky Linux GPUI | `daydalek/Maltoria` | `linux-vX.Y.Z` | deb, rpm and AppImage |
 | Wine Libraries | `daydalek/ge-proton-macos-wine-poc` | `vX.Y.Z` | `Libraries.tar.gz` |
 
@@ -37,8 +38,16 @@ preparing a new version. Linux tag builds still derive their version from
 Pull requests run the existing validation jobs; automatic distribution packages
 are produced on `main` pushes and explicit CI dispatches.
 
-Branch CI uploads Actions artifacts. Tag-triggered workflows below handle GitHub
-Release publication separately.
+After a successful `main` push CI, [PublishCIRelease.yml](../.github/workflows/PublishCIRelease.yml)
+automatically promotes that run's verified artifacts into a unified `vX.Y.Z` GitHub
+prerelease. It verifies both platforms' versions, source commits and checksums,
+then creates the tag at the exact tested commit. Published versions are immutable:
+subsequent pushes with the same version leave them intact. Bump `version.env` to
+publish the next version. A failed CI, pull request or manual build cannot publish.
+The workflow's explicit `run_id` dispatch can recover publication from an already
+successful main-push CI without rebuilding or uploading files by hand.
+
+The platform-specific tag workflows below remain available for separate releases.
 
 ### Prepare the release
 
