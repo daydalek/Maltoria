@@ -245,7 +245,7 @@ struct AudioInputChallengerStressTests {
 
     // MARK: - Challenge 2: WineAudioRegistry Two-Stage Shutdown & Error Resilience
 
-    @Test("WineAudioRegistry: resetAudioState executes -k then -w even if reg delete fails")
+    @Test("WineAudioRegistry: resetAudioState executes -k then -w even if reg delete fails", .managedInstalled)
     @MainActor
     func resetAudioStateResilientToRegDeleteFailure() async throws {
         let (dir, cleanup) = makeBottleDir()

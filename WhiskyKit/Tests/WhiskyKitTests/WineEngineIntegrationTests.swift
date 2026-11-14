@@ -430,7 +430,7 @@ import Testing
 
     // MARK: - Managed compatibility
 
-    @Test func managedEngineBehaviorIsUnchanged() throws {
+    @Test(.managedInstalled) func managedEngineBehaviorIsUnchanged() throws {
         let root = try temporaryRoot()
         defer { try? FileManager.default.removeItem(at: root) }
         let store = WineEngineStore(registryURL: root.appending(path: "engines.json")) { [] }

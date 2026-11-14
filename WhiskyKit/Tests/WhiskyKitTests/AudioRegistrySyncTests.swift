@@ -124,7 +124,10 @@ struct AudioRegistrySyncTests {
         }
     }
 
-    @Test("resetAudioState executes two-stage wineserver termination (-k then -w) and stamps factoryDefault")
+    @Test(
+        "resetAudioState executes two-stage wineserver termination (-k then -w) and stamps factoryDefault",
+        .managedInstalled
+    )
     @MainActor
     func resetAudioStateTwoStageTerminationAndMarkerStamp() async throws {
         let (dir, cleanup) = makeBottleDir()

@@ -20,7 +20,7 @@ import Foundation
 import Testing
 @testable import WhiskyKit
 
-@Suite("Pinned program launch settings")
+@Suite("Pinned program launch settings", .managedInstalled)
 @MainActor
 struct PinnedProgramLaunchTests {
     private func makeProgram(extensionName: String, root: URL) throws -> Program {

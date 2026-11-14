@@ -61,7 +61,7 @@ struct ProgramEnvironmentPresetTests {
         #expect(settings.wineD3DRenderer == nil)
     }
 
-    @Test("Shortcut settings persist and enter the environment after reloading a program")
+    @Test("Shortcut settings persist and enter the environment after reloading a program", .managedInstalled)
     @MainActor func persistedPresets() throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

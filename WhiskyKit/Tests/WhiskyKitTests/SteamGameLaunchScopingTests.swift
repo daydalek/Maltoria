@@ -24,7 +24,7 @@ import Testing
 /// the game's plan in its executables' `AppDefaults` entries, Steam's DXVK set
 /// in Steam's, and nothing in the `-applaunch` environment, so whichever
 /// process starts the client lands on DXVK. The runtime is pinned in every case.
-@Suite("Steam game launch scoping")
+@Suite("Steam game launch scoping", .managedInstalled)
 @MainActor
 final class SteamGameLaunchScopingTests {
     private let tempRoot: URL

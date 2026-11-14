@@ -23,7 +23,7 @@ import Testing
 /// A `d3d12` that 3.7.0 turned off in a game's own `AppDefaults` entry, which
 /// outlived the fix for games Steam starts (#285). A Steam game launch now
 /// writes the game's plan into that entry, which replaces it.
-@Suite("Stale d3d12 overrides")
+@Suite("Stale d3d12 overrides", .managedInstalled)
 @MainActor
 final class StaleD3D12OverrideTests {
     private let tempRoot: URL

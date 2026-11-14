@@ -23,7 +23,7 @@ import Testing
 /// Pins the shared prediction: the backend a launch reply names must be the
 /// backend `Wine.prepareProgramLaunch` resolves, through overrides, launcher
 /// steering and payload fallback alike.
-@Suite("Effective Backend Tests")
+@Suite("Effective Backend Tests", .managedInstalled)
 @MainActor
 struct EffectiveBackendTests {
     private let tempRoot: URL

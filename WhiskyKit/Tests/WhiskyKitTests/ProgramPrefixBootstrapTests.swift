@@ -20,7 +20,7 @@ import Foundation
 import Testing
 @testable import WhiskyKit
 
-@Suite("Program prefix bootstrap and terminal runs")
+@Suite("Program prefix bootstrap and terminal runs", .managedInstalled)
 @MainActor
 final class ProgramPrefixBootstrapTests {
     @Test

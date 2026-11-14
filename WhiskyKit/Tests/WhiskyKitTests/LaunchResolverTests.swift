@@ -40,7 +40,7 @@ struct GameProfileLayerTests {
         #expect(resolved["PROGRAM_WINS"] == "program")
     }
 
-    @Test("constructWineEnvironment carries the game profile environment")
+    @Test("constructWineEnvironment carries the game profile environment", .managedInstalled)
     @MainActor func constructCarriesProfile() throws {
         let tempDir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
