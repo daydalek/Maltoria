@@ -16,6 +16,30 @@ The app workflow publishes prereleases with ad-hoc signatures. Users download an
 
 The authoritative macOS GPUI workflow is [AppRelease.yml](../.github/workflows/AppRelease.yml), which invokes `./build.sh run whisky-macos-gpui-arm64`. Linux GPUI uses [LinuxRelease.yml](../.github/workflows/LinuxRelease.yml) and its reusable distribution and package acceptance jobs.
 
+### Automatic CI packages
+
+Every non-documentation push to `main` automatically builds installable packages in
+[CI.yml](../.github/workflows/CI.yml), after SwiftLint, SwiftFormat, third-party checks
+and WhiskyKit tests pass. No manual dispatch or file upload is required.
+
+- macOS: `macos-arm64-X.Y.Z` contains the ad-hoc signed ZIP, source archive,
+  `SHA256SUMS`, build information and release notes. The job verifies the app's
+  resources and signatures before uploading.
+- Linux: the reusable distribution workflow builds one Release payload and uploads
+  `linux-deb`, `linux-rpm` and `linux-appimage`. Its package-manager and production
+  window smoke jobs must pass before the complete CI run is green. Download packages
+  from a successful CI run's **Artifacts** section, alongside the smoke evidence.
+
+The shared development package version comes from
+[`apps/whisky-gpui/version.env`](../apps/whisky-gpui/version.env). Update it when
+preparing a new version. Linux tag builds still derive their version from
+`linux-vX.Y.Z`; an explicit manual version overrides the development default.
+Pull requests run the existing validation jobs; automatic distribution packages
+are produced on `main` pushes and explicit CI dispatches.
+
+Branch CI uploads Actions artifacts. Tag-triggered workflows below handle GitHub
+Release publication separately.
+
 ### Prepare the release
 
 1. Review the changes and update `CHANGELOG.md` for the app version.

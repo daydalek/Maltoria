@@ -5,16 +5,16 @@ on:
     inputs:
       version:
         type: string
-        default: '0.1.0'
+        default: ''
       run_tests:
         type: boolean
         default: true
   workflow_dispatch:
     inputs:
       version:
-        description: 'Package version X.Y.Z'
-        required: true
-        default: '0.1.0'
+        description: 'Package version X.Y.Z (empty uses version.env)'
+        required: false
+        default: ''
         type: string
       run_tests:
         description: 'Run shared-core, bridge and production client unit tests'
@@ -61,7 +61,13 @@ jobs:
           # toolchain that provides it is installed only in a later step.
           case "$GITHUB_REF" in
             refs/tags/linux-v*) value="${RELEASE_REF#linux-v}" ;;
-            *) value="${INPUT_VERSION:-0.1.0}" ;;
+            *)
+              value="$INPUT_VERSION"
+              if [ -z "$value" ]; then
+                . ./apps/whisky-gpui/version.env
+                value="$WHISKY_DEFAULT_VERSION"
+              fi
+              ;;
           esac
           echo "$value" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo 'Expected X.Y.Z' >&2; exit 1; }
           echo "value=$value" >> "$GITHUB_OUTPUT"
@@ -75,6 +81,7 @@ jobs:
           key: linux-amd64-swift6.4.0-rust1.99.1-${{ hashFiles('apps/whisky-gpui/Cargo.lock', '**/Package.resolved', 'apps/whisky-gpui/tools/build-linux-release.sh', '.github/workflows/LinuxDistribution.yml') }}-${{ github.sha }}
           restore-keys: |
             linux-amd64-swift6.4.0-rust1.99.1-${{ hashFiles('apps/whisky-gpui/Cargo.lock', '**/Package.resolved', 'apps/whisky-gpui/tools/build-linux-release.sh', '.github/workflows/LinuxDistribution.yml') }}-
+            linux-amd64-swift6.4.0-rust1.99.1-
       - name: Install the fixed build toolchain
         run: |
           bash apps/whisky-gpui/tools/install-linux-deps.sh
