@@ -162,6 +162,9 @@ jobs:
       - name: Setup Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Run WhiskyTranslation tests
+        run: swift test --package-path WhiskyTranslation
+
       - name: GPUI Foundation Gate (Swift + Bridge SDK + real helper)
         run: python3 scripts/check-gpui-foundation.py --output build/reliability/foundation-linux
 

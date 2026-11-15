@@ -118,6 +118,9 @@ jobs:
       - name: Run WhiskyMetadata Tests
         run: swift test --package-path WhiskyMetadata
 
+      - name: Run WhiskyTranslation Tests
+        run: swift test --package-path WhiskyTranslation
+
       - name: Run Tests with Code Coverage
         run: swift test --package-path WhiskyKit --enable-code-coverage
           
