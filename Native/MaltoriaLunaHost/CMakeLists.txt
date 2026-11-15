@@ -28,7 +28,8 @@ set_target_properties(MaltoriaLunaHost PROPERTIES
 
 add_executable(MaltoriaUnicodeFixture WIN32 tests/UnicodeFixture.cpp)
 target_compile_features(MaltoriaUnicodeFixture PRIVATE cxx_std_17)
-target_compile_definitions(MaltoriaUnicodeFixture PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_definitions(MaltoriaUnicodeFixture PRIVATE
+    WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE)
 target_link_libraries(MaltoriaUnicodeFixture PRIVATE user32 gdi32)
 set_target_properties(MaltoriaUnicodeFixture PROPERTIES
     MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
