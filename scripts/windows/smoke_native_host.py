@@ -226,12 +226,36 @@ def run(host, fixture, architecture):
                 raise AssertionError("fixture was terminated when the helper shut down")
 
             process, connection, peer, token, session = start_host(host, server, architecture)
+            send_command(connection, "attach", "attach-eof", session, params={"target": fixture_record})
+            assert_success(peer, "attach-eof", session)
+            connection.close()
+            finish_host(process, token)
+            if fixture_process.poll() is not None:
+                raise AssertionError("fixture exited during attached-helper EOF cleanup")
+
+            # A fresh helper must be able to attach after EOF released our hook.
+            process, connection, peer, token, session = start_host(host, server, architecture)
+            send_command(connection, "attach", "attach-exit", session, params={"target": fixture_record})
+            assert_success(peer, "attach-exit", session)
+            close_fixture(fixture_process)
+            deadline = time.monotonic() + 10
+            disconnected = False
+            while time.monotonic() < deadline:
+                event = peer.events.popleft() if peer.events else peer.receive()
+                if (event.get("type") == "process" and event.get("action") == "disconnected"
+                        and event.get("guestPID") == fixture_process.pid):
+                    disconnected = True
+                    break
+            if not disconnected:
+                raise AssertionError("target exit did not produce a disconnection event")
+            send_command(connection, "ping", "after-exit", session)
+            assert_success(peer, "after-exit", session)
+            send_command(connection, "shutdown", "exit-shutdown", session)
+            assert_success(peer, "exit-shutdown", session)
             connection.close()
             finish_host(process, token)
 
-        if fixture_process.poll() is not None:
-            raise AssertionError("fixture exited after helper EOF")
-        print(f"Native host Unicode capture/identity/detach smoke passed (arch={architecture}).")
+        print(f"Native host Unicode capture/identity/detach/EOF/target-exit smoke passed (arch={architecture}).")
     finally:
         if fixture_process.poll() is None:
             close_fixture(fixture_process)
