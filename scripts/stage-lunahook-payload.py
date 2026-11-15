@@ -37,17 +37,23 @@ def pe_machine(path):
     return struct.unpack_from('<H', header, offset + 4)[0]
 
 
+def machine_allowed(arch, name, machine):
+    # LunaTmpFontLoader.dll is an AnyCPU .NET assembly, which carries the i386 machine type.
+    allowed = {ARCHITECTURES[arch][1]} | ({0x014C} if name in SHARED_FILES else set())
+    return machine in allowed
+
+
 def stage(source, output, root):
     source, output = Path(source), Path(output)
     if output.exists() or output.is_symlink():
         raise ValueError(f'Choose a new payload directory: {output}')
     files = {}
-    for arch, (_, machine) in ARCHITECTURES.items():
+    for arch in ARCHITECTURES:
         for name in expected_files(arch):
             path = source / arch / name
             if path.is_symlink() or not path.is_file():
                 raise ValueError(f'Missing native payload file: {arch}/{name}')
-            if pe_machine(path) != machine:
+            if not machine_allowed(arch, name, pe_machine(path)):
                 raise ValueError(f'PE architecture mismatch: {arch}/{name}')
             files[f'{arch}/{name}'] = path
     sources = source / 'sources/Maltoria'
@@ -88,7 +94,7 @@ def verify(payload):
         if path.is_symlink() or not path.is_file() or digest(path) != entry['sha256'] \
                 or path.stat().st_size != entry['size']:
             raise ValueError(f'LunaHook payload hash mismatch: {relative}')
-        if pe_machine(path) != ARCHITECTURES[relative.split('/')[0]][1]:
+        if not machine_allowed(*relative.split('/', 1), pe_machine(path)):
             raise ValueError(f'PE architecture mismatch: {relative}')
     if not (payload / manifest['notices']).is_file():
         raise ValueError('LunaHook notices are missing')
