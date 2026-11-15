@@ -165,6 +165,7 @@ shutil.copytree(root / 'WhiskyBridge', tmp / 'WhiskyBridge',
                 ignore=shutil.ignore_patterns('.build', '.swiftpm', 'Package.resolved'))
 (tmp / 'WhiskyCore').symlink_to(root / 'WhiskyCore', target_is_directory=True)
 (tmp / 'WhiskyMetadata').symlink_to(root / 'WhiskyMetadata', target_is_directory=True)
+(tmp / 'WhiskyTranslation').symlink_to(root / 'WhiskyTranslation', target_is_directory=True)
 PY
         fi
         printf '%s\n' "$LINUX_BRIDGE_TMP/WhiskyBridge"
