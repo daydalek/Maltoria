@@ -31,6 +31,10 @@ class NativeSourceTests(unittest.TestCase):
             self.assertTrue((output / "nlohmann-json/single_include/nlohmann/json.hpp").is_file())
             cmake = (output / "LunaTranslator/src/NativeImpl/LunaHook/LunaHook/CMakeLists.txt").read_text()
             self.assertIn(prepare_native_sources.MINHOOK_REVISION, cmake)
+            main = (output / "LunaTranslator/src/NativeImpl/LunaHook/LunaHook/main.cc").read_text()
+            self.assertIn("LPVOID reserved)", main)
+            self.assertIn("if (reserved) return TRUE;", main)
+            self.assertIn("detachall();", main)
 
     def test_traversal_archive_is_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:

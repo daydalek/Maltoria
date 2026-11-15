@@ -3,7 +3,7 @@
 The native source lock is in `manifest.json`; archives are committed under
 `sources/native/`. `python3 scripts/prepare-native-sources.py --output <empty-dir>`
 checks SHA-256 before extraction, preflights every archive path/root, rejects
-unsafe members, and applies the single recorded MinHook pin patch. No source is
+unsafe members, and applies the recorded MinHook pin and process-exit patches. No source is
 fetched during Windows builds.
 
 On Windows 2022 with Visual Studio 2022 C++ and .NET Framework 4.x:
@@ -30,6 +30,12 @@ left allocated because freeing memory still in use would damage the target.
 Windows CI captures Japanese Unicode text from our authored GDI fixture and
 checks identity rejection, detach and fixture survival. It is not evidence of
 Wine or real-game compatibility.
+
+`lunahook-process-exit.patch` skips synchronized hook cleanup during process
+termination (`DllMain`'s reserved argument is non-null), when Windows has already
+terminated other threads that may own its locks. Explicit DLL unloading still
+performs the upstream cleanup. This follows Microsoft's
+[DllMain process detach guidance](https://learn.microsoft.com/en-us/windows/win32/dlls/dllmain).
 
 ## Local IPC schema
 

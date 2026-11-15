@@ -130,6 +130,19 @@ def prepare(output):
     final_text = cmake.read_text(encoding="utf-8")
     if MINHOOK_REVISION not in final_text or "GIT_TAG master" in final_text:
         raise ValueError("MinHook pin patch verification failed")
+    main = luna / "src/NativeImpl/LunaHook/LunaHook/main.cc"
+    text = main.read_text(encoding="utf-8")
+    signature = "BOOL WINAPI DllMain(HINSTANCE hModule, DWORD fdwReason, LPVOID)"
+    detach = "\tcase DLL_PROCESS_DETACH:\n\t{\n\t\tdetachall();"
+    replacement = ("\tcase DLL_PROCESS_DETACH:\n\t{\n"
+                   "\t\t// Maltoria: process teardown has already terminated other threads.\n"
+                   "\t\t// They may own locks used by hook cleanup. The OS reclaims memory;\n"
+                   "\t\t// only an explicit FreeLibrary should run synchronized cleanup.\n"
+                   "\t\tif (reserved) return TRUE;\n\t\tdetachall();")
+    if text.count(signature) != 1 or text.count(detach) != 1:
+        raise ValueError("Process-exit patch no longer matches the locked LunaTranslator source")
+    text = text.replace(signature, signature[:-1] + " reserved)").replace(detach, replacement)
+    main.write_text(text, encoding="utf-8")
     print(f"Prepared {len(packages)} pinned native source trees: {output}")
 
 
