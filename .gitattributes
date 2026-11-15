@@ -1,2 +1,7 @@
 # Preserve upstream license documents verbatim, including their whitespace.
+ThirdParty/** -text
 ThirdParty/licenses/** -whitespace
+THIRD-PARTY-NOTICES.md -text
+Libraries/cabextract -text
+Libraries/winetricks -text
+Libraries/verbs.txt -text
