@@ -47,6 +47,8 @@ def check(name, command, extra_env=None):
                              'seconds': round(time.monotonic() - started, 2)})
     (output / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
     if result.returncode:
+        tail = (output / f'{name}.log').read_text(errors='replace').splitlines()[-80:]
+        print('\n'.join(tail), file=sys.stderr, flush=True)
         raise SystemExit(f'{name} failed; see {output / (name + ".log")}')
     print(f'{name}: passed', flush=True)
 
