@@ -1261,8 +1261,17 @@ impl WhiskyApp {
                 }
             }
             BridgeEvent::TranslationReply { request, method, result } => {
-                self.translation_page.reply(request, &method, result.clone(), cx);
+                self.translation_page
+                    .reply(request, &method, result.clone(), &self.bridge, cx);
                 self.capture.reply(request, &method, result, &self.bridge, cx);
+                if matches!(
+                    method.as_str(),
+                    "translation.providers/list"
+                        | "translation.providers/save"
+                        | "translation.providers/delete"
+                ) {
+                    self.sync_capture_provider_selection();
+                }
             }
             BridgeEvent::Services(methods) => {
                 self.service_methods = methods.into_iter().collect();
@@ -3584,10 +3593,42 @@ impl WhiskyApp {
     }
 
     pub(crate) fn open_translation_settings(&mut self, cx: &mut Context<Self>) {
+        let from_capture = self.capture.panel_open;
         self.capture.panel_open = false;
         self.open_settings(cx);
-        self.translation_page.context = None;
+        self.translation_page.context = if from_capture {
+            self.capture.context.clone()
+        } else {
+            None
+        };
+        self.translation_page.return_to_capture = from_capture;
         self.translation_page.open(&self.bridge);
+        cx.notify();
+    }
+
+    pub(crate) fn sync_capture_provider_selection(&mut self) {
+        if let Some(id) = self.capture.provider_id.as_deref() {
+            if !self.translation_page.providers.iter().any(|p| p.id == id) {
+                self.capture.provider_id = None;
+            }
+        }
+        if self.capture.provider_id.is_none() && self.translation_page.providers.len() == 1 {
+            self.capture.provider_id = Some(self.translation_page.providers[0].id.clone());
+        }
+    }
+
+    pub(crate) fn close_translation_settings(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let return_to_capture = self.translation_page.return_to_capture;
+        self.translation_page.close(window, cx);
+        if return_to_capture {
+            self.settings = false;
+            self.capture.panel_open = true;
+            self.sync_capture_provider_selection();
+        }
         cx.notify();
     }
 
@@ -3599,6 +3640,7 @@ impl WhiskyApp {
             }
             self.capture.context = Some(context);
         }
+        self.sync_capture_provider_selection();
         self.settings = false;
         self.translation_page.active = false;
         self.capture.panel_open = true;

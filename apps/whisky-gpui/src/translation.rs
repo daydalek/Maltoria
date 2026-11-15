@@ -129,9 +129,18 @@ pub(crate) struct ProviderDraft {
     pub(crate) model_metadata: Option<ModelDescriptorDto>,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum TranslationTab {
+    #[default]
+    Providers,
+    Settings,
+}
+
 #[derive(Clone, Default)]
 pub(crate) struct TranslationPage {
     pub(crate) active: bool,
+    pub(crate) return_to_capture: bool,
+    pub(crate) tab: TranslationTab,
     pub(crate) context: Option<(String, String, String)>,
     pub(crate) providers: Vec<ProviderDto>,
     pub(crate) selected_id: Option<String>,
@@ -142,6 +151,7 @@ pub(crate) struct TranslationPage {
     pub(crate) models: Vec<ModelDescriptorDto>,
     pub(crate) model_info: Option<ModelDescriptorDto>,
     pub(crate) secret: SecretValue,
+    pub(crate) pending_credential: SecretValue,
     pub(crate) inputs: BTreeMap<&'static str, Entity<InputState>>,
     pub(crate) prompt_input: Option<Entity<TextareaState>>,
     pub(crate) pending: BTreeMap<u64, PendingTranslationRequest>,
@@ -183,6 +193,7 @@ impl TranslationPage {
     pub(crate) fn bridge_disconnected(&mut self, reason: Option<&str>) {
         let had_pending = !self.pending.is_empty();
         self.pending.clear();
+        self.pending_credential.clear();
         if had_pending {
             self.error = Some(match reason {
                 Some(reason) => format!("桥接连接中断：{reason}"),
@@ -196,6 +207,7 @@ impl TranslationPage {
         request: u64,
         method: &str,
         result: Result<Value, String>,
+        bridge: &BridgeSupervisor,
         cx: &mut Context<WhiskyApp>,
     ) {
         let Some(pending) = self.pending.remove(&request) else {
@@ -211,6 +223,9 @@ impl TranslationPage {
         let current_provider_request = self.request_matches_provider(&pending);
         match result {
             Err(error) => {
+                if method == "translation.providers/save" {
+                    self.pending_credential.clear();
+                }
                 let show_error = match method {
                     "translation.providers/save" => selection_current && draft_current,
                     "translation.providers/list" => true,
@@ -269,11 +284,27 @@ impl TranslationPage {
                             let id = profile.id.clone();
                             self.upsert_provider(profile);
                             if selection_current && draft_current {
-                                self.select(Some(id));
-                                self.message = Some("提供商已保存".into());
+                                let pending_key = (!self.pending_credential.is_empty())
+                                    .then(|| self.pending_credential.expose().to_owned());
+                                self.select(Some(id.clone()));
+                                if let Some(key) = pending_key {
+                                    self.pending_credential.clear();
+                                    self.request(
+                                        bridge,
+                                        "translation.credential.set",
+                                        json!({"providerID": id, "key": key}),
+                                    );
+                                    if self.error.is_none() {
+                                        self.message =
+                                            Some("提供商已保存，正在安全保存凭证…".into());
+                                    }
+                                } else {
+                                    self.message = Some("提供商已保存".into());
+                                }
                             }
                         }
                         Err(error) if selection_current && draft_current => {
+                            self.pending_credential.clear();
                             self.error = Some(format!("无效的提供商响应：{error}"))
                         }
                         Err(_) => {}
@@ -556,6 +587,7 @@ impl TranslationPage {
         self.selection_generation = self.selection_generation.wrapping_add(1);
         self.draft_generation = self.draft_generation.wrapping_add(1);
         self.selected_id = id.clone();
+        self.pending_credential.clear();
         self.clear_provider_inputs();
         self.models.clear();
         self.model_info = None;
@@ -579,10 +611,62 @@ impl TranslationPage {
     }
 
     pub(crate) fn set_kind(&mut self, kind: &str) {
-        self.draft.kind = kind.to_owned();
+        if self.draft.kind == kind && !self.draft.base_url.trim().is_empty() {
+            return;
+        }
+        let old_kind = std::mem::replace(&mut self.draft.kind, kind.to_owned());
+        let trimmed = self.draft.base_url.trim();
+        if trimmed.is_empty() || (!old_kind.is_empty() && trimmed == default_endpoint(&old_kind)) {
+            self.draft.base_url = default_endpoint(kind).into();
+        }
         self.clear_model_metadata();
         self.models.clear();
         self.draft_generation = self.draft_generation.wrapping_add(1);
+    }
+
+    pub(crate) fn switch_kind(
+        &mut self,
+        kind: &str,
+        window: &mut Window,
+        cx: &mut Context<WhiskyApp>,
+    ) {
+        let old_url = self.draft.base_url.clone();
+        self.set_kind(kind);
+        if self.draft.base_url != old_url {
+            if let Some(input) = self.inputs.get("endpoint").cloned() {
+                let next_url = self.draft.base_url.clone();
+                input.update(cx, |state, cx| state.set_value(next_url, window, cx));
+            }
+        }
+    }
+
+    pub(crate) fn set_language_preset(
+        &mut self,
+        key: &'static str,
+        code: &str,
+        window: &mut Window,
+        cx: &mut Context<WhiskyApp>,
+    ) {
+        self.input_state_event(key, &InputEvent::Change, Some(code));
+        match key {
+            "source-language" => {
+                let settings = self
+                    .settings
+                    .get_or_insert_with(default_translation_settings);
+                settings.source_language = code.to_owned();
+            }
+            "target-language" => {
+                let settings = self
+                    .settings
+                    .get_or_insert_with(default_translation_settings);
+                settings.target_language = code.to_owned();
+            }
+            _ => {}
+        }
+        if let Some(input) = self.inputs.get(key).cloned() {
+            let value = code.to_owned();
+            input.update(cx, |state, cx| state.set_value(value, window, cx));
+        }
     }
 
     pub(crate) fn set_token_field(&mut self, field: &str) {
@@ -679,7 +763,12 @@ impl TranslationPage {
         });
     }
 
-    pub(crate) fn save_provider(&mut self, bridge: &BridgeSupervisor, cx: &Context<WhiskyApp>) {
+    pub(crate) fn save_provider(
+        &mut self,
+        bridge: &BridgeSupervisor,
+        window: &mut Window,
+        cx: &mut Context<WhiskyApp>,
+    ) {
         let model_id = if self.draft.kind == "deepL" {
             String::new()
         } else {
@@ -690,6 +779,13 @@ impl TranslationPage {
         if name.trim().is_empty() || endpoint.trim().is_empty() {
             self.error = Some("提供商名称和 API 端点不能为空。".into());
             return;
+        }
+        let credential = self.field("credential", cx);
+        if !credential.is_empty() {
+            self.pending_credential.set(credential);
+            if let Some(input) = self.inputs.remove("credential") {
+                input.update(cx, |state, cx| state.set_value(String::new(), window, cx));
+            }
         }
         let draft = ProviderWriteDto {
             id: self.draft.id.clone().unwrap_or_else(new_profile_id),
@@ -703,12 +799,20 @@ impl TranslationPage {
             open_ai_chat_token_limit_field: self.draft.token_limit_field.clone(),
         };
         match serde_json::to_value(draft) {
-            Ok(provider) => self.request(
-                bridge,
-                "translation.providers/save",
-                json!({"provider": provider}),
-            ),
-            Err(error) => self.error = Some(error.to_string()),
+            Ok(provider) => {
+                self.request(
+                    bridge,
+                    "translation.providers/save",
+                    json!({"provider": provider}),
+                );
+                if self.error.is_some() {
+                    self.pending_credential.clear();
+                }
+            }
+            Err(error) => {
+                self.pending_credential.clear();
+                self.error = Some(error.to_string());
+            }
         }
     }
 
@@ -761,6 +865,7 @@ impl TranslationPage {
 
     pub(crate) fn new_provider(&mut self, kind: &str) {
         self.select(None);
+        self.pending_credential.clear();
         self.draft = ProviderDraft {
             kind: kind.to_owned(),
             base_url: default_endpoint(kind).into(),
@@ -775,7 +880,9 @@ impl TranslationPage {
 
     pub(crate) fn dismiss(&mut self) {
         self.active = false;
+        self.return_to_capture = false;
         self.secret.clear();
+        self.pending_credential.clear();
         self.inputs.remove("credential");
     }
 
@@ -1212,6 +1319,275 @@ mod tests {
         assert_eq!(value["openAIChatTokenLimitField"], "max_completion_tokens");
     }
 
+    #[test]
+    fn dismiss_and_selection_clear_return_to_capture_and_pending_credential() {
+        let mut page = TranslationPage::default();
+        page.providers = vec![test_provider("provider-a")];
+        page.active = true;
+        page.return_to_capture = true;
+        page.pending_credential.set("sk-temp".into());
+        page.dismiss();
+        assert!(!page.active);
+        assert!(!page.return_to_capture);
+        assert!(page.pending_credential.is_empty());
+
+        page.pending_credential.set("sk-temp".into());
+        page.select(Some("provider-a".into()));
+        assert!(page.pending_credential.is_empty());
+
+        page.pending_credential.set("sk-temp".into());
+        page.new_provider("deepL");
+        assert!(page.pending_credential.is_empty());
+    }
+
+    #[gpui_kit::test]
+    fn return_to_capture_navigation_restores_capture_panel_only_when_opened_from_capture(
+        cx: &mut gpui_kit::TestAppContext,
+    ) {
+        cx.update(|app| gpui_kit::init(app));
+        let (_events_tx, events_rx) = smol::channel::unbounded();
+        let bridge = BridgeSupervisor::disconnected_for_tests();
+        let window = cx.add_window(|window, cx| {
+            WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, false)
+        });
+
+        window
+            .update(cx, |this, window, cx| {
+                // Opened from capture panel -> return_to_capture = true
+                this.capture.panel_open = true;
+                this.capture.context = Some((
+                    "container-1".into(),
+                    "game-1".into(),
+                    "Demo Game".into(),
+                ));
+                this.open_translation_settings(cx);
+                assert!(!this.capture.panel_open);
+                assert!(this.settings);
+                assert!(this.translation_page.active);
+                assert!(this.translation_page.return_to_capture);
+                assert_eq!(
+                    this.translation_page.context.as_ref().map(|c| c.2.as_str()),
+                    Some("Demo Game")
+                );
+
+                this.close_translation_settings(window, cx);
+                assert!(!this.settings);
+                assert!(!this.translation_page.active);
+                assert!(!this.translation_page.return_to_capture);
+                assert!(this.capture.panel_open);
+
+                // Opened from application settings -> return_to_capture = false
+                this.capture.panel_open = false;
+                this.open_translation_settings(cx);
+                assert!(this.settings);
+                assert!(this.translation_page.active);
+                assert!(!this.translation_page.return_to_capture);
+                assert!(this.translation_page.context.is_none());
+
+                this.close_translation_settings(window, cx);
+                assert!(this.settings);
+                assert!(!this.translation_page.active);
+                assert!(!this.capture.panel_open);
+            })
+            .unwrap();
+    }
+
+    #[gpui_kit::test]
+    fn switch_kind_updates_default_endpoint_and_preserves_custom_endpoint(
+        cx: &mut gpui_kit::TestAppContext,
+    ) {
+        cx.update(|app| gpui_kit::init(app));
+        let (_events_tx, events_rx) = smol::channel::unbounded();
+        let bridge = BridgeSupervisor::disconnected_for_tests();
+        let window = cx.add_window(|window, cx| {
+            WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, false)
+        });
+
+        window
+            .update(cx, |this, window, cx| {
+                this.translation_page.new_provider("ollama");
+                let endpoint_input = this.translation_page.input(
+                    "endpoint",
+                    &this.translation_page.draft.base_url.clone(),
+                    "Endpoint",
+                    window,
+                    cx,
+                );
+                assert_eq!(
+                    endpoint_input.read(cx).value().to_string(),
+                    "http://localhost:11434"
+                );
+
+                // Switching from default ollama endpoint updates both draft and InputState.
+                this.translation_page.switch_kind("deepL", window, cx);
+                assert_eq!(this.translation_page.draft.kind, "deepL");
+                assert_eq!(
+                    this.translation_page.draft.base_url,
+                    "https://api.deepl.com"
+                );
+                assert_eq!(
+                    endpoint_input.read(cx).value().to_string(),
+                    "https://api.deepl.com"
+                );
+
+                // Custom endpoint is preserved when switching kinds.
+                this.translation_page.draft.base_url = "https://custom.proxy/v1".into();
+                endpoint_input.update(cx, |state, input_cx| {
+                    state.set_value("https://custom.proxy/v1", window, input_cx);
+                });
+                this.translation_page.switch_kind("openAIChat", window, cx);
+                assert_eq!(this.translation_page.draft.kind, "openAIChat");
+                assert_eq!(
+                    this.translation_page.draft.base_url,
+                    "https://custom.proxy/v1"
+                );
+                assert_eq!(
+                    endpoint_input.read(cx).value().to_string(),
+                    "https://custom.proxy/v1"
+                );
+            })
+            .unwrap();
+    }
+
+    #[gpui_kit::test]
+    fn pending_credential_chains_after_provider_save_and_clears_on_error(
+        cx: &mut gpui_kit::TestAppContext,
+    ) {
+        cx.update(|app| gpui_kit::init(app));
+        let (_events_tx, events_rx) = smol::channel::unbounded();
+        let bridge = BridgeSupervisor::disconnected_for_tests();
+        let window = cx.add_window(|window, cx| {
+            WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, false)
+        });
+
+        window
+            .update(cx, |this, window, cx| {
+                this.translation_page.new_provider("openAIChat");
+                let _name = this.translation_page.input("name", "My OpenAI", "Name", window, cx);
+                let _endpoint = this.translation_page.input(
+                    "endpoint",
+                    "https://api.openai.com/v1",
+                    "Endpoint",
+                    window,
+                    cx,
+                );
+                let cred_input =
+                    this.translation_page
+                        .input("credential", "sk-secret-key", "Cred", window, cx);
+
+                // Disconnected bridge clears pending_credential when request fails immediately.
+                let disconnected = BridgeSupervisor::disconnected_for_tests();
+                this.translation_page.save_provider(&disconnected, window, cx);
+                assert!(cred_input.read(cx).value().is_empty());
+                assert!(this.translation_page.pending_credential.is_empty());
+                assert!(this.translation_page.error.is_some());
+
+                // Error reply for translation.providers/save clears pending_credential.
+                this.translation_page.error = None;
+                this.translation_page.pending_credential.set("sk-retry".into());
+                let err_req = PendingTranslationRequest {
+                    method: "translation.providers/save".into(),
+                    provider_id: Some("p-err".into()),
+                    selection_generation: this.translation_page.selection_generation,
+                    draft_generation: this.translation_page.draft_generation,
+                    settings_edit_generation: this.translation_page.settings_edit_generation,
+                };
+                this.translation_page.pending.insert(101, err_req);
+                this.translation_page.reply(
+                    101,
+                    "translation.providers/save",
+                    Err("save failed".into()),
+                    &disconnected,
+                    cx,
+                );
+                assert!(this.translation_page.pending_credential.is_empty());
+                assert_eq!(this.translation_page.error.as_deref(), Some("save failed"));
+
+                // Ok reply for translation.providers/save extracts & clears pending_credential
+                // and immediately dispatches translation.credential.set for the saved provider ID.
+                this.translation_page.error = None;
+                this.translation_page.pending_credential.set("sk-chained".into());
+                let ok_req = PendingTranslationRequest {
+                    method: "translation.providers/save".into(),
+                    provider_id: Some("saved-id".into()),
+                    selection_generation: this.translation_page.selection_generation,
+                    draft_generation: this.translation_page.draft_generation,
+                    settings_edit_generation: this.translation_page.settings_edit_generation,
+                };
+                this.translation_page.pending.insert(102, ok_req);
+                let saved_profile = serde_json::to_value(test_provider("saved-id")).unwrap();
+                this.translation_page.reply(
+                    102,
+                    "translation.providers/save",
+                    Ok(saved_profile),
+                    &disconnected,
+                    cx,
+                );
+                assert_eq!(
+                    this.translation_page.selected_id.as_deref(),
+                    Some("saved-id")
+                );
+                assert!(this.translation_page.pending_credential.is_empty());
+                // Disconnected test supervisor proves `translation.credential.set` was dispatched.
+                assert!(
+                    this.translation_page
+                        .error
+                        .as_deref()
+                        .is_some_and(|e| e.contains("disconnected"))
+                );
+            })
+            .unwrap();
+    }
+
+    #[gpui_kit::test]
+    fn sync_capture_provider_selection_auto_selects_sole_and_prunes_deleted(
+        cx: &mut gpui_kit::TestAppContext,
+    ) {
+        cx.update(|app| gpui_kit::init(app));
+        let (_events_tx, events_rx) = smol::channel::unbounded();
+        let bridge = BridgeSupervisor::disconnected_for_tests();
+        let window = cx.add_window(|window, cx| {
+            WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, false)
+        });
+
+        window
+            .update(cx, |this, window, cx| {
+                // Sole provider is auto-selected when capture.provider_id is None.
+                this.translation_page.providers = vec![test_provider("provider-a")];
+                this.capture.provider_id = None;
+                this.sync_capture_provider_selection();
+                assert_eq!(this.capture.provider_id.as_deref(), Some("provider-a"));
+
+                // With 2+ providers, an unset selection stays None rather than guessing.
+                this.translation_page.providers =
+                    vec![test_provider("provider-a"), test_provider("provider-b")];
+                this.capture.provider_id = None;
+                this.sync_capture_provider_selection();
+                assert_eq!(this.capture.provider_id, None);
+
+                // Deleting the previously selected provider clears it when 2+ remain.
+                this.capture.provider_id = Some("deleted-provider".into());
+                this.sync_capture_provider_selection();
+                assert_eq!(this.capture.provider_id, None);
+
+                // Deleting down to 1 remaining provider clears the deleted ID and auto-selects the sole survivor.
+                this.translation_page.providers = vec![test_provider("provider-b")];
+                this.capture.provider_id = Some("provider-a".into());
+                this.sync_capture_provider_selection();
+                assert_eq!(this.capture.provider_id.as_deref(), Some("provider-b"));
+
+                // Closing translation settings back to capture syncs the sole provider too.
+                this.capture.panel_open = true;
+                this.capture.provider_id = None;
+                this.open_translation_settings(cx);
+                this.translation_page.providers = vec![test_provider("provider-b")];
+                this.close_translation_settings(window, cx);
+                assert!(this.capture.panel_open);
+                assert_eq!(this.capture.provider_id.as_deref(), Some("provider-b"));
+            })
+            .unwrap();
+    }
+
     fn test_provider(id: &str) -> ProviderDto {
         ProviderDto {
             id: id.into(),
@@ -1235,13 +1611,26 @@ mod tests {
     }
 }
 
-fn default_endpoint(kind: &str) -> &'static str {
+pub(crate) fn default_endpoint(kind: &str) -> &'static str {
     match kind {
         "ollama" => "http://localhost:11434",
         "anthropic" => "https://api.anthropic.com/v1",
         "gemini" => "https://generativelanguage.googleapis.com/v1beta",
         "deepL" => "https://api.deepl.com",
         _ => "https://api.openai.com/v1",
+    }
+}
+
+pub(crate) fn provider_kind_label(kind: &str) -> &str {
+    match kind {
+        "openAIChat" => "OpenAI Chat",
+        "openAICompletions" => "OpenAI Completions",
+        "ollama" => "Ollama（本地）",
+        "deepL" => "DeepL",
+        "anthropic" => "Anthropic",
+        "gemini" => "Gemini",
+        "" => "未选择",
+        other => other,
     }
 }
 

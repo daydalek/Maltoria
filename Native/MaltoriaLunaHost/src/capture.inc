@@ -45,7 +45,7 @@ std::wstring payload_directory() {
 }
 
 // Only this writer touches the socket after authentication. Callbacks never
-// wait for it: bounded try-lock enqueue, with observable overflow counters.
+// wait for socket I/O: bounded enqueue under mutex, with observable overflow counters.
 class CaptureOutbox {
 public:
     CaptureOutbox(SOCKET socket, std::string session)
@@ -54,8 +54,8 @@ public:
     void event(Json value) noexcept {
         if (closed_) return;
         try {
-            std::unique_lock lock(mutex_, std::try_to_lock);
-            if (!lock.owns_lock() || events_.size() >= 256) {
+            std::lock_guard lock(mutex_);
+            if (events_.size() >= 2048) {
                 ++dropped_;
             } else {
                 value["session"] = session_;

@@ -122,7 +122,7 @@ private final class HookSocket: @unchecked Sendable {
         listener = descriptor
         _ = fcntl(descriptor, F_SETFD, FD_CLOEXEC)
         _ = fcntl(descriptor, F_SETFL, O_NONBLOCK)
-        let stream = AsyncThrowingStream<JSONValue, any Error>.makeStream(bufferingPolicy: .bufferingOldest(256))
+        let stream = AsyncThrowingStream<JSONValue, any Error>.makeStream(bufferingPolicy: .bufferingOldest(2048))
         frames = stream.stream
         continuation = stream.continuation
         DispatchQueue(label: "maltoria.hook.reads").async { [self] in readFrames() }
@@ -276,7 +276,7 @@ public actor HookIPCClient: HookClient {
         self.session = session
         self.token = token
         self.architecture = architecture
-        let events = AsyncThrowingStream<JSONValue, any Error>.makeStream(bufferingPolicy: .bufferingOldest(256))
+        let events = AsyncThrowingStream<JSONValue, any Error>.makeStream(bufferingPolicy: .bufferingOldest(2048))
         stream = events.stream
         continuation = events.continuation
     }
