@@ -74,6 +74,20 @@ if [[ -d "${REPO_ROOT}/ThirdParty" ]]; then
     cp -R "${REPO_ROOT}/ThirdParty/"* "${CONTENTS}/Resources/ThirdParty/"
 fi
 
+# LunaHook capture payload: the bridge resolves LunaHook/<arch> beside its own
+# executable (Contents/Resources/LunaHook). Release builds must provide the
+# NativeLunaHook CI artifacts; local builds may omit them and capture reports
+# capture_payload_unavailable.
+if [[ -n "${MALTORIA_LUNAHOOK_ARTIFACTS:-}" ]]; then
+    python3 "${REPO_ROOT}/scripts/stage-lunahook-payload.py" \
+        --artifacts "${MALTORIA_LUNAHOOK_ARTIFACTS}" --output "${CONTENTS}/Resources/LunaHook"
+elif [[ "${MALTORIA_REQUIRE_LUNAHOOK:-0}" == 1 ]]; then
+    echo "MALTORIA_LUNAHOOK_ARTIFACTS is required for this build" >&2
+    exit 1
+else
+    echo "warning: packaging without the LunaHook capture payload" >&2
+fi
+
 # Defaults for local builds; release workflows supply their own version and build number.
 source "${REPO_ROOT}/apps/whisky-gpui/version.env"
 VERSION="${WHISKY_VERSION:-${WHISKY_DEFAULT_VERSION}}"

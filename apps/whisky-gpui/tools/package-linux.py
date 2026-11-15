@@ -99,7 +99,7 @@ def copy_sources(output, target):
     destination = output / 'share/whisky/sources'
     destination.mkdir(parents=True)
     paths = command('git', '-C', ROOT, 'ls-files', '--cached', '--others', '--exclude-standard', '--',
-                    'LICENSE', 'WhiskyCore', 'WhiskyMetadata', 'WhiskyBridge', 'crates', 'apps/whisky-gpui',
+                    'LICENSE', 'WhiskyCore', 'WhiskyMetadata', 'WhiskyBridge', 'WhiskyTranslation', 'crates', 'apps/whisky-gpui',
                     'scripts/check-gpui-foundation.py', 'build.sh', 'scripts/distribution',
                     'docs/BUILDING.md', 'docs/DistributionStrategy.md').splitlines()
     with tarfile.open(destination / 'application.tar.gz', 'w:gz') as archive:
@@ -150,7 +150,11 @@ def main():
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--archive', required=True, type=Path)
     parser.add_argument('--upscaler', required=True, type=Path)
+    parser.add_argument('--lunahook-artifacts', type=Path,
+                        help='Merged NativeLunaHook CI artifacts staged as bin/LunaHook')
     args = parser.parse_args()
+    if args.lunahook_artifacts is None and os.environ.get('MALTORIA_REQUIRE_LUNAHOOK') == '1':
+        parser.error('--lunahook-artifacts is required for this build')
     if platform.system() != 'Linux':
         parser.error('Run packaging in the Linux build environment')
     for tool in ('ldd', 'patchelf', 'cargo', 'swift', 'git'):
@@ -231,6 +235,9 @@ def main():
     shutil.copyfile(swift_license, notices / 'Swift-LICENSE.txt')
     shutil.copyfile(icu_license, notices / 'Foundation-ICU-LICENSE.txt')
     shutil.copyfile(TOOLS / 'linux-runtime-packages.txt', output / 'share/whisky-runtime-packages.txt')
+    if args.lunahook_artifacts is not None:
+        subprocess.run(['python3', ROOT / 'scripts/stage-lunahook-payload.py', '--artifacts',
+                        args.lunahook_artifacts.resolve(strict=True), '--output', output / 'bin/LunaHook'], check=True)
     copy_sources(output, target)
     copy_upscaler_resources(args.upscaler, output)
     (output / 'README.txt').write_text(
