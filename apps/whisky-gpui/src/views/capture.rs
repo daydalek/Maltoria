@@ -513,6 +513,11 @@ impl WhiskyApp {
                     row().child(muted(if cfg!(target_os = "linux") { "字幕叠层：Linux 原生窗口待实现；当前不可用。" } else { "字幕叠层：当前桥接未公布此功能，因此不可用。" }))
                 })
                 .child(muted(self.capture.overlay_platform.clone()));
-        body.into_any_element()
+        div()
+            .id("capture-panel-scroll")
+            .size_full()
+            .overflow_y_scroll()
+            .child(body)
+            .into_any_element()
     }
 }
