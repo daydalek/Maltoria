@@ -19,7 +19,11 @@
 
 import PackageDescription
 
-var dependencies: [Package.Dependency] = [.package(path: "../WhiskyCore"), .package(path: "../WhiskyMetadata")]
+var dependencies: [Package.Dependency] = [
+    .package(path: "../WhiskyCore"),
+    .package(path: "../WhiskyMetadata"),
+    .package(path: "../WhiskyTranslation")
+]
 var hostDependencies: [Target.Dependency] = ["WhiskyApplication", "WhiskyBridgeProtocol"]
 var nativeTargets: [Target] = []
 var hostToolProducts: [Product] = []
@@ -65,7 +69,8 @@ let package = Package(
                 "WhiskyBridgeProtocol",
                 "WhiskyCore",
                 "CHostCommand",
-                .product(name: "WhiskyMetadata", package: "WhiskyMetadata")
+                .product(name: "WhiskyMetadata", package: "WhiskyMetadata"),
+                .product(name: "WhiskyTranslation", package: "WhiskyTranslation")
             ],
             resources: [.copy("Resources/linux-wine-archive.py")]
         ),
@@ -76,7 +81,8 @@ let package = Package(
                 "WhiskyApplication",
                 "WhiskyBridgeProtocol",
                 "WhiskyCore",
-                .product(name: "WhiskyMetadata", package: "WhiskyMetadata")
+                .product(name: "WhiskyMetadata", package: "WhiskyMetadata"),
+                .product(name: "WhiskyTranslation", package: "WhiskyTranslation")
             ]
         )
     ] + nativeTargets,

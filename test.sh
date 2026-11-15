@@ -165,6 +165,7 @@ shutil.copytree(root / 'WhiskyBridge', tmp / 'WhiskyBridge',
                 ignore=shutil.ignore_patterns('.build', '.swiftpm', 'Package.resolved'))
 (tmp / 'WhiskyCore').symlink_to(root / 'WhiskyCore', target_is_directory=True)
 (tmp / 'WhiskyMetadata').symlink_to(root / 'WhiskyMetadata', target_is_directory=True)
+(tmp / 'WhiskyTranslation').symlink_to(root / 'WhiskyTranslation', target_is_directory=True)
 PY
         fi
         printf '%s\n' "$LINUX_BRIDGE_TMP/WhiskyBridge"
@@ -380,6 +381,9 @@ cmd_all() {
     run_step "GPUI Foundation 门禁 (Core/Metadata/Bridge + 真实 helper Rust SDK)" \
         run_foundation ${foundation_args[@]+"${foundation_args[@]}"}
 
+    run_step "WhiskyTranslation 跨平台翻译核心测试" \
+        run_swift_pkg WhiskyTranslation
+
     if [[ "$OS_NAME" == "Darwin" ]]; then
         local kit_args=()
         [[ "${#cargo_args[@]}" -gt 0 ]] && kit_args+=(--disable-automatic-resolution --skip-update)
@@ -470,14 +474,18 @@ cmd_swift() {
         kit)
             run_step "Swift: WhiskyKit" run_swift_pkg WhiskyKit ${swift_args[@]+"${swift_args[@]}"}
             ;;
+        translation)
+            run_step "Swift: WhiskyTranslation" run_swift_pkg WhiskyTranslation ${swift_args[@]+"${swift_args[@]}"}
+            ;;
         all)
             run_step "Swift: WhiskyCore" run_swift_pkg WhiskyCore ${swift_args[@]+"${swift_args[@]}"}
             run_step "Swift: WhiskyMetadata" run_swift_pkg WhiskyMetadata ${swift_args[@]+"${swift_args[@]}"}
             run_step "Swift: WhiskyBridge" run_swift_pkg WhiskyBridge ${swift_args[@]+"${swift_args[@]}"}
             run_step "Swift: WhiskyKit" run_swift_pkg WhiskyKit ${swift_args[@]+"${swift_args[@]}"}
+            run_step "Swift: WhiskyTranslation" run_swift_pkg WhiskyTranslation ${swift_args[@]+"${swift_args[@]}"}
             ;;
         *)
-            die "未知 Swift 目标: $target（可选: core, metadata, bridge, kit, all）"
+            die "未知 Swift 目标: $target（可选: core, metadata, bridge, kit, translation, all）"
             ;;
     esac
     finish_steps
@@ -766,7 +774,7 @@ cmd_list() {
     all         运行当前平台完整测试套件 (foundation + WhiskyKit[macOS] + gpui + python)
     engines     快速聚焦本分支 (feat/custom-wine-engines) 自定义 Wine 引擎相关测试
     foundation  运行 GPUI Foundation 门禁 (scripts/check-gpui-foundation.py)
-    swift       运行 Swift 包测试: [core|metadata|bridge|kit|all] [--filter <pat>] [--coverage] [--offline]
+    swift       运行 Swift 包测试: [core|metadata|bridge|kit|translation|all] [--filter <pat>] [--coverage] [--offline]
     rust        运行 Rust 测试: [bridge-sdk|gpui|all] [--filter <pat>] [--no-helper] [--offline]
     python      运行 Python unittest (scripts/distribution + test_bridge_coverage.py)
     lint        运行 swiftformat --lint、swiftlint --strict 与 check-third-party.py

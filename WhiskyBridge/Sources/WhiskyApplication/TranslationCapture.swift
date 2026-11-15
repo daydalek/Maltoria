@@ -1,0 +1,634 @@
+//
+//  TranslationCapture.swift
+//  WhiskyApplication
+//
+//  This file is part of Whisky.
+//
+//  Whisky is free software: you can redistribute it and/or modify it under the terms
+//  of the GNU General Public License as published by the Free Software Foundation,
+//  either version 3 of the License, or (at your option) any later version.
+//
+//  Whisky is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+//  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+//  See the GNU General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License along with Whisky.
+//  If not, see https://www.gnu.org/licenses/.
+//
+
+// SPDX-License-Identifier: GPL-3.0-or-later
+import Foundation
+import WhiskyBridgeProtocol
+import WhiskyCore
+import WhiskyTranslation
+
+@MainActor
+public final class TranslationHelperHandle {
+    private let stopOperation: () -> Void
+    private var stopped = false
+    public init(stop: @escaping () -> Void) { stopOperation = stop }
+    public func stop() {
+        guard !stopped else { return }
+        stopped = true
+        stopOperation()
+    }
+}
+
+/// One current history file per game, with explicit opt-in restoration across
+/// launches. Provider profiles and credentials belong to their separate stores.
+actor CaptureHistoryRepository: TranslationRepository {
+    let file: URL
+    let gameID: String
+    init(directory: URL, gameID: String) {
+        self.gameID = gameID
+        file = directory.appendingPathComponent("history").appendingPathComponent(gameID + ".json")
+    }
+
+    func saveConfiguration(_: ProviderConfiguration) {}
+    func loadConfiguration(id _: UUID) -> ProviderConfiguration? { nil }
+    func saveSettings(_: TranslationSettings) {}
+    func loadSettings() -> TranslationSettings? { nil }
+    func saveHistory(_ snapshot: TranslationSessionSnapshot) throws {
+        guard snapshot.gameID == gameID else { throw hookFailure("history_mismatch") }
+        let manager = FileManager.default
+        try manager.createDirectory(
+            at: file.deletingLastPathComponent(),
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        try JSONEncoder().encode(snapshot).write(to: file, options: .atomic)
+        try manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+    }
+
+    func loadHistory(gameID: String, sessionID _: UUID) throws -> TranslationSessionSnapshot? {
+        guard gameID == self.gameID, FileManager.default.fileExists(atPath: file.path) else { return nil }
+        let data = try Data(contentsOf: file)
+        guard data.count <= 64 * 1_024 * 1_024 else { throw hookFailure("history_too_large") }
+        let saved = try JSONDecoder().decode(TranslationSessionSnapshot.self, from: data)
+        guard saved.gameID == gameID, saved.entries.count <= 1_000 else { throw hookFailure("history_mismatch") }
+        return saved
+    }
+
+    func clearHistory(gameID: String, sessionID _: UUID) throws {
+        guard gameID == self.gameID else { throw hookFailure("history_mismatch") }
+        if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
+    }
+}
+
+@MainActor
+public final class ApplicationCaptureService {
+    public static let methods = [
+        "translation.capture.start", "translation.capture.processes", "translation.capture.attach",
+        "translation.capture.detach", "translation.capture.stop", "translation.capture.insertHook",
+        "translation.threads.select", "translation.threads.list", "translation.snapshot", "translation.events",
+        "translation.history",
+        "translation.history.text",
+        "translation.history.include", "translation.history.clear", "translation.cache.clear"
+    ]
+    public typealias Launcher = @MainActor (URL, URL, [String: String]) throws -> TranslationHelperHandle
+    public typealias ClientFactory = @MainActor (String, String) throws -> HookClientBootstrap
+    public var onSubtitle: ((JSONValue) -> Void)?
+    private let profiles: ApplicationTranslationService
+    private let launcher: Launcher
+    private let clientFactory: ClientFactory
+    private let payloadRoot: URL
+    private let requirePayload: Bool
+    private var client: (any HookClient)?
+    private var helper: TranslationHelperHandle?
+    private var incoming: Task<Void, Never>?
+    private var heartbeat: Task<Void, Never>?
+    private var updates: Task<Void, Never>?
+    private var session: TranslationSession?
+    private var captureID: String?
+    private var channelID: String?
+    private var architecture = "x64"
+    private var container: URL?
+    private var gameID: String?
+    private var providerID: UUID?
+    private var target: JSONValue?
+    private var processes: [JSONValue] = []
+    private var threads: [String: [String: JSONValue]] = [:]
+    private var roles: [String: String] = [:]
+    private var sequences: [String: Int64] = [:]
+    private var speaker: String?
+    private var activeSourceID: UUID?
+    private var activeEntryID: UUID?
+    private var selectionEpoch = 0
+    private var captureState = "stopped"
+    private var lastError: String?
+    private var subtitle: JSONValue = .object([
+        "source": .string(""),
+        "translation": .string(""),
+        "status": .string("idle")
+    ])
+    private var cursor: Int64 = 0
+    private var eventBuffer: [JSONValue] = []
+
+    public init(
+        profiles: ApplicationTranslationService,
+        payloadRoot: URL? = nil,
+        requirePayload: Bool = true,
+        clientFactory: @escaping ClientFactory = { try HookIPCClient.make(session: $0, architecture: $1) },
+        launcher: @escaping Launcher
+    ) {
+        self.profiles = profiles
+        self.launcher = launcher
+        self.clientFactory = clientFactory
+        self.requirePayload = requirePayload
+        self.payloadRoot = payloadRoot ?? Self.defaultPayloadRoot()
+    }
+
+    public static func defaultPayloadRoot() -> URL {
+        if let override = ProcessInfo.processInfo.environment["MALTORIA_LUNAHOOK_ROOT"], override.hasPrefix("/") {
+            return URL(fileURLWithPath: override)
+        }
+        let executable = URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL
+        return executable.deletingLastPathComponent().appendingPathComponent("LunaHook")
+    }
+
+    public func call(
+        _ method: String,
+        params: [String: JSONValue],
+        workspace: ApplicationWorkspace
+    ) async throws -> JSONValue {
+        switch method {
+        case "translation.capture.start": return try await start(params, workspace: workspace)
+        case "translation.capture.processes": return try await listProcesses()
+        case "translation.capture.attach": return try await attach(params)
+        case "translation.capture.detach", "translation.capture.stop":
+            await stop()
+            return await snapshot()
+        case "translation.capture.insertHook":
+            guard target != nil, let client else { throw hookFailure("not_attached") }
+            let code = try params.text("hookCode")
+            guard !code.isEmpty, code.utf8.count <= 2_048 else { throw hookFailure("invalid_hook_code") }
+            return try await client.request("insertHook", params: ["hookCode": .string(code)])
+        case "translation.threads.select": return try await selectThreads(params)
+        case "translation.threads.list": return threadPage(params)
+        case "translation.snapshot": return await snapshot()
+        case "translation.events":
+            await refreshSubtitle()
+            let after = max(0, params["afterCursor"]?.integer ?? 0)
+            let maximum = min(32, max(1, Int(params["maxCount"]?.integer ?? 16)))
+            let available = eventBuffer.filter { ($0.object?["cursor"]?.integer ?? 0) > after }
+            var page: [JSONValue] = []
+            var bytes = 0
+            for event in available.prefix(maximum) {
+                let size = try JSONEncoder().encode(event).count
+                if bytes + size > 512 * 1_024 { break }
+                bytes += size
+                page.append(event)
+            }
+            return .object([
+                "events": .array(page), "cursor": page.last?.object?["cursor"] ?? .integer(cursor),
+                "resetRequired": .bool(after > cursor || after < (eventBuffer.first?.object?["cursor"]?.integer ?? 1) -
+                    1)
+            ])
+        case "translation.history": return try await history(params)
+        case "translation.history.text":
+            guard let session, let id = try UUID(uuidString: params.text("entryID")),
+                  let entry = await session.history().first(where: { $0.id == id })
+            else { throw hookFailure("unknown_entry") }
+            let field = try params.text("field")
+            guard ["source", "translation"].contains(field) else { throw hookFailure("invalid_params") }
+            let text = field == "source" ? entry.source.text : entry.translatedText ?? ""
+            let offset = min(text.count, max(0, Int(params["offset"]?.integer ?? 0)))
+            let limit = min(16_384, max(1, Int(params["maxCharacters"]?.integer ?? 16_384)))
+            let chunk = String(text.dropFirst(offset).prefix(limit))
+            return .object([
+                "text": .string(chunk),
+                "nextOffset": .integer(Int64(offset + chunk.count)),
+                "total": .integer(Int64(text.count))
+            ])
+        case "translation.history.include":
+            guard let session, let id = try UUID(uuidString: params.text("entryID")),
+                  let included = params["include"]?.bool
+            else { throw hookFailure("invalid_params") }
+            try await session.setIncludedInContext(included, entryID: id)
+            return .object(["updated": .bool(true)])
+        case "translation.history.clear":
+            selectionEpoch += 1
+            activeSourceID = nil
+            activeEntryID = nil
+            subtitle = .object(["source": .string(""), "translation": .string(""), "status": .string("idle")])
+            emit("subtitle", subtitle)
+            onSubtitle?(subtitle)
+            try await session?.clearHistory()
+            return .object(["cleared": .bool(true)])
+        case "translation.cache.clear":
+            await session?.clearCache()
+            return .object(["cleared": .bool(true)])
+        default: throw BridgeFailure("method_unavailable", "Translation capture method is unavailable")
+        }
+    }
+
+    private func start(_ params: [String: JSONValue], workspace: ApplicationWorkspace) async throws -> JSONValue {
+        let entry = try await workspace.entry(params)
+        let prefix = try workspace.resolve(params)
+        guard let selectedProvider = try UUID(uuidString: params.text("providerID"))
+        else { throw hookFailure("invalid_provider") }
+        let arch = params["architecture"]?.string ?? "x64"
+        guard ["x86", "x64"].contains(arch) else { throw hookFailure("invalid_architecture") }
+        await stop()
+        session = nil
+        let id = UUID().uuidString
+        captureID = id
+        container = prefix
+        gameID = LibraryStorageLayout.key(prefix.standardizedFileURL.path + "\n" + entry.id)
+        providerID = selectedProvider
+        captureState = "connecting"
+        lastError = nil
+        subtitle = .object(["source": .string(""), "translation": .string(""), "status": .string("idle")])
+        activeSourceID = nil
+        activeEntryID = nil
+        onSubtitle?(subtitle)
+        do {
+            _ = try await profiles.captureConfiguration(providerID: selectedProvider)
+            guard captureID == id else { throw CancellationError() }
+            try await openChannel(architecture: arch)
+            guard captureID == id else { throw CancellationError() }
+            _ = try await listProcesses()
+            guard captureID == id else { throw CancellationError() }
+            // A missing payload or failed helper launch must not clear the
+            // previous game's persisted history.
+            session = try await profiles.makeCaptureSession(
+                gameID: gameID!,
+                providerID: selectedProvider,
+                restoreHistory: params["restoreHistory"]?.bool ?? false
+            )
+            guard captureID == id else { throw CancellationError() }
+            captureState = "selecting"
+            updates = Task { [weak self] in
+                while !Task.isCancelled {
+                    await self?.refreshSubtitle()
+                    do { try await Task.sleep(for: .milliseconds(150)) } catch { break }
+                }
+            }
+            emit("state", .string(captureState))
+            return await snapshot()
+        } catch {
+            if captureID == id { await stop()
+                setError(error)
+            }
+            throw error
+        }
+    }
+
+    private func openChannel(architecture arch: String) async throws {
+        guard captureID != nil, let container else { throw hookFailure("not_started") }
+        await closeChannel()
+        let wireID = UUID().uuidString
+        channelID = wireID
+        architecture = arch
+        let bits = arch == "x86" ? "32" : "64"
+        let root = payloadRoot.appendingPathComponent(arch)
+        let executable = root.appendingPathComponent("MaltoriaLunaHost\(bits).exe")
+        if requirePayload {
+            for filename in [
+                "MaltoriaLunaHost\(bits).exe",
+                "LunaHost\(bits).dll",
+                "LunaHook\(bits).dll",
+                "LunaTmpFontLoader.dll"
+            ] {
+                guard FileManager.default.fileExists(atPath: root.appendingPathComponent(filename).path) else {
+                    throw hookFailure("payload_unavailable")
+                }
+            }
+        }
+        let bootstrap = try clientFactory(wireID, arch)
+        client = bootstrap.client
+        do {
+            helper = try launcher(executable, container, bootstrap.environment)
+            try await bootstrap.client.ready()
+            guard channelID == wireID else { throw CancellationError() }
+            incoming = Task { [weak self, client = bootstrap.client] in
+                do {
+                    for try await event in await client.events() {
+                        await self?.consume(event, channel: wireID)
+                    }
+                    await self?.disconnected(channel: wireID, error: hookFailure("disconnected"))
+                } catch { await self?.disconnected(channel: wireID, error: error) }
+            }
+            heartbeat = Task { [weak self, client = bootstrap.client] in
+                do {
+                    while !Task.isCancelled {
+                        try await Task.sleep(for: .seconds(10))
+                        _ = try await client.request("ping", params: [:])
+                    }
+                } catch { await self?.disconnected(channel: wireID, error: error) }
+            }
+        } catch {
+            if channelID == wireID { await closeChannel() }
+            throw error
+        }
+    }
+
+    private func listProcesses() async throws -> JSONValue {
+        guard let client, let wireID = channelID else { throw hookFailure("not_started") }
+        let result = try await client.request("listProcesses", params: [:])
+        guard channelID == wireID else { throw CancellationError() }
+        guard let list = result.object?["processes"]?.array,
+              list.count <= 512
+        else { throw hookFailure("invalid_process_list") }
+        processes = list.filter { Self.validTarget($0) }
+        return .object(["processes": .array(processes), "truncated": result.object?["truncated"] ?? .bool(false)])
+    }
+
+    private func attach(_ params: [String: JSONValue]) async throws -> JSONValue {
+        guard let selected = params["target"], Self.validTarget(selected), processes.contains(selected) else {
+            throw hookFailure("invalid_target")
+        }
+        guard target == nil, let id = captureID else { throw hookFailure("already_attached") }
+        let arch = selected.object!["arch"]!.string!
+        do {
+            if arch != architecture { try await openChannel(architecture: arch) }
+            guard let client, captureID == id else { throw CancellationError() }
+            target = selected
+            captureState = "attaching"
+            _ = try await client.request("attach", params: ["target": selected])
+            guard captureID == id else { throw CancellationError() }
+            captureState = "attached"
+            emit("state", .string(captureState))
+            return await snapshot()
+        } catch {
+            if captureID == id { await stop()
+                setError(error)
+            }
+            throw error
+        }
+    }
+
+    nonisolated static func validTarget(_ value: JSONValue) -> Bool {
+        guard let record = value.object, let pid = record["guestPID"]?.integer, pid > 0, pid <= Int64(UInt32.max),
+              let path = record["exePath"]?.string, !path.isEmpty, path.utf8.count <= 8_192,
+              let arch = record["arch"]?.string, ["x86", "x64"].contains(arch),
+              let creation = record["creationTime"]?.string, creation.count == 16,
+              creation.allSatisfy(\.isHexDigit)
+        else { return false }
+        return path.hasPrefix("\\\\") || (path.count > 3 && path.dropFirst().hasPrefix(":\\"))
+    }
+
+    private func selectThreads(_ params: [String: JSONValue]) async throws -> JSONValue {
+        guard let selections = params["selections"]?.array,
+              selections.count <= 8
+        else { throw hookFailure("invalid_threads") }
+        var next: [String: String] = [:]
+        for selection in selections {
+            guard let object = selection.object, let id = object["threadID"]?.string, threads[id] != nil,
+                  let role = object["role"]?.string, ["body", "speaker", "choice"].contains(role), next[id] == nil
+            else { throw hookFailure("invalid_threads") }
+            next[id] = role
+        }
+        guard next.values.filter({ $0 == "body" }).count <= 1,
+              next.values.filter({ $0 == "speaker" }).count <= 1
+        else { throw hookFailure("invalid_threads") }
+        roles = next
+        selectionEpoch += 1
+        activeSourceID = nil
+        activeEntryID = nil
+        speaker = nil
+        markSubtitleCancelled()
+        emit("threadsChanged", .null)
+        try await session?.cancelActive()
+        return .object(["selected": .integer(Int64(roles.count))])
+    }
+
+    private func consume(_ value: JSONValue, channel: String) async {
+        guard channel == channelID, let frame = value.object, let target,
+              let pid = target.object?["guestPID"]
+        else { return }
+        switch frame["type"]?.string {
+        case "process":
+            if frame["guestPID"] == pid, frame["action"] == .string("disconnected") {
+                await stop()
+                captureState = "targetExited"
+                emit("state", .string(captureState))
+            }
+        case "error":
+            lastError = String((frame["code"]?.string ?? "capture_error").prefix(80))
+            emit("error", .string(lastError!))
+        case "thread", "text":
+            guard let thread = frame["thread"]?.object, thread["guestPID"] == pid,
+                  let address = thread["addressHex"]?.string, let context = thread["contextHex"]?.string,
+                  let context2 = thread["context2Hex"]?.string,
+                  [address, context, context2].allSatisfy({ $0.hasPrefix("0x") && $0.count <= 18 })
+            else { return }
+            let key = [address, context, context2].joined(separator: ":")
+            if frame["action"] == .string("removed") {
+                threads[key] = nil
+                roles[key] = nil
+                sequences[key] = nil
+                emit("threadsChanged", .null)
+                return
+            }
+            guard threads[key] != nil || threads.count < 256 else { lastError = "thread_limit"
+                return
+            }
+            var record = thread
+            record["id"] = .string(key)
+            record["preview"] = threads[key]?["preview"] ?? .string("")
+            threads[key] = record
+            guard frame["type"] == .string("text"), let text = frame["text"]?.string,
+                  !text.isEmpty, text.utf8.count <= 64 * 1_024,
+                  let sequence = frame["sequence"]?.integer, sequence > (sequences[key] ?? 0)
+            else { return }
+            sequences[key] = sequence
+            threads[key]?["preview"] = .string(String(text.prefix(256)))
+            emit("threadsChanged", .null)
+            guard let role = roles[key] else { return }
+            if role == "speaker" { speaker = String(text.prefix(256))
+                return
+            }
+            guard let session, let providerID else { return }
+            let sourceID = UUID()
+            let selectedAt = selectionEpoch
+            activeSourceID = sourceID
+            activeEntryID = nil
+            subtitle = .object([
+                "source": .string(text), "translation": .string(""), "speaker": speaker.map(JSONValue.string) ?? .null,
+                "kind": .string(role), "status": .string("pending"), "error": .null
+            ])
+            emit("subtitle", subtitle)
+            onSubtitle?(subtitle)
+            do {
+                try await profiles.allowTranslation(providerID: providerID)
+                guard channel == channelID, selectedAt == selectionEpoch else { return }
+                let entryID = try await session.submit(FinalizedTranslationSource(
+                    eventID: sourceID,
+                    revision: 0,
+                    streamID: key,
+                    generation: 1,
+                    text: text,
+                    speaker: speaker
+                ))
+                guard channel == channelID, selectedAt == selectionEpoch, activeSourceID == sourceID else { return }
+                activeEntryID = entryID
+            } catch {
+                guard channel == channelID, selectedAt == selectionEpoch, activeSourceID == sourceID else { return }
+                setError(error)
+                if var display = subtitle.object {
+                    display["status"] = .string("failed")
+                    display["error"] = .string(lastError!)
+                    subtitle = .object(display)
+                    emit("subtitle", subtitle)
+                    onSubtitle?(subtitle)
+                }
+            }
+        default: break
+        }
+    }
+
+    private func refreshSubtitle() async {
+        guard let session, let id = captureID, let active = await session.activeEntry(), captureID == id,
+              active.id == activeEntryID
+        else { return }
+        var display = subtitle.object ?? [:]
+        display["translation"] = .string(String((active.translatedText ?? "").prefix(16_384)))
+        display["translationTruncated"] = .bool((active.translatedText?.count ?? 0) > 16_384)
+        display["status"] = .string(active.status.rawValue)
+        display["error"] = active.failureDescription.map(JSONValue.string) ?? .null
+        let next = JSONValue.object(display)
+        if next != subtitle { subtitle = next
+            emit("subtitle", next)
+            onSubtitle?(next)
+        }
+    }
+
+    public func snapshot() async -> JSONValue {
+        await refreshSubtitle()
+        let count = await session?.history().count ?? 0
+        return .object([
+            "sessionID": captureID.map(JSONValue.string) ?? .null, "gameID": gameID.map(JSONValue.string) ?? .null,
+            "captureState": .string(captureState), "lastError": lastError.map(JSONValue.string) ?? .null,
+            "target": target ?? .null, "subtitle": subtitle, "cursor": .integer(cursor),
+            "processes": .array(processes), "historyCount": .integer(Int64(count)),
+            "threads": threadPage([:]).object?["threads"] ?? .array([]),
+            "threadsTotal": .integer(Int64(threads.count))
+        ])
+    }
+
+    private func history(_ params: [String: JSONValue]) async throws -> JSONValue {
+        let all = await session?.history() ?? []
+        let offset = min(all.count, max(0, Int(params["offset"]?.integer ?? 0)))
+        let maximum = min(20, max(1, Int(params["maxCount"]?.integer ?? 20)))
+        var page: [JSONValue] = []
+        var bytes = 0
+        for entry in all.dropFirst(offset).prefix(maximum) {
+            var record = try JSONValue.encoded(entry).object!
+            record["translatedText"] = entry.translatedText.map { .string(String($0.prefix(16_384))) } ?? .null
+            record["translationTruncated"] = .bool((entry.translatedText?.count ?? 0) > 16_384)
+            let value = JSONValue.object(record)
+            let size = try JSONEncoder().encode(value).count
+            if bytes + size > 512 * 1_024 { break }
+            bytes += size
+            page.append(value)
+        }
+        return .object([
+            "entries": .array(page),
+            "total": .integer(Int64(all.count)),
+            "nextOffset": .integer(Int64(offset + page.count))
+        ])
+    }
+
+    private func threadPage(_ params: [String: JSONValue]) -> JSONValue {
+        let offset = min(threads.count, max(0, Int(params["offset"]?.integer ?? 0)))
+        let count = min(64, max(1, Int(params["maxCount"]?.integer ?? 64)))
+        let keys = threads.keys.sorted()
+        let records: [JSONValue] = keys.dropFirst(offset).prefix(count).compactMap { key in
+            guard var thread = threads[key] else { return nil }
+            thread["role"] = roles[key].map(JSONValue.string) ?? .null
+            if let name = thread["hookName"]?.string { thread["hookName"] = .string(String(name.prefix(128))) }
+            return .object(thread)
+        }
+        return .object([
+            "threads": .array(records),
+            "total": .integer(Int64(threads.count)),
+            "nextOffset": .integer(Int64(offset + records.count))
+        ])
+    }
+
+    private func emit(_ type: String, _ value: JSONValue) {
+        cursor += 1
+        eventBuffer.append(.object(["cursor": .integer(cursor), "type": .string(type), "value": value]))
+        if eventBuffer.count > 64 { eventBuffer.removeFirst(eventBuffer.count - 64) }
+    }
+
+    private func setError(_ error: any Error) {
+        lastError = (error as? BridgeFailure)?.code ?? "translation_failed"
+        if let error = error as? TranslationError { lastError = error.localizedDescription }
+        emit("error", .string(lastError!))
+    }
+
+    private func disconnected(channel: String, error: any Error) async {
+        guard channelID == channel else { return }
+        await stop()
+        captureState = "error"
+        setError(error)
+    }
+
+    private func closeChannel() async {
+        channelID = nil
+        incoming?.cancel()
+        incoming = nil
+        heartbeat?.cancel()
+        heartbeat = nil
+        let oldClient = client
+        client = nil
+        let oldHelper = helper
+        helper = nil
+        await oldClient?.close() // EOF asks the helper to detach only its own target.
+        if let oldHelper {
+            Task { try? await Task.sleep(for: .seconds(2))
+                oldHelper.stop()
+            }
+        }
+    }
+
+    public func stop() async {
+        let oldSession = session
+        captureID = nil
+        selectionEpoch += 1
+        activeSourceID = nil
+        activeEntryID = nil
+        updates?.cancel()
+        updates = nil
+        target = nil
+        threads = [:]
+        roles = [:]
+        sequences = [:]
+        processes = []
+        speaker = nil
+        captureState = "stopped"
+        markSubtitleCancelled()
+        emit("state", .string(captureState))
+        await closeChannel()
+        try? await oldSession?.cancelActive()
+    }
+
+    private func markSubtitleCancelled() {
+        if var value = subtitle.object, value["status"] == .string("pending") {
+            value["status"] = .string("cancelled")
+            subtitle = .object(value)
+            emit("subtitle", subtitle)
+            onSubtitle?(subtitle)
+        }
+    }
+
+    public func settingsChanged() async {
+        guard let session, let providerID else { return }
+        do {
+            try await session.cancelActive()
+            try await profiles.allowTranslation(providerID: providerID)
+            let configuration = try await profiles.captureConfiguration(providerID: providerID)
+            try await session.updateConfiguration(configuration)
+            try await session.updateSettings(profiles.captureSettings())
+            await session.clearCache()
+        } catch { await stop()
+            setError(error)
+        }
+    }
+
+    public func prepareContainerRemoval(_ url: URL) async {
+        if container?.standardizedFileURL == url.standardizedFileURL { await stop() }
+    }
+}

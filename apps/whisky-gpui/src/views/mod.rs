@@ -1,6 +1,7 @@
 //! View layer: shared form widgets, menus, scrolling, and the page modules.
 
 pub(crate) mod bottle;
+pub(crate) mod capture;
 pub(crate) mod dialogs;
 pub(crate) mod gallery;
 pub(crate) mod immersive;
@@ -10,6 +11,7 @@ pub(crate) mod library;
 pub(crate) mod settings;
 pub(crate) mod staggered;
 pub(crate) mod statistics;
+pub(crate) mod translation;
 pub(crate) mod onboarding;
 pub(crate) mod view_picker;
 
@@ -34,6 +36,7 @@ pub(crate) enum Command {
     Configure(usize),
     /// Run the card's primary action (launch, cancel, or stop).
     Runtime(usize),
+    Translation(usize),
     /// Name the executable a folder entry starts, without running it.
     Executable(usize),
     /// Flip a launcher's "open with Whisky" auto-start flag.
@@ -346,6 +349,7 @@ impl WhiskyApp {
                 cx,
             ),
         ];
+        items.push(self.menu_item("游戏翻译…", Command::Translation(index), cx));
         if has_path {
             items.push(self.menu_item(crate::platform::REVEAL_LABEL, Command::Reveal(index), cx));
         }

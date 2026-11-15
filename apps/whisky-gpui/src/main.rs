@@ -10,6 +10,7 @@ use gpui_kit::{prelude::*, *};
 
 mod artwork;
 mod bridge;
+mod capture;
 mod config;
 mod desktop_open;
 mod host;
@@ -34,6 +35,7 @@ mod runtime;
 mod scan;
 mod state;
 mod theme;
+mod translation;
 mod ui_state;
 mod upscale;
 mod views;
@@ -99,8 +101,14 @@ impl Render for WhiskyApp {
         // fullscreen removes them entirely. Either way content hugs the edge.
         let fullscreen = window.is_fullscreen() || window.is_simple_fullscreen();
         let backdrop = self.backdrop(window, cx);
-        let body = if self.settings {
-            self.application_settings(cx)
+        let body = if self.capture.panel_open {
+            self.capture_panel(window, cx)
+        } else if self.settings {
+            if self.translation_page.active {
+                self.translation_settings(window, cx)
+            } else {
+                self.application_settings(cx)
+            }
         } else if self.preview.page == PreviewPage::Statistics {
             self.statistics_page(width, cx)
         } else if self.preview.page == PreviewPage::Launchers {
@@ -178,6 +186,7 @@ impl Render for WhiskyApp {
                     return;
                 }
                 if this.settings || this.preview.page != PreviewPage::Library {
+                    this.translation_page.close(window, cx);
                     this.settings = false;
                     this.preview.page = PreviewPage::Library;
                     this.selected_bottle = None;
@@ -230,6 +239,7 @@ impl Render for WhiskyApp {
                 } else if this.staggered_selection.is_some() {
                     this.staggered_selection = None;
                 } else if this.settings {
+                    this.translation_page.close(window, cx);
                     this.settings = false;
                 }
                 this.focus_handle.focus(window, cx);
@@ -387,6 +397,7 @@ fn capture_preview(handle: AnyWindowHandle, view: Entity<WhiskyApp>, cx: &mut Ap
             handle
                 .update(cx, |_, window, cx| {
                     view.update(cx, |this, cx| {
+                        this.translation_page.dismiss();
                         this.settings = false;
                         this.detail_open = false;
                         this.preview.sheet = None;

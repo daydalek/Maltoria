@@ -1,0 +1,13 @@
+--- a/src/NativeImpl/LunaHook/LunaHook/main.cc
++++ b/src/NativeImpl/LunaHook/LunaHook/main.cc
+@@ -232,1 +232,1 @@
+-BOOL WINAPI DllMain(HINSTANCE hModule, DWORD fdwReason, LPVOID)
++BOOL WINAPI DllMain(HINSTANCE hModule, DWORD fdwReason, LPVOID reserved)
+@@ -260,3 +260,7 @@
+ 	case DLL_PROCESS_DETACH:
+ 	{
++		// Maltoria: process teardown has already terminated other threads.
++		// They may own locks used by hook cleanup. The OS reclaims memory;
++		// only an explicit FreeLibrary should run synchronized cleanup.
++		if (reserved) return TRUE;
+ 		detachall();

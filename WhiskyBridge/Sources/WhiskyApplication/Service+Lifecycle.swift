@@ -37,6 +37,9 @@ extension ApplicationService {
     }
 
     func lifecycleCall(_ method: String, params: [String: JSONValue]) async throws -> JSONValue {
+        if ["bottle.remove", "bottle.move"].contains(method) {
+            try await capture.prepareContainerRemoval(workspace.resolve(params))
+        }
         if portableDiagnosticsMethods.contains(method) {
             return try diagnosticsService.call(method, params: params, workspace: workspace)
         }

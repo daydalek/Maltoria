@@ -1,0 +1,50 @@
+name: Native LunaHook builds
+
+on:
+  push:
+    branches: ['devin/**', main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build pinned upstream sources
+        shell: pwsh
+        run: ./scripts/build-lunahook.ps1 -Architecture ${{ matrix.arch }} -Output "$env:RUNNER_TEMP/MaltoriaNative"
+      - name: Capture Unicode from the authored GDI fixture
+        shell: pwsh
+        run: |
+          $bits = if ('${{ matrix.arch }}' -eq 'x86') { '32' } else { '64' }
+          $payload = "$env:RUNNER_TEMP/MaltoriaNative/${{ matrix.arch }}"
+          python scripts/windows/smoke_native_host.py `
+            --host "$payload/MaltoriaLunaHost$bits.exe" `
+            --fixture "$payload/MaltoriaUnicodeFixture.exe" `
+            --architecture "${{ matrix.arch }}"
+      - name: Assemble source and compliance payload
+        shell: pwsh
+        run: |
+          python scripts/check-third-party.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/package-native-sources.py --output "$env:RUNNER_TEMP/MaltoriaNative/sources"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Maltoria-LunaHook-${{ matrix.arch }}
+          path: ${{ runner.temp }}/MaltoriaNative
+          if-no-files-found: error

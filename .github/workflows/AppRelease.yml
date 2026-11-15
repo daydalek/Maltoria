@@ -18,7 +18,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  native:
+    uses: ./.github/workflows/NativeLunaHook.yml
+
   build:
+    needs: native
     runs-on: macos-26 # latest-stable Xcode 27, matching CI and local release builds
     timeout-minutes: 60
     steps:
@@ -44,8 +48,16 @@ jobs:
         run: swift test --package-path WhiskyBridge
       - name: Run GPUI tests
         run: cargo test --release --locked --manifest-path apps/whisky-gpui/Cargo.toml
+      - name: Download pinned LunaHook payloads
+        uses: actions/download-artifact@v4
+        with:
+          pattern: Maltoria-LunaHook-*
+          path: ${{ runner.temp }}/lunahook
+          merge-multiple: true
       - name: Build, sign and package GPUI app
         env:
+          MALTORIA_LUNAHOOK_ARTIFACTS: ${{ runner.temp }}/lunahook
+          MALTORIA_REQUIRE_LUNAHOOK: '1'
           RELEASE_TAG: ${{ github.ref_name }}
           MANUAL_VERSION: ${{ inputs.version }}
           BUILD_NUMBER: ${{ github.run_number }}

@@ -42,11 +42,23 @@ public protocol NativeApplicationServices: AnyObject {
     /// lifecycle moves or erases it. Host adapters that keep Wine processes
     /// (the Linux adapter) terminate them here; file-only adapters do nothing.
     func prepareContainerRemoval(_ container: URL) async throws
+    func launchTranslationHelper(executable: URL, container: URL, environment: [String: String]) throws
+        -> TranslationHelperHandle
+    func updateTranslationSubtitle(_ value: JSONValue)
 }
 
 public extension NativeApplicationServices {
     func prepareShutdown(applyExitPolicy: Bool) async throws {}
     func prepareContainerRemoval(_ container: URL) async throws {}
+    func launchTranslationHelper(
+        executable: URL,
+        container: URL,
+        environment: [String: String]
+    ) throws -> TranslationHelperHandle {
+        throw BridgeFailure("capability_unavailable", "A Wine runtime is required for text capture")
+    }
+
+    func updateTranslationSubtitle(_ value: JSONValue) {}
 }
 
 @MainActor
@@ -66,6 +78,21 @@ public final class ApplicationService {
     public let native: (any NativeApplicationServices)?
     public let runtime: RuntimeService?
     public let processes: ProcessService?
+    public let translation: ApplicationTranslationService
+    public lazy var capture: ApplicationCaptureService = {
+        let capture =
+            ApplicationCaptureService(profiles: translation) { [weak self] executable, container, environment in
+                guard let native = self?.native else { throw hookFailure("runtime_unavailable") }
+                return try native.launchTranslationHelper(
+                    executable: executable,
+                    container: container,
+                    environment: environment
+                )
+            }
+        capture.onSubtitle = { [weak self] value in self?.native?.updateTranslationSubtitle(value) }
+        return capture
+    }()
+
     public static let methods = [
         "bridge.describe", "bridge.shutdown", "jobs.get", "jobs.cancel", "library.scan", "library.page",
         "workspace.containers", "system.info",
@@ -97,7 +124,8 @@ public final class ApplicationService {
         "processes.killAll",
         "environment.read",
         "environment.set"
-    ] + LibraryMetadataService.methods + GameReferenceService.methods
+    ] + LibraryMetadataService.methods + GameReferenceService.methods + ApplicationTranslationService
+        .methods + ApplicationCaptureService.methods
     public init(
         workspace: ApplicationWorkspace,
         native: (any NativeApplicationServices)? = nil,
@@ -105,6 +133,7 @@ public final class ApplicationService {
         processes: ProcessService? = nil,
         preferences: PreferencesService? = nil,
         jobs: BridgeJobStore? = nil,
+        translationService: ApplicationTranslationService? = nil,
         metadataSession: URLSession = .shared
     ) {
         self.workspace = workspace
@@ -112,6 +141,11 @@ public final class ApplicationService {
         self.runtime = runtime
         self.processes = processes
         self.preferences = preferences
+        translation = translationService ?? ApplicationTranslationService()
+        translation.networkAccess = { [weak preferences] in
+            let values = try preferences?.call("preferences.read", params: [:])
+            if values?.object?["offlineMode"] == .bool(true) { throw hookFailure("offline") }
+        }
         let jobStore = jobs ?? BridgeJobStore()
         self.jobs = jobStore
         diagnosticsService = FileDiagnosticsService(jobs: jobStore)
@@ -177,6 +211,7 @@ public final class ApplicationService {
         portraitRepair = nil
         repairStores = [:]
         runtime?.stopTracking()
+        await capture.stop()
         await jobs.shutdown()
         await native?.shutdown(applyExitPolicy: applyExitPolicy)
     }
@@ -191,15 +226,33 @@ extension ApplicationService {
         params: [String: JSONValue]
     ) async throws -> JSONValue? {
         switch scope {
-        case "preferences": try await preferencesCall(method, params: params)
-        case "jobs": try await jobsCall(method, params: params)
-        case "entry": try await entryCall(method, params: params)
-        case "configuration": try await configurationCall(method, params: params)
-        case "programs": try await programCall(method, params: params)
-        case "environment": try await environmentCall(method, params: params)
-        case "processes": try await processesCall(method, params: params)
-        case "system": method == "system.info" ? ApplicationInfo.payload() : nil
-        default: nil
+        case "preferences": return try await preferencesCall(method, params: params)
+        case "jobs": return try await jobsCall(method, params: params)
+        case "entry": return try await entryCall(method, params: params)
+        case "configuration": return try await configurationCall(method, params: params)
+        case "programs": return try await programCall(method, params: params)
+        case "environment": return try await environmentCall(method, params: params)
+        case "processes": return try await processesCall(method, params: params)
+        case "translation":
+            if ApplicationCaptureService.methods.contains(method) {
+                return try await capture.call(method, params: params, workspace: workspace)
+            }
+            if ApplicationTranslationService.methods.contains(method) {
+                let result = try await translation.call(method, params: params)
+                if [
+                    "translation.providers/save",
+                    "translation.providers/delete",
+                    "translation.settings/save",
+                    "translation.credential.set",
+                    "translation.credential.delete"
+                ].contains(method) {
+                    await capture.settingsChanged()
+                }
+                return result
+            }
+            return try await nativeCall(method, params: params)
+        case "system": return method == "system.info" ? ApplicationInfo.payload() : nil
+        default: return nil
         }
     }
 
@@ -229,6 +282,7 @@ extension ApplicationService {
 
     private func describe() -> JSONValue {
         var extraMethods = native?.methods ?? []
+        extraMethods += ApplicationTranslationService.methods
         extraMethods += preferences == nil ? [] : PreferencesService.methods
         extraMethods += runtime == nil ? [] : RuntimeService.methods
         extraMethods += portableLifecycleMethods + portableDiagnosticsMethods
@@ -236,6 +290,7 @@ extension ApplicationService {
             "workspace.recover", "workspace.discover", "workspace.import"
         ]
         var extraCapabilities = native?.capabilities ?? []
+        extraCapabilities += ApplicationTranslationService.capabilities
         extraCapabilities += runtime == nil ? [] : RuntimeService.capabilities
         extraCapabilities += portableLifecycleMethods.isEmpty ? [] : ["bottle.lifecycle.file"]
         extraCapabilities += portableDiagnosticsMethods.isEmpty ? [] : ["bottle.diagnostics.file"]
@@ -273,7 +328,9 @@ extension ApplicationService {
         switch method {
         case "preferences.read", "preferences.set", "preferences.setMany", "preferences.schema":
             guard let preferences else { throw BridgeFailure("method_unavailable", "Preferences store is unavailable") }
-            return try preferences.call(method, params: params)
+            let result = try preferences.call(method, params: params)
+            if method == "preferences.set" || method == "preferences.setMany" { await capture.settingsChanged() }
+            return result
         default:
             return try await nativeCall(method, params: params)
         }

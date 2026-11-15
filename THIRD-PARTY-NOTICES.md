@@ -117,3 +117,29 @@ Consult that release's source and license materials for its exact payload.
 Apple's D3DMetal/Game Porting Toolkit components are imported under Apple's
 applicable terms by the user. This application notice covers the application
 and the bundled tools listed above.
+
+## Native Windows text-hook build sources
+
+- **LunaTranslator native LunaHook/LunaHost sources** — pinned to
+  `178b4372c4ed7ac0f67aa2e217007916e937250d`, GPL-3.0; full upstream license
+  and copyright notices are preserved in `licenses/LunaTranslator-GPL-3.0.txt`
+  and the corresponding source archive.
+- **MinHook** — pinned to commit `c3fcafdc10146beb5919319d0683e44e3c30d537`
+  (v1.3.4), BSD-2-Clause; full upstream notice is
+  `licenses/MinHook-BSD-2-Clause.txt`. It also preserves the BSD notices for
+  the bundled HDE32/HDE64 disassemblers, including Vyacheslav Patkov's credits.
+- **uchardet** — pinned to commit `06029ec3340cdf6bf9a6a537dafb3f39eda0560e`,
+  whose 61 compiled source files declare
+  `MPL-1.1 OR GPL-2.0-or-later OR LGPL-2.1-or-later`. Maltoria selects the
+  `GPL-2.0-or-later` option for this GPL-3.0-or-later distribution. The upstream
+  MPL-1.1 `COPYING` and verbatim alternative-license notice are preserved in
+  `licenses/uchardet-COPYING.txt` and
+  `licenses/uchardet-license-options.txt`; the source archive retains every
+  original file notice.
+- **nlohmann/json** — pinned to commit
+  `55f93686c01528224f448c19128836e7df245f72` (v3.12.0), MIT; full license is
+  `licenses/nlohmann-json-MIT.txt`.
+
+The exact source archives, their SHA-256 values, and a separate `native_packages`
+inventory are in `manifest.json`. `LunaHook-BUILD.md` records the local-source
+build procedure. No YY-Thunks or VC-LTL source is included; VC-LTL is disabled.

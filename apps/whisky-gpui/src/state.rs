@@ -697,6 +697,8 @@ pub(crate) struct WhiskyApp {
     pub(crate) winetricks: WinetricksState,
     /// Draft of the program whose run-settings sheet is open.
     pub(crate) program_settings: ProgramSettingsPage,
+    pub(crate) translation_page: crate::translation::TranslationPage,
+    pub(crate) capture: crate::capture::CaptureState,
     /// The pending library-entry move, while its target picker is open.
     pub(crate) move_entry: Option<MoveEntryState>,
     /// The opened/dropped file, while its bottle picker is open.
@@ -992,6 +994,8 @@ impl WhiskyApp {
             desktop_installing: false,
             winetricks: WinetricksState::default(),
             program_settings: ProgramSettingsPage::default(),
+            translation_page: crate::translation::TranslationPage::default(),
+            capture: crate::capture::CaptureState::default(),
             move_entry: None,
             open_file: None,
             catalogue_ready: false,
@@ -1204,6 +1208,11 @@ impl WhiskyApp {
                 };
                 let stopped = matches!(&status, BridgeStatus::Stopped);
                 self.bridge_status = status;
+                if unavailable {
+                    self.translation_page.bridge_disconnected(reason.as_deref());
+                    self.capture.disconnected(reason.as_deref());
+                    cx.notify();
+                }
                 if !connected {
                     self.service_methods.clear();
                     self.setup_status = None;
@@ -1250,6 +1259,10 @@ impl WhiskyApp {
                         self.load_error = reason;
                     }
                 }
+            }
+            BridgeEvent::TranslationReply { request, method, result } => {
+                self.translation_page.reply(request, &method, result.clone(), cx);
+                self.capture.reply(request, &method, result, &self.bridge, cx);
             }
             BridgeEvent::Services(methods) => {
                 self.service_methods = methods.into_iter().collect();
@@ -3465,6 +3478,7 @@ impl WhiskyApp {
                     self.refresh_processes(cx);
                 }
             }
+            Command::Translation(i) => self.open_translation_for_game(i, cx),
             Command::GameInfo(i) => self.open_game_info(i, cx),
             Command::MetadataSearch => self.search_game_info(cx),
             Command::MetadataApply(source, game) => {
@@ -3552,6 +3566,8 @@ impl WhiskyApp {
 
     /// The settings page replaces the library body, as the gear does.
     pub(crate) fn open_settings(&mut self, cx: &mut Context<Self>) {
+        self.capture.panel_open = false;
+        self.translation_page.dismiss();
         self.settings = true;
         self.detail_open = false;
         self.preview.sheet = None;
@@ -3563,6 +3579,38 @@ impl WhiskyApp {
         }
         if !self.demo && self.service_available("wine.engines.list") {
             self.bridge.load_wine_engines();
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn open_translation_settings(&mut self, cx: &mut Context<Self>) {
+        self.capture.panel_open = false;
+        self.open_settings(cx);
+        self.translation_page.context = None;
+        self.translation_page.open(&self.bridge);
+        cx.notify();
+    }
+
+    pub(crate) fn open_translation_for_game(&mut self, index: usize, cx: &mut Context<Self>) {
+        if let Some(game) = self.game(index) {
+            let context = (game.container.clone(), game.id.clone(), game.title.clone());
+            if self.capture.context.as_ref() != Some(&context) {
+                self.capture.provider_id = None;
+            }
+            self.capture.context = Some(context);
+        }
+        self.settings = false;
+        self.translation_page.active = false;
+        self.capture.panel_open = true;
+        if self.translation_page.providers.is_empty() {
+            self.translation_page.request(
+                &self.bridge,
+                "translation.providers/list",
+                serde_json::json!({}),
+            );
+        }
+        if self.capture.history_owner == self.capture.context {
+            self.capture.refresh_history(&self.bridge, 0);
         }
         cx.notify();
     }

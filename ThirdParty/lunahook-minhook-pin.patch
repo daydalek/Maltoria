@@ -1,0 +1,10 @@
+--- a/src/NativeImpl/LunaHook/LunaHook/CMakeLists.txt
++++ b/src/NativeImpl/LunaHook/LunaHook/CMakeLists.txt
+@@ -2,5 +2,5 @@
+ FetchContent_Declare(minhook
+ GIT_REPOSITORY https://github.com/TsudaKageyu/minhook
+-	GIT_TAG master
+-	GIT_SHALLOW TRUE
++	GIT_TAG c3fcafdc10146beb5919319d0683e44e3c30d537
++	GIT_SHALLOW FALSE
+ )

@@ -25,7 +25,7 @@ with tempfile.TemporaryDirectory(prefix='whisky-linux-release-') as folder:
     bridge = workspace / 'WhiskyBridge'
     shutil.copytree(root / 'WhiskyBridge', bridge,
                     ignore=shutil.ignore_patterns('.build', '.swiftpm', 'Package.resolved'))
-    for name in ('WhiskyCore', 'WhiskyMetadata'):
+    for name in ('WhiskyCore', 'WhiskyMetadata', 'WhiskyTranslation'):
         (workspace / name).symlink_to(root / name, target_is_directory=True)
     command = ['swift', 'build', '--jobs', os.environ.get('WHISKY_BUILD_JOBS', '4'),
                '--package-path', str(bridge), '--scratch-path', str(cache / 'bridge-build'),
@@ -43,4 +43,5 @@ python3 "$repo_root/apps/whisky-gpui/tools/build-linux-upscaler.py" \
 python3 "$repo_root/apps/whisky-gpui/tools/package-linux.py" \
     --frontend "$cache/rust-build/release/whisky-gpui" \
     --products "$(cat "$output/products-path.txt")" --output "$output/Maltoria" \
-    --archive "$output/maltoria-linux-$(uname -m).tar.gz" --upscaler "$upscaler"
+    --archive "$output/maltoria-linux-$(uname -m).tar.gz" --upscaler "$upscaler" \
+    ${MALTORIA_LUNAHOOK_ARTIFACTS:+--lunahook-artifacts "$MALTORIA_LUNAHOOK_ARTIFACTS"}

@@ -27,6 +27,7 @@ import WhiskyKit
 public final class MacOSApplicationServices: NativeApplicationServices {
     var bottles: [URL: (Data, Bottle)] = [:]
     private let wineEnabled: Bool
+    private let subtitleOverlay: MacOSSubtitleOverlay
     let jobs: BridgeJobStore
     /// Registry of external Wine engines; injectable for isolated tests.
     let engineStore: WineEngineStore
@@ -72,13 +73,14 @@ public final class MacOSApplicationServices: NativeApplicationServices {
     ) {
         WhiskyDataIdentity.configure("com.daydalek.Maltoria")
         self.wineEnabled = wineEnabled
+        subtitleOverlay = MacOSSubtitleOverlay(domain: preferencesDomain)
         self.jobs = jobs
         self.engineStore = engineStore
         WhiskyPreferences.configureSharedDomain(preferencesDomain)
     }
 
     public var capabilities: [String] {
-        ["system.files", "setup", "programs.settings", "programs.shortcut", "library.edit"] +
+        ["system.files", "setup", "programs.settings", "programs.shortcut", "library.edit", "translation.overlay"] +
             (wineEnabled ? [
                 "bottle.create",
                 "bottle.manage",
@@ -101,6 +103,7 @@ public final class MacOSApplicationServices: NativeApplicationServices {
         [
             "system.reveal", "system.open", "system.resources", "system.chooseFolder", "system.choosePath",
             "system.chooseFolders",
+            "translation.overlay.read", "translation.overlay.configure",
             "setup.status", "setup.install", "setup.checkUpdate", "setup.installRosetta",
             "setup.gptk.status", "setup.gptk.import", "setup.gptk.remove",
             "programs.settings.read", "programs.settings.set",
@@ -151,6 +154,21 @@ public final class MacOSApplicationServices: NativeApplicationServices {
         host: WineProcessHost(bottle: { [weak self] in self?.bottle($0) })
     )
 
+    public func launchTranslationHelper(
+        executable: URL, container: URL, environment: [String: String]
+    ) throws -> TranslationHelperHandle {
+        guard wineEnabled, let bottle = bottle(container) else {
+            throw BridgeFailure(
+                "capability_unavailable",
+                "Text capture requires an enabled Wine runtime and valid bottle"
+            )
+        }
+        let process = try Wine.runTranslationHelper(at: executable, bottle: bottle, environment: environment)
+        return TranslationHelperHandle { if process.isRunning { process.terminate() } }
+    }
+
+    public func updateTranslationSubtitle(_ value: JSONValue) { subtitleOverlay.update(value) }
+
     func bottle(_ url: URL) -> Bottle? {
         guard let data = try? ApplicationWorkspace.read(url.appendingPathComponent("Metadata.plist")),
               (try? PropertyListDecoder().decode(BottleSettings.self, from: data)) != nil
@@ -197,6 +215,7 @@ public final class MacOSApplicationServices: NativeApplicationServices {
         guard methods.contains(method)
         else { throw BridgeFailure("method_unavailable", "Native method is unavailable") }
         switch method.prefix(while: { $0 != "." }) {
+        case "translation": return try subtitleOverlay.call(method, params: params)
         case "system": return try systemCall(method, params: params, workspace: workspace)
         case "setup": return try await setupCall(method, params: params)
         case "bottle":
@@ -226,6 +245,7 @@ public final class MacOSApplicationServices: NativeApplicationServices {
     }
 
     public func shutdown(applyExitPolicy: Bool) async {
+        subtitleOverlay.hide()
         guard wineEnabled else { return }
         runtimeService.stopTracking()
         await GameActivityTracker.shared.stopPolling()

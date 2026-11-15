@@ -76,7 +76,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Verify third-party notices and source inventory
-        run: python3 scripts/check-third-party.py
+        run: |
+          python3 scripts/check-third-party.py
+          python3 -m unittest discover -s scripts/distribution -p 'test_native_sources.py' -v
+          python3 -m unittest discover -s scripts/distribution -p 'test_native_host_protocol.py' -v
 
   # Test job for WhiskyKit - always runs to ensure coverage is uploaded
   test:
@@ -117,6 +120,9 @@ jobs:
 
       - name: Run WhiskyMetadata Tests
         run: swift test --package-path WhiskyMetadata
+
+      - name: Run WhiskyTranslation Tests
+        run: swift test --package-path WhiskyTranslation
 
       - name: Run Tests with Code Coverage
         run: swift test --package-path WhiskyKit --enable-code-coverage
