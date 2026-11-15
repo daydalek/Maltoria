@@ -76,7 +76,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Verify third-party notices and source inventory
-        run: python3 scripts/check-third-party.py
+        run: |
+          python3 scripts/check-third-party.py
+          python3 -m unittest discover -s scripts/distribution -p 'test_native_sources.py' -v
 
   # Test job for WhiskyKit - always runs to ensure coverage is uploaded
   test:

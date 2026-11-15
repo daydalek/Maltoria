@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Archive the release commit and the exact locked Swift package sources."""
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -41,10 +42,15 @@ def build(checkouts, output):
                 raise ValueError(f"Checkout revision differs from inventory: {package['identity']}")
             extract_git_tree(repository, revision,
                              source / "ThirdParty/package-sources" / package["identity"])
+        for package in manifest["native_packages"]:
+            archive = source / "ThirdParty" / package["archive"]
+            if not archive.is_file() or hashlib.sha256(archive.read_bytes()).hexdigest() != package["sha256"]:
+                raise ValueError(f"Native source archive differs from inventory: {package['name']}")
         output.parent.mkdir(parents=True, exist_ok=True)
         with tarfile.open(output, "w:gz") as archive:
             archive.add(source, arcname=source.name)
-    print(f"Application and {len(manifest['packages'])} dependency sources: {output}")
+    print(f"Application and {len(manifest['packages'])} Swift plus "
+          f"{len(manifest['native_packages'])} native dependency sources: {output}")
 
 
 if __name__ == "__main__":

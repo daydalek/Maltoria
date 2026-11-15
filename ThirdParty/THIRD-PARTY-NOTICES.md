@@ -117,3 +117,19 @@ Consult that release's source and license materials for its exact payload.
 Apple's D3DMetal/Game Porting Toolkit components are imported under Apple's
 applicable terms by the user. This application notice covers the application
 and the bundled tools listed above.
+
+## Native Windows text-hook build sources
+
+- **LunaTranslator native LunaHook/LunaHost sources** — pinned to
+  `178b4372c4ed7ac0f67aa2e217007916e937250d`, GPL-3.0; full upstream license
+  and copyright notices are preserved in `licenses/LunaTranslator-GPL-3.0.txt`
+  and the corresponding source archive.
+- **MinHook** — pinned to commit `c3fcafdc10146beb5919319d0683e44e3c30d537`
+  (v1.3.4), BSD-2-Clause; full upstream notice is
+  `licenses/MinHook-BSD-2-Clause.txt`.
+- **uchardet** — pinned to commit `06029ec3340cdf6bf9a6a537dafb3f39eda0560e`,
+  MPL-1.1; full license is `licenses/uchardet-COPYING.txt`.
+
+The exact source archives, their SHA-256 values, and a separate `native_packages`
+inventory are in `manifest.json`. `LunaHook-BUILD.md` records the local-source
+build procedure. No YY-Thunks or VC-LTL source is included; VC-LTL is disabled.

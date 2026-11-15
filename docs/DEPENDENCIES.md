@@ -57,8 +57,10 @@ All application dependency licenses and resolved revisions are recorded in
 [ThirdParty/manifest.json](../ThirdParty/manifest.json). The application embeds
 the `ThirdParty` directory. `python3 scripts/check-third-party.py` validates the
 inventory and package lock revisions; `--resources PATH` also checks a built or
-extracted application's `Contents/Resources`. Each application release includes
-a source archive with the application and locked Swift package sources.
+extracted application's `Contents/Resources`. `native_packages` separately locks
+the LunaTranslator, MinHook, and uchardet sources used by the Windows build.
+Their exact source archives and build instructions are included in release source
+archives and the Windows CI artifact; see [LunaHook-BUILD.md](../ThirdParty/LunaHook-BUILD.md).
 
 ## Tracking cadence
 

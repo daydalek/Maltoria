@@ -51,6 +51,21 @@ def verify(resources=None):
                 check(entry["license_file"] in expected,
                       f"License missing for {pin['identity']}")
 
+    native_packages = manifest["native_packages"]
+    check(len({p["name"] for p in native_packages}) == len(native_packages),
+          "Duplicate native package name")
+    for package in native_packages:
+        archive = package["archive"]
+        check(package["revision"] and len(package["revision"]) == 40,
+              f"Invalid native revision: {package['name']}")
+        check(package["license_file"] in expected,
+              f"Native license missing: {package['name']}")
+        check(archive in expected and expected.get(archive) == package["sha256"],
+              f"Native source hash not in file inventory: {package['name']}")
+        path = directory / archive
+        check(path.is_file() and digest(path) == package["sha256"],
+              f"Native source archive hash mismatch: {package['name']}")
+
     if resources:
         # Compare immutable resources. Code signing changes executable hashes.
         bundled = Path(resources) / "ThirdParty"
@@ -68,7 +83,8 @@ def verify(resources=None):
 
     if errors:
         raise ValueError("\n".join(errors))
-    print(f"Third-party notices verified: {len(packages)} packages, {len(expected)} preserved files"
+    print(f"Third-party notices verified: {len(packages)} Swift packages, "
+          f"{len(native_packages)} native packages, {len(expected)} preserved files"
           + (", bundle checked" if resources else ""))
 
 

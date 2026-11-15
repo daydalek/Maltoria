@@ -1,0 +1,38 @@
+name: Native LunaHook builds
+
+on:
+  push:
+    branches: ['devin/**']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build pinned upstream sources
+        shell: pwsh
+        run: ./scripts/build-lunahook.ps1 -Architecture ${{ matrix.arch }} -Output "$env:RUNNER_TEMP/MaltoriaNative"
+      - name: Assemble source and compliance payload
+        shell: pwsh
+        run: |
+          python scripts/check-third-party.py
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP/MaltoriaNative/sources" | Out-Null
+          Copy-Item ThirdParty/sources/native "$env:RUNNER_TEMP/MaltoriaNative/sources/native" -Recurse
+          Copy-Item ThirdParty/licenses "$env:RUNNER_TEMP/MaltoriaNative/sources/licenses" -Recurse
+          Copy-Item ThirdParty/manifest.json,ThirdParty/THIRD-PARTY-NOTICES.md,ThirdParty/LunaHook-BUILD.md,ThirdParty/lunahook-minhook-pin.patch "$env:RUNNER_TEMP/MaltoriaNative/sources/"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Maltoria-LunaHook-${{ matrix.arch }}
+          path: ${{ runner.temp }}/MaltoriaNative
+          if-no-files-found: error
