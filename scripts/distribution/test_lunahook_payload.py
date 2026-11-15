@@ -26,7 +26,8 @@ def artifacts(folder, machines=None):
     for arch in ('x86', 'x64'):
         (folder / arch).mkdir(parents=True)
         for name in stage_lunahook.expected_files(arch):
-            (folder / arch / name).write_bytes(pe(machines[arch], name.encode()))
+            machine = 0x014C if name in stage_lunahook.SHARED_FILES else machines[arch]
+            (folder / arch / name).write_bytes(pe(machine, name.encode()))
         (folder / arch / 'MaltoriaUnicodeFixture.exe').write_bytes(pe(machines[arch]))
     sources = folder / 'sources/Maltoria'
     (sources / 'ThirdParty').mkdir(parents=True)
@@ -49,6 +50,10 @@ class LunaHookPayloadTests(unittest.TestCase):
             self.assertFalse((folder / 'out/x64/MaltoriaUnicodeFixture.exe').exists())
             self.assertTrue((folder / 'out/sources/Maltoria/THIRD-PARTY-NOTICES.md').is_file())
             self.assertEqual(8, len(json.loads((folder / 'out/manifest.json').read_text())['files']))
+
+    def test_accepts_anycpu_font_loader_only_for_shared_files(self):
+        self.assertTrue(stage_lunahook.machine_allowed('x64', 'LunaTmpFontLoader.dll', 0x014C))
+        self.assertFalse(stage_lunahook.machine_allowed('x64', 'LunaHook64.dll', 0x014C))
 
     def test_rejects_wrong_pe_architecture(self):
         with tempfile.TemporaryDirectory() as folder:
