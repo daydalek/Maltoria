@@ -73,7 +73,10 @@ public struct TranslationService: Sendable {
             }
             let provider = try self.provider(for: configuration)
             let credential = try await self.credential(for: configuration)
-            let fitted = try TranslationPrompt.fitting(request, kind: configuration.kind)
+            // DeepL sends source text directly rather than an LLM prompt, so the token budget does not apply.
+            let fitted = configuration.kind == .deepL
+                ? request
+                : try TranslationPrompt.fitting(request, kind: configuration.kind)
             let stream = provider.translate(fitted, configuration: configuration, credential: credential)
             for try await event in stream {
                 try yieldServiceEvent(event, to: continuation)
