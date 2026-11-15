@@ -58,8 +58,16 @@ def verify(resources=None):
         archive = package["archive"]
         check(package["revision"] and len(package["revision"]) == 40,
               f"Invalid native revision: {package['name']}")
-        check(package["license_file"] in expected,
-              f"Native license missing: {package['name']}")
+        license_files = [package["license_file"], *package.get("additional_license_files", [])]
+        for license_file in license_files:
+            check(license_file in expected,
+                  f"Native license missing: {package['name']}: {license_file}")
+        if package["name"] == "uchardet":
+            check(package.get("license") ==
+                  "MPL-1.1 OR GPL-2.0-or-later OR LGPL-2.1-or-later",
+                  "uchardet license alternatives are inaccurate")
+            check(package.get("distribution_license") == "GPL-2.0-or-later",
+                  "uchardet must use the GPL-compatible option in this distribution")
         check(archive in expected and expected.get(archive) == package["sha256"],
               f"Native source hash not in file inventory: {package['name']}")
         path = directory / archive

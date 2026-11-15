@@ -2,7 +2,12 @@ name: Native LunaHook builds
 
 on:
   push:
-    branches: ['devin/**']
+    branches: ['devin/**', main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -23,14 +28,20 @@ jobs:
       - name: Build pinned upstream sources
         shell: pwsh
         run: ./scripts/build-lunahook.ps1 -Architecture ${{ matrix.arch }} -Output "$env:RUNNER_TEMP/MaltoriaNative"
+      - name: Smoke-test local process inventory protocol
+        shell: pwsh
+        run: |
+          $bits = if ('${{ matrix.arch }}' -eq 'x86') { '32' } else { '64' }
+          $payload = "$env:RUNNER_TEMP/MaltoriaNative/${{ matrix.arch }}"
+          python scripts/windows/smoke_native_host.py `
+            --host "$payload/MaltoriaLunaHost$bits.exe" `
+            --fixture "$payload/MaltoriaUnicodeFixture.exe" `
+            --architecture "${{ matrix.arch }}"
       - name: Assemble source and compliance payload
         shell: pwsh
         run: |
           python scripts/check-third-party.py
-          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP/MaltoriaNative/sources" | Out-Null
-          Copy-Item ThirdParty/sources/native "$env:RUNNER_TEMP/MaltoriaNative/sources/native" -Recurse
-          Copy-Item ThirdParty/licenses "$env:RUNNER_TEMP/MaltoriaNative/sources/licenses" -Recurse
-          Copy-Item ThirdParty/manifest.json,ThirdParty/THIRD-PARTY-NOTICES.md,ThirdParty/LunaHook-BUILD.md,ThirdParty/lunahook-minhook-pin.patch "$env:RUNNER_TEMP/MaltoriaNative/sources/"
+          python scripts/package-native-sources.py --output "$env:RUNNER_TEMP/MaltoriaNative/sources"
       - uses: actions/upload-artifact@v4
         with:
           name: Maltoria-LunaHook-${{ matrix.arch }}

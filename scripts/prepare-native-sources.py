@@ -5,8 +5,10 @@ import argparse
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
+import shutil
 import sys
 import tarfile
+import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "ThirdParty/manifest.json"
@@ -23,41 +25,80 @@ def digest(path):
 
 
 def safe_extract(archive_path, destination, revision):
-    destination.mkdir(parents=True)
     with tarfile.open(archive_path, "r:gz") as archive:
         members = archive.getmembers()
         if not members or len(members) > 100_000:
             raise ValueError(f"Unexpected archive member count: {archive_path.name}")
         roots = set()
-        seen = set()
+        entries = {}
+        planned = []
+        total_size = 0
         for member in members:
-            path = PurePosixPath(member.name)
-            if (path.is_absolute() or ".." in path.parts or "\\" in member.name
-                    or not path.parts or ":" in path.parts[0]):
+            name = member.name
+            if not name or "\0" in name or "\\" in name or name.startswith("/"):
                 raise ValueError(f"Unsafe archive path: {member.name}")
             if member.issym() or member.islnk() or not (member.isfile() or member.isdir()):
                 raise ValueError(f"Unsupported archive member: {member.name}")
-            roots.add(path.parts[0])
-            relative = Path(*path.parts[1:])
-            if not relative.parts:
+            parts = name.split("/")
+            if member.isdir() and parts[-1] == "":
+                parts.pop()
+            if (not parts or any(part in ("", ".", "..") or ":" in part
+                                 for part in parts)):
+                raise ValueError(f"Unsafe archive path: {member.name}")
+            path = PurePosixPath(name)
+            if path.is_absolute() or not path.parts:
+                raise ValueError(f"Unsafe archive path: {member.name}")
+            roots.add(parts[0])
+            if len(parts) == 1:
+                if not member.isdir():
+                    raise ValueError(f"Archive root is not a directory: {member.name}")
                 continue
-            if relative in seen:
+            relative = tuple(parts[1:])
+            if relative in entries:
                 raise ValueError(f"Duplicate archive path: {member.name}")
-            seen.add(relative)
-            target = destination / relative
-            if member.isdir():
-                target.mkdir(parents=True, exist_ok=True)
-                continue
-            if member.size > 100 * 1024 * 1024:
+            if member.isfile() and (member.size < 0 or member.size > 100 * 1024 * 1024):
                 raise ValueError(f"Oversized archive member: {member.name}")
-            target.parent.mkdir(parents=True, exist_ok=True)
-            source = archive.extractfile(member)
-            if source is None:
-                raise ValueError(f"Missing archive data: {member.name}")
-            with source, target.open("xb") as output:
-                output.write(source.read())
-        if len(roots) != 1 or revision not in next(iter(roots)):
+            total_size += member.size if member.isfile() else 0
+            if total_size > 2 * 1024 * 1024 * 1024:
+                raise ValueError(f"Oversized archive contents: {archive_path.name}")
+            entries[relative] = member.isdir()
+            planned.append((member, relative))
+        if len(roots) != 1 or not next(iter(roots)).endswith(revision):
             raise ValueError(f"Unexpected archive root for {archive_path.name}: {sorted(roots)}")
+        for relative, is_directory in entries.items():
+            for count in range(1, len(relative)):
+                parent = relative[:count]
+                if parent in entries and not entries[parent]:
+                    raise ValueError(f"Archive path traverses a file: {'/'.join(relative)}")
+
+        if destination.exists():
+            raise ValueError(f"Extraction destination already exists: {destination}")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        staging = Path(tempfile.mkdtemp(prefix=f"{destination.name}.extract-",
+                                        dir=destination.parent))
+        try:
+            for member, relative in planned:
+                target = staging.joinpath(*relative)
+                if member.isdir():
+                    target.mkdir(parents=True, exist_ok=True)
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                source = archive.extractfile(member)
+                if source is None:
+                    raise ValueError(f"Missing archive data: {member.name}")
+                written = 0
+                with source, target.open("xb") as output:
+                    while chunk := source.read(1024 * 1024):
+                        written += len(chunk)
+                        if written > member.size:
+                            raise ValueError(f"Unexpected archive data length: {member.name}")
+                        output.write(chunk)
+                if written != member.size:
+                    raise ValueError(f"Truncated archive member: {member.name}")
+            staging.replace(destination)
+        except BaseException:
+            shutil.rmtree(staging, ignore_errors=True)
+            raise
 
 
 def prepare(output):
@@ -66,7 +107,7 @@ def prepare(output):
     if output.exists() and any(output.iterdir()):
         raise ValueError(f"Output directory must be empty: {output}")
     output.mkdir(parents=True, exist_ok=True)
-    for name in ("lunatranslator", "minhook", "uchardet"):
+    for name in packages:
         package = packages[name]
         archive = ROOT / "ThirdParty" / package["archive"]
         if not archive.is_file() or digest(archive) != package["sha256"]:
@@ -89,7 +130,7 @@ def prepare(output):
     final_text = cmake.read_text(encoding="utf-8")
     if MINHOOK_REVISION not in final_text or "GIT_TAG master" in final_text:
         raise ValueError("MinHook pin patch verification failed")
-    print(f"Prepared 3 pinned native source trees: {output}")
+    print(f"Prepared {len(packages)} pinned native source trees: {output}")
 
 
 if __name__ == "__main__":
