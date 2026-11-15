@@ -116,7 +116,9 @@ struct NDJSONParser {
 
 func jsonDictionary(_ data: Data) throws -> [String: Any] {
     let value: Any
-    do { value = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) } catch { throw TranslationError.malformedResponse }
+    do { value = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) } catch {
+        throw TranslationError.malformedResponse
+    }
     guard let object = value as? [String: Any] else {
         throw TranslationError.malformedResponse
     }

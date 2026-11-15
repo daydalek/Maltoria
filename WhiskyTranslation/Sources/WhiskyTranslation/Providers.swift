@@ -262,8 +262,9 @@ public struct HTTPTranslationProvider: TranslationProvider, Sendable {
             if frame.event == "error" || root["error"] != nil { throw TranslationError.providerRejected }
             if let choices = root["choices"] as? [[String: Any]] {
                 for choice in choices {
-                    let fragment: String?
-                    if legacy { fragment = choice["text"] as? String } else { fragment = (choice["delta"] as? [String: Any])?["content"] as? String }
+                    let fragment = legacy
+                        ? choice["text"] as? String
+                        : (choice["delta"] as? [String: Any])?["content"] as? String
                     if let fragment, !fragment.isEmpty {
                         aggregate.append(fragment)
                         try yield(.delta(fragment), to: continuation)
