@@ -1,3 +1,21 @@
+//
+//  TestSupport.swift
+//  WhiskyTranslationTests
+//
+//  This file is part of Whisky.
+//
+//  Whisky is free software: you can redistribute it and/or modify it under the terms
+//  of the GNU General Public License as published by the Free Software Foundation,
+//  either version 3 of the License, or (at your option) any later version.
+//
+//  Whisky is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+//  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+//  See the GNU General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License along with Whisky.
+//  If not, see https://www.gnu.org/licenses/.
+//
+
 import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
@@ -132,7 +150,10 @@ final class RecordingProvider: TranslationProvider, @unchecked Sendable {
     private var requests: [TranslationRequest] = []
     private let translatedText: @Sendable (TranslationRequest) -> String
 
-    init(kind: ProviderKind = .openAIChat, translatedText: @escaping @Sendable (TranslationRequest) -> String = { "translated: \($0.sourceText)" }) {
+    init(
+        kind: ProviderKind = .openAIChat,
+        translatedText: @escaping @Sendable (TranslationRequest) -> String = { "translated: \($0.sourceText)" }
+    ) {
         self.kind = kind
         self.translatedText = translatedText
     }
@@ -143,8 +164,15 @@ final class RecordingProvider: TranslationProvider, @unchecked Sendable {
         return requests
     }
 
-    func discoverModels(configuration _: ProviderConfiguration, credential _: String?) async throws -> [ModelDescriptor] { [] }
-    func modelInfo(id: String, configuration _: ProviderConfiguration, credential _: String?) async throws -> ModelDescriptor {
+    func discoverModels(
+        configuration _: ProviderConfiguration,
+        credential _: String?
+    ) async throws -> [ModelDescriptor] { [] }
+    func modelInfo(
+        id: String,
+        configuration _: ProviderConfiguration,
+        credential _: String?
+    ) async throws -> ModelDescriptor {
         ModelDescriptor(id: id)
     }
 
@@ -190,8 +218,15 @@ final class ControlledProvider: TranslationProvider, @unchecked Sendable {
         continuation?.finish()
     }
 
-    func discoverModels(configuration _: ProviderConfiguration, credential _: String?) async throws -> [ModelDescriptor] { [] }
-    func modelInfo(id: String, configuration _: ProviderConfiguration, credential _: String?) async throws -> ModelDescriptor { ModelDescriptor(id: id) }
+    func discoverModels(
+        configuration _: ProviderConfiguration,
+        credential _: String?
+    ) async throws -> [ModelDescriptor] { [] }
+    func modelInfo(
+        id: String,
+        configuration _: ProviderConfiguration,
+        credential _: String?
+    ) async throws -> ModelDescriptor { ModelDescriptor(id: id) }
 
     func translate(
         _ request: TranslationRequest,
@@ -207,7 +242,12 @@ final class ControlledProvider: TranslationProvider, @unchecked Sendable {
     }
 }
 
-func makeHTTPResponse(_ body: String, status: Int = 200, headers: [String: String] = [:], chunkSize: Int = .max) -> HTTPResponse {
+func makeHTTPResponse(
+    _ body: String,
+    status: Int = 200,
+    headers: [String: String] = [:],
+    chunkSize: Int = .max
+) -> HTTPResponse {
     let data = Data(body.utf8)
     let size = max(1, min(chunkSize, max(1, data.count)))
     let chunks = stride(from: 0, to: data.count, by: size).map { start in
@@ -215,7 +255,9 @@ func makeHTTPResponse(_ body: String, status: Int = 200, headers: [String: Strin
     }
     let (stream, continuation) = AsyncThrowingStream<Data, any Error>.makeStream()
     Task {
-        for chunk in chunks { continuation.yield(chunk) }
+        for chunk in chunks {
+            continuation.yield(chunk)
+        }
         continuation.finish()
     }
     return HTTPResponse(statusCode: status, headers: headers, body: stream)
@@ -254,7 +296,9 @@ func testTranslationRequest(
 
 func collectEvents(_ stream: AsyncThrowingStream<TranslationEvent, any Error>) async throws -> [TranslationEvent] {
     var result: [TranslationEvent] = []
-    for try await event in stream { result.append(event) }
+    for try await event in stream {
+        result.append(event)
+    }
     return result
 }
 

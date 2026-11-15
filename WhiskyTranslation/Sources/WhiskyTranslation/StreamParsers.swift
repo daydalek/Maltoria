@@ -1,11 +1,23 @@
 //
 //  StreamParsers.swift
+//  WhiskyTranslation
 //
-//  This file is part of Maltoria, licensed under GPL-3.0-or-later.
+//  This file is part of Whisky.
+//
+//  Whisky is free software: you can redistribute it and/or modify it under the terms
+//  of the GNU General Public License as published by the Free Software Foundation,
+//  either version 3 of the License, or (at your option) any later version.
+//
+//  Whisky is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+//  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+//  See the GNU General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License along with Whisky.
+//  If not, see https://www.gnu.org/licenses/.
 //
 
-import Foundation
 import CoreFoundation
+import Foundation
 
 struct LineFramer {
     private var buffer = Data()
@@ -47,13 +59,17 @@ struct SSEParser {
 
     mutating func append(_ data: Data) throws -> [SSEFrame] {
         var frames: [SSEFrame] = []
-        for line in framer.append(data) { frames.append(contentsOf: try consume(line)) }
+        for line in framer.append(data) {
+            try frames.append(contentsOf: consume(line))
+        }
         return frames
     }
 
     mutating func finish() throws -> [SSEFrame] {
         var frames: [SSEFrame] = []
-        for line in framer.finish() { frames.append(contentsOf: try consume(line)) }
+        for line in framer.finish() {
+            try frames.append(contentsOf: consume(line))
+        }
         if let frame = try dispatch() { frames.append(frame) }
         return frames
     }

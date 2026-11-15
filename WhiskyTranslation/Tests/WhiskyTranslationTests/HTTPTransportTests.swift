@@ -1,3 +1,21 @@
+//
+//  HTTPTransportTests.swift
+//  WhiskyTranslationTests
+//
+//  This file is part of Whisky.
+//
+//  Whisky is free software: you can redistribute it and/or modify it under the terms
+//  of the GNU General Public License as published by the Free Software Foundation,
+//  either version 3 of the License, or (at your option) any later version.
+//
+//  Whisky is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+//  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+//  See the GNU General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License along with Whisky.
+//  If not, see https://www.gnu.org/licenses/.
+//
+
 #if os(macOS)
 import Foundation
 import Testing
@@ -5,8 +23,8 @@ import Testing
 
 private final class BlockingURLProtocol: URLProtocol, @unchecked Sendable {
     private static let lock = NSLock()
-    nonisolated(unsafe) private static var started = false
-    nonisolated(unsafe) private static var stopped = false
+    private nonisolated(unsafe) static var started = false
+    private nonisolated(unsafe) static var stopped = false
 
     static func reset() {
         lock.lock()
@@ -45,10 +63,10 @@ private final class BlockingURLProtocol: URLProtocol, @unchecked Sendable {
 
 private final class RedirectURLProtocol: URLProtocol, @unchecked Sendable {
     private static let lock = NSLock()
-    nonisolated(unsafe) private static var location: URL?
-    nonisolated(unsafe) private static var requestedHosts: [String] = []
-    nonisolated(unsafe) private static var requestedURLs: [String] = []
-    nonisolated(unsafe) private static var redirectAttempts = 0
+    private nonisolated(unsafe) static var location: URL?
+    private nonisolated(unsafe) static var requestedHosts: [String] = []
+    private nonisolated(unsafe) static var requestedURLs: [String] = []
+    private nonisolated(unsafe) static var redirectAttempts = 0
 
     static func configure(location: URL) {
         lock.lock()
@@ -88,13 +106,18 @@ private final class RedirectURLProtocol: URLProtocol, @unchecked Sendable {
         let location = Self.location
         Self.lock.unlock()
         guard let location, let url = request.url,
-              let response = HTTPURLResponse(url: url, statusCode: 302, httpVersion: "HTTP/1.1", headerFields: ["Location": location.absoluteString])
+              let response = HTTPURLResponse(
+                  url: url,
+                  statusCode: 302,
+                  httpVersion: "HTTP/1.1",
+                  headerFields: ["Location": location.absoluteString]
+              )
         else { return }
         client?.urlProtocol(self, wasRedirectedTo: URLRequest(url: location), redirectResponse: response)
         client?.urlProtocolDidFinishLoading(self)
     }
 
-    override func stopLoading() { }
+    override func stopLoading() {}
 }
 
 @Suite("URLSession streaming transport")
@@ -106,12 +129,17 @@ struct HTTPTransportTests {
         let transport = URLSessionStreamTransport(sessionConfiguration: configuration, timeout: 20)
         let request = URLRequest(url: URL(string: "https://transport-fixture.invalid/stream")!)
         let task = Task { try await transport.execute(request) }
-        for _ in 0 ..< 100 where !BlockingURLProtocol.didStart { try await Task.sleep(for: .milliseconds(5)) }
+        for _ in 0 ..< 100 where !BlockingURLProtocol.didStart {
+            try await Task.sleep(for: .milliseconds(5))
+        }
         #expect(BlockingURLProtocol.didStart)
         task.cancel()
-        do { _ = try await task.value; Issue.record("cancelled request returned a response") }
-        catch is CancellationError { }
-        for _ in 0 ..< 100 where !BlockingURLProtocol.didStop { try await Task.sleep(for: .milliseconds(5)) }
+        do { _ = try await task.value
+            Issue.record("cancelled request returned a response")
+        } catch is CancellationError {}
+        for _ in 0 ..< 100 where !BlockingURLProtocol.didStop {
+            try await Task.sleep(for: .milliseconds(5))
+        }
         #expect(BlockingURLProtocol.didStop)
     }
 

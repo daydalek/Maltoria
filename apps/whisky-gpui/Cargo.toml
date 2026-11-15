@@ -13,6 +13,7 @@ serde_json = "=1.0.154"
 sha2 = "=0.10.9"
 smol = "=2.0.2"
 whisky-bridge = { path = "../../crates/whisky-bridge" }
+uuid = { version = "=1.28.0", features = ["v4"] }
 
 # macOS cover upscaling uses Metal; Linux uses the bundled ncnn helper.
 [target.'cfg(target_os = "macos")'.dependencies]

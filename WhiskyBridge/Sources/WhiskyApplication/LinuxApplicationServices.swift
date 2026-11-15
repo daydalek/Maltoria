@@ -455,6 +455,27 @@ public final class LinuxApplicationServices: NativeApplicationServices {
         }
     }
 
+    public func launchTranslationHelper(
+        executable: URL, container: URL, environment: [String: String]
+    ) throws -> TranslationHelperHandle {
+        let resolved = try resolveContainerHost(for: container, missingCapability: true)
+        let lease = try resolved.engine.map { try engineStore!.acquireSharedLease(for: $0.id) }
+        let process = resolved.host.process(
+            resolved.host.loader,
+            arguments: [executable.path],
+            prefix: container,
+            environment: environment.merging(["WINEDEBUG": "-all"]) { _, new in new }
+        )
+        process.currentDirectoryURL = executable.deletingLastPathComponent()
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        process.terminationHandler = { _ in lease?.release() }
+        do { try process.run() } catch { lease?.release()
+            throw error
+        }
+        return TranslationHelperHandle { if process.isRunning { process.terminate() } }
+    }
+
     private func resolveOptionalHost(for container: URL) -> LinuxWineHost? {
         if let engineStore {
             return try? engineStore.resolveHost(for: container).host

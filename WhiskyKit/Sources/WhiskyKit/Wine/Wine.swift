@@ -441,6 +441,34 @@ public class Wine {
         }
     }
 
+    /// Launches a text-capture helper under the bottle's pinned engine. It has
+    /// no log file: environment tokens and game dialogue must never be logged.
+    @MainActor
+    public static func runTranslationHelper(
+        at executable: URL, bottle: Bottle, environment: [String: String]
+    ) throws -> Process {
+        try withEngineOperation(bottle: bottle) {
+            let engine = try engine(for: bottle)
+            let process = Process()
+            process.executableURL = engine.wineBinary
+            process.arguments = [executable.path]
+            process.currentDirectoryURL = executable.deletingLastPathComponent()
+            var values = try constructWineEnvironment(for: bottle, environment: environment, engine: engine)
+            values["WINEDEBUG"] = "-all"
+            process.environment = values
+            process.standardInput = FileHandle.nullDevice
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            try process.run()
+            let lease = operationContext?.lease
+            Task.detached(priority: .utility) {
+                process.waitUntilExit()
+                withExtendedLifetime(lease) {}
+            }
+            return process
+        }
+    }
+
     /// Runs a Wine server process with the given arguments and returns a stream of output.
     ///
     /// The Wine server manages shared resources and state for all Wine processes in a bottle.

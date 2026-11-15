@@ -1,7 +1,19 @@
 //
 //  TranslationService.swift
+//  WhiskyTranslation
 //
-//  This file is part of Maltoria, licensed under GPL-3.0-or-later.
+//  This file is part of Whisky.
+//
+//  Whisky is free software: you can redistribute it and/or modify it under the terms
+//  of the GNU General Public License as published by the Free Software Foundation,
+//  either version 3 of the License, or (at your option) any later version.
+//
+//  Whisky is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+//  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+//  See the GNU General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License along with Whisky.
+//  If not, see https://www.gnu.org/licenses/.
 //
 
 import Foundation
@@ -63,7 +75,9 @@ public struct TranslationService: Sendable {
             let credential = try await self.credential(for: configuration)
             let fitted = try TranslationPrompt.fitting(request, kind: configuration.kind)
             let stream = provider.translate(fitted, configuration: configuration, credential: credential)
-            for try await event in stream { try yieldServiceEvent(event, to: continuation) }
+            for try await event in stream {
+                try yieldServiceEvent(event, to: continuation)
+            }
         }
     }
 
@@ -98,7 +112,8 @@ public struct TranslationService: Sendable {
 
     private func provider(for configuration: ProviderConfiguration) throws -> any TranslationProvider {
         try configuration.validate()
-        guard let provider = providers[configuration.kind] else { throw TranslationError.unsupportedCapability("provider") }
+        guard let provider = providers[configuration.kind]
+        else { throw TranslationError.unsupportedCapability("provider") }
         return provider
     }
 
@@ -109,15 +124,18 @@ public struct TranslationService: Sendable {
             }
             return secret
         }
-        guard !configuration.kind.requiresCredential(at: configuration.baseURL) else { throw TranslationError.missingCredential }
+        guard !configuration.kind.requiresCredential(at: configuration.baseURL)
+        else { throw TranslationError.missingCredential }
         return nil
     }
 }
 
 private func serviceEventStream(
-    _ operation: @escaping @Sendable (AsyncThrowingStream<TranslationEvent, any Error>.Continuation) async throws -> Void
+    _ operation: @escaping @Sendable (AsyncThrowingStream<TranslationEvent, any Error>.Continuation) async throws
+        -> Void
 ) -> AsyncThrowingStream<TranslationEvent, any Error> {
-    let (stream, continuation) = AsyncThrowingStream<TranslationEvent, any Error>.makeStream(bufferingPolicy: .bufferingOldest(256))
+    let (stream, continuation) = AsyncThrowingStream<TranslationEvent, any Error>
+        .makeStream(bufferingPolicy: .bufferingOldest(256))
     let task = Task {
         do {
             try await operation(continuation)

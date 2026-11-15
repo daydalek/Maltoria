@@ -1,7 +1,19 @@
 //
 //  TranslationSession.swift
+//  WhiskyTranslation
 //
-//  This file is part of Maltoria, licensed under GPL-3.0-or-later.
+//  This file is part of Whisky.
+//
+//  Whisky is free software: you can redistribute it and/or modify it under the terms
+//  of the GNU General Public License as published by the Free Software Foundation,
+//  either version 3 of the License, or (at your option) any later version.
+//
+//  Whisky is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+//  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+//  See the GNU General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License along with Whisky.
+//  If not, see https://www.gnu.org/licenses/.
 //
 
 import Foundation
@@ -74,7 +86,9 @@ public actor TranslationCache {
 
     public func removeAll(gameID: String) {
         let keys = values.keys.filter { $0.gameID == gameID }
-        for key in keys { values.removeValue(forKey: key) }
+        for key in keys {
+            values.removeValue(forKey: key)
+        }
         recency.removeAll { $0.gameID == gameID }
     }
 }
@@ -95,7 +109,16 @@ public actor TranslationSession {
     private var latestSourceVersions: [UUID: SourceVersion] = [:]
     private var sourceVersionOrder: [UUID] = []
     private var persistenceTail: Task<Void, any Error>?
-    private var lastDeduplicated: (streamID: String, generation: Int, revision: Int, text: String, speaker: String?, time: Date, entryID: UUID)?
+    // swiftlint:disable:next large_tuple
+    private var lastDeduplicated: (
+        streamID: String,
+        generation: Int,
+        revision: Int,
+        text: String,
+        speaker: String?,
+        time: Date,
+        entryID: UUID
+    )?
 
     public init(
         gameID: String,
@@ -174,8 +197,7 @@ public actor TranslationSession {
            previous.text == source.text,
            previous.speaker == source.speaker,
            source.capturedAt.timeIntervalSince(previous.time) >= 0,
-           source.capturedAt.timeIntervalSince(previous.time) <= 0.35
-        {
+           source.capturedAt.timeIntervalSince(previous.time) <= 0.35 {
             recordSourceVersion(version, eventID: source.eventID)
             return previous.entryID
         }
@@ -188,7 +210,15 @@ public actor TranslationSession {
         activeEntryID = entry.id
         requestEpochByEntry[entry.id] = epoch
         recordSourceVersion(version, eventID: source.eventID)
-        lastDeduplicated = (source.streamID, source.generation, source.revision, source.text, source.speaker, source.capturedAt, entry.id)
+        lastDeduplicated = (
+            source.streamID,
+            source.generation,
+            source.revision,
+            source.text,
+            source.speaker,
+            source.capturedAt,
+            entry.id
+        )
         trimHistory()
         let request = try makeRequest(for: entry)
         let key = TranslationCacheKey(configuration: configuration, request: request)
@@ -199,7 +229,9 @@ public actor TranslationSession {
 
         if let cached = await cache.value(for: key) {
             guard isCurrentRequest(epoch, entryID: entry.id) else { throw CancellationError() }
-            updateEntry(entry.id) { $0.translatedText = cached; $0.status = .completed }
+            updateEntry(entry.id) { $0.translatedText = cached
+                $0.status = .completed
+            }
             requestEpochByEntry.removeValue(forKey: entry.id)
             try await persistHistory()
             guard requestEpoch == epoch, activeEntryID == entry.id else { throw CancellationError() }
@@ -236,6 +268,7 @@ public actor TranslationSession {
     public func updateSettings(_ settings: TranslationSettings) async throws {
         try settings.validate()
         guard settings != self.settings else { return }
+        lastDeduplicated = nil
         advanceRequestEpoch()
         let epoch = requestEpoch
         cancelCurrentResponse(markCancelled: true, invalidateActiveRequest: true)
@@ -250,6 +283,7 @@ public actor TranslationSession {
     public func updateConfiguration(_ configuration: ProviderConfiguration) async throws {
         try configuration.validate()
         guard configuration != self.configuration else { return }
+        lastDeduplicated = nil
         advanceRequestEpoch()
         let epoch = requestEpoch
         cancelCurrentResponse(markCancelled: true, invalidateActiveRequest: true)
@@ -267,6 +301,7 @@ public actor TranslationSession {
     public func currentSettings() -> TranslationSettings { settings }
 
     public func cancelActive() async throws {
+        lastDeduplicated = nil
         advanceRequestEpoch()
         cancelCurrentResponse(markCancelled: true, invalidateActiveRequest: true)
         try await persistHistory()
@@ -339,22 +374,30 @@ public actor TranslationSession {
         switch event.kind {
         case .delta:
             if let text = event.text { updateEntry(entryID) { $0.translatedText = ($0.translatedText ?? "") + text } }
+            return // Persist the pending source and terminal result, not every token.
         case .completed:
             if let text = event.text {
-                updateEntry(entryID) { $0.translatedText = text; $0.status = .completed; $0.failureDescription = nil }
+                updateEntry(entryID) { $0.translatedText = text
+                    $0.status = .completed
+                    $0.failureDescription = nil
+                }
                 await cache.insert(text, for: cacheKey)
-                guard requestEpochByEntry[entryID] == eventEpoch, entries.contains(where: { $0.id == entryID }) else { return }
+                guard requestEpochByEntry[entryID] == eventEpoch,
+                      entries.contains(where: { $0.id == entryID })
+                else { return }
                 requestEpochByEntry.removeValue(forKey: entryID)
                 if requestEpoch == eventEpoch, activeEntryID == entryID { activeTask = nil }
             }
-        case .usage: break
+        case .usage: return
         }
         try? await persistHistory()
     }
 
     private func markFailed(entryID: UUID, requestEpoch eventEpoch: UInt64, error: any Error) async {
         guard requestEpochByEntry[entryID] == eventEpoch, entries.contains(where: { $0.id == entryID }) else { return }
-        updateEntry(entryID) { $0.status = .failed; $0.failureDescription = Self.safeFailureDescription(error) }
+        updateEntry(entryID) { $0.status = .failed
+            $0.failureDescription = Self.safeFailureDescription(error)
+        }
         requestEpochByEntry.removeValue(forKey: entryID)
         if requestEpoch == eventEpoch, activeEntryID == entryID { activeTask = nil }
         try? await persistHistory()

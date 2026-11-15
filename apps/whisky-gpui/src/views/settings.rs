@@ -542,6 +542,26 @@ impl WhiskyApp {
                     cx,
                 ),
                 self.section(
+                    "translation-settings",
+                    "游戏翻译",
+                    vec![
+                        muted("配置翻译服务、模型和对话上下文。游戏翻译入口也可从游戏菜单打开。")
+                            .line_height(relative(1.4))
+                            .into_any_element(),
+                        row()
+                            .py(px(6.))
+                            .child(
+                                Button::new("translation-settings-open")
+                                    .label("提供商与翻译设置…")
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.open_translation_settings(cx)
+                                    })),
+                            )
+                            .into_any_element(),
+                    ],
+                    cx,
+                ),
+                self.section(
                     "metadata-preferences",
                     "资料来源",
                     vec![

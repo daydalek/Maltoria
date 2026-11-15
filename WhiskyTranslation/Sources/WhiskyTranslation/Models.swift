@@ -1,17 +1,18 @@
 //
 //  Models.swift
+//  WhiskyTranslation
 //
-//  This file is part of Maltoria.
+//  This file is part of Whisky.
 //
-//  Maltoria is free software: you can redistribute it and/or modify it under the terms
+//  Whisky is free software: you can redistribute it and/or modify it under the terms
 //  of the GNU General Public License as published by the Free Software Foundation,
 //  either version 3 of the License, or (at your option) any later version.
 //
-//  Maltoria is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+//  Whisky is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
 //  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 //  See the GNU General Public License for more details.
 //
-//  You should have received a copy of the GNU General Public License along with Maltoria.
+//  You should have received a copy of the GNU General Public License along with Whisky.
 //  If not, see https://www.gnu.org/licenses/.
 //
 
@@ -28,18 +29,17 @@ public enum ProviderKind: String, Codable, CaseIterable, Hashable, Sendable {
     public var supportsModelDiscovery: Bool { self != .deepL }
 
     public var defaultBaseURL: URL {
-        let value: String
-        switch self {
+        let value = switch self {
         case .openAIChat, .openAICompletions:
-            value = "https://api.openai.com/v1"
+            "https://api.openai.com/v1"
         case .ollama:
-            value = "http://localhost:11434"
+            "http://localhost:11434"
         case .deepL:
-            value = "https://api.deepl.com"
+            "https://api.deepl.com"
         case .anthropic:
-            value = "https://api.anthropic.com/v1"
+            "https://api.anthropic.com/v1"
         case .gemini:
-            value = "https://generativelanguage.googleapis.com/v1beta"
+            "https://generativelanguage.googleapis.com/v1beta"
         }
         return URL(string: value)!
     }
@@ -47,17 +47,53 @@ public enum ProviderKind: String, Codable, CaseIterable, Hashable, Sendable {
     public var capabilities: ProviderCapabilities {
         switch self {
         case .openAIChat:
-            ProviderCapabilities(modelDiscovery: true, contextDiscovery: false, streaming: true, customPrompt: true, context: true)
+            ProviderCapabilities(
+                modelDiscovery: true,
+                contextDiscovery: false,
+                streaming: true,
+                customPrompt: true,
+                context: true
+            )
         case .openAICompletions:
-            ProviderCapabilities(modelDiscovery: true, contextDiscovery: false, streaming: true, customPrompt: true, context: true)
+            ProviderCapabilities(
+                modelDiscovery: true,
+                contextDiscovery: false,
+                streaming: true,
+                customPrompt: true,
+                context: true
+            )
         case .ollama:
-            ProviderCapabilities(modelDiscovery: true, contextDiscovery: true, streaming: true, customPrompt: true, context: true)
+            ProviderCapabilities(
+                modelDiscovery: true,
+                contextDiscovery: true,
+                streaming: true,
+                customPrompt: true,
+                context: true
+            )
         case .deepL:
-            ProviderCapabilities(modelDiscovery: false, contextDiscovery: false, streaming: false, customPrompt: false, context: true)
+            ProviderCapabilities(
+                modelDiscovery: false,
+                contextDiscovery: false,
+                streaming: false,
+                customPrompt: false,
+                context: true
+            )
         case .anthropic:
-            ProviderCapabilities(modelDiscovery: true, contextDiscovery: true, streaming: true, customPrompt: true, context: true)
+            ProviderCapabilities(
+                modelDiscovery: true,
+                contextDiscovery: true,
+                streaming: true,
+                customPrompt: true,
+                context: true
+            )
         case .gemini:
-            ProviderCapabilities(modelDiscovery: true, contextDiscovery: true, streaming: true, customPrompt: true, context: true)
+            ProviderCapabilities(
+                modelDiscovery: true,
+                contextDiscovery: true,
+                streaming: true,
+                customPrompt: true,
+                context: true
+            )
         }
     }
 
@@ -66,7 +102,8 @@ public enum ProviderKind: String, Codable, CaseIterable, Hashable, Sendable {
         case .deepL, .anthropic, .gemini: return true
         case .ollama: return false
         case .openAIChat, .openAICompletions:
-            guard let host = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)?.host?.lowercased() else { return true }
+            guard let host = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)?.host?.lowercased()
+            else { return true }
             return !ProviderConfiguration.isLoopback(host)
         }
     }
@@ -178,7 +215,8 @@ public struct ProviderConfiguration: Codable, Equatable, Identifiable, Sendable 
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, kind, baseURL, modelID, credentialReference, defaultSourceLanguage, defaultTargetLanguage, modelMetadata, openAIChatTokenLimitField
+        case id, name, kind, baseURL, modelID, credentialReference, defaultSourceLanguage, defaultTargetLanguage,
+             modelMetadata, openAIChatTokenLimitField
     }
 
     public init(from decoder: Decoder) throws {
@@ -192,7 +230,10 @@ public struct ProviderConfiguration: Codable, Equatable, Identifiable, Sendable 
         defaultSourceLanguage = try values.decodeIfPresent(String.self, forKey: .defaultSourceLanguage) ?? "auto"
         defaultTargetLanguage = try values.decodeIfPresent(String.self, forKey: .defaultTargetLanguage) ?? "en"
         modelMetadata = try values.decodeIfPresent(ModelDescriptor.self, forKey: .modelMetadata)
-        openAIChatTokenLimitField = try values.decodeIfPresent(OpenAIChatTokenLimitField.self, forKey: .openAIChatTokenLimitField) ?? .maxCompletionTokens
+        openAIChatTokenLimitField = try values.decodeIfPresent(
+            OpenAIChatTokenLimitField.self,
+            forKey: .openAIChatTokenLimitField
+        ) ?? .maxCompletionTokens
     }
 
     public func validate() throws {
@@ -321,12 +362,12 @@ public struct TranslationSettings: Codable, Equatable, Sendable {
         try ProviderConfiguration.validateLanguage(targetLanguage, allowAuto: false)
     }
 
-    public func effectiveContextWindow(for model: ModelDescriptor?) -> (tokens: Int, provenance: ContextWindowProvenance) {
+    public func effectiveContextWindow(for model: ModelDescriptor?)
+        -> (tokens: Int, provenance: ContextWindowProvenance) {
         if let contextWindowOverride { return (contextWindowOverride, .manual) }
         if let window = model?.contextWindow,
            let provenance = model?.contextWindowProvenance,
-           provenance == .detected || provenance == .manual
-        {
+           provenance == .detected || provenance == .manual {
             return (window, provenance)
         }
         return (4_096, .unknown)
@@ -418,7 +459,8 @@ public struct TranslationRequest: Codable, Equatable, Sendable {
             ($0.sourceText?.utf8.count ?? 0) <= 1_048_576
                 && ($0.translatedText?.utf8.count ?? 0) <= 1_048_576
                 && ($0.speaker?.utf8.count ?? 0) <= 1_024
-        }) else {
+        })
+        else {
             throw TranslationError.invalidConfiguration("Translation context exceeds supported limits")
         }
     }

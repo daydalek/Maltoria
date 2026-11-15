@@ -1,7 +1,19 @@
 //
 //  TranslationPersistence.swift
+//  WhiskyTranslation
 //
-//  This file is part of Maltoria, licensed under GPL-3.0-or-later.
+//  This file is part of Whisky.
+//
+//  Whisky is free software: you can redistribute it and/or modify it under the terms
+//  of the GNU General Public License as published by the Free Software Foundation,
+//  either version 3 of the License, or (at your option) any later version.
+//
+//  Whisky is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+//  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+//  See the GNU General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License along with Whisky.
+//  If not, see https://www.gnu.org/licenses/.
 //
 
 import Foundation
@@ -49,7 +61,10 @@ public actor FileTranslationRepository: TranslationRepository {
     public func loadConfiguration(id: UUID) async throws -> ProviderConfiguration? {
         guard fileManager.fileExists(atPath: url("provider-\(id.uuidString).json").path) else { return nil }
         do {
-            let value = try JSONDecoder().decode(ProviderConfiguration.self, from: Data(contentsOf: url("provider-\(id.uuidString).json")))
+            let value = try JSONDecoder().decode(
+                ProviderConfiguration.self,
+                from: Data(contentsOf: url("provider-\(id.uuidString).json"))
+            )
             try value.validate()
             return value
         } catch let error as TranslationError { throw error }
@@ -75,8 +90,10 @@ public actor FileTranslationRepository: TranslationRepository {
     }
 
     public func saveHistory(_ snapshot: TranslationSessionSnapshot) async throws {
-        do { try write(JSONEncoder.sorted.encode(snapshot), to: historyFilename(gameID: snapshot.gameID, sessionID: snapshot.sessionID)) }
-        catch { throw TranslationError.persistenceUnavailable }
+        do { try write(
+            JSONEncoder.sorted.encode(snapshot),
+            to: historyFilename(gameID: snapshot.gameID, sessionID: snapshot.sessionID)
+        ) } catch { throw TranslationError.persistenceUnavailable }
     }
 
     public func loadHistory(gameID: String, sessionID: UUID) async throws -> TranslationSessionSnapshot? {
@@ -107,7 +124,9 @@ public actor FileTranslationRepository: TranslationRepository {
     private func url(_ filename: String) -> URL { directory.appending(path: filename, directoryHint: .notDirectory) }
     private func historyFilename(gameID: String, sessionID: UUID) -> String {
         var hash: UInt64 = 14_695_981_039_346_656_037
-        for byte in gameID.utf8 { hash = (hash ^ UInt64(byte)) &* 1_099_511_628_211 }
+        for byte in gameID.utf8 {
+            hash = (hash ^ UInt64(byte)) &* 1_099_511_628_211
+        }
         return String(format: "history-%016llx-%@.json", hash, sessionID.uuidString)
     }
 }

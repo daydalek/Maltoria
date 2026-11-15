@@ -1,7 +1,19 @@
 //
 //  HTTPTransport.swift
+//  WhiskyTranslation
 //
-//  This file is part of Maltoria, licensed under GPL-3.0-or-later.
+//  This file is part of Whisky.
+//
+//  Whisky is free software: you can redistribute it and/or modify it under the terms
+//  of the GNU General Public License as published by the Free Software Foundation,
+//  either version 3 of the License, or (at your option) any later version.
+//
+//  Whisky is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+//  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+//  See the GNU General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License along with Whisky.
+//  If not, see https://www.gnu.org/licenses/.
 //
 
 import Foundation
@@ -292,7 +304,7 @@ func executeWithRetry(
                 response.cancel()
                 throw TranslationError.httpStatus(status)
             }
-            let delay = policy.delay(attempt: attempt, retryAfter: response.header("Retry-After"), now: await clock.now)
+            let delay = await policy.delay(attempt: attempt, retryAfter: response.header("Retry-After"), now: clock.now)
             response.cancel()
             try await clock.sleep(for: delay)
         } catch is CancellationError {
@@ -300,11 +312,17 @@ func executeWithRetry(
         } catch let error as TranslationError {
             throw error
         } catch let error as URLError {
-            let retryable: Set<URLError.Code> = [.timedOut, .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet, .dnsLookupFailed]
+            let retryable: Set<URLError.Code> = [
+                .timedOut,
+                .cannotConnectToHost,
+                .networkConnectionLost,
+                .notConnectedToInternet,
+                .dnsLookupFailed
+            ]
             guard retryable.contains(error.code), attempt < policy.maximumAttempts else {
                 throw TranslationError.transportFailure
             }
-            try await clock.sleep(for: policy.delay(attempt: attempt, retryAfter: nil, now: await clock.now))
+            try await clock.sleep(for: policy.delay(attempt: attempt, retryAfter: nil, now: clock.now))
         } catch {
             throw TranslationError.transportFailure
         }
@@ -324,7 +342,13 @@ private func responseIndicatesQuotaOrBilling(_ stream: AsyncThrowingStream<Data,
     guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
     let error = root["error"] as? [String: Any] ?? root
     let identifiers = [error["code"], error["type"]].compactMap { $0 as? String }.map { $0.lowercased() }
-    if identifiers.contains(where: { ["insufficient_quota", "billing_hard_limit_reached", "billing_not_active", "quota_exceeded", "billing_error"].contains($0) }) {
+    if identifiers.contains(where: { [
+        "insufficient_quota",
+        "billing_hard_limit_reached",
+        "billing_not_active",
+        "quota_exceeded",
+        "billing_error"
+    ].contains($0) }) {
         return true
     }
     let message = (error["message"] as? String ?? "").lowercased()

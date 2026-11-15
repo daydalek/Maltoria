@@ -53,10 +53,20 @@ use crate::winetricks::{self, CatalogDto, InstallProgress, InstallResultDto, Ins
 /// Executable product declared in `WhiskyBridge/Package.swift`.
 const HELPER_PRODUCT: &str = "whisky-bridge";
 const CALL_TIMEOUT: Duration = Duration::from_secs(5);
+const PROVIDER_PROBE_TIMEOUT: Duration = Duration::from_secs(240);
+const CAPTURE_OPERATION_TIMEOUT: Duration = Duration::from_secs(60);
 /// Native dialogs allow human interaction; Linux's chooser bounds itself at 300 s.
 pub(crate) const PICKER_TIMEOUT: Duration = Duration::from_secs(330);
 pub(crate) const BACKOFF_MIN_MS: u64 = 500;
 pub(crate) const BACKOFF_MAX_MS: u64 = 8_000;
+
+fn translation_call_timeout(method: &str) -> Duration {
+    match method {
+        "translation.models" | "translation.modelInfo" | "translation.testConnection" => PROVIDER_PROBE_TIMEOUT,
+        "translation.capture.start" | "translation.capture.attach" => CAPTURE_OPERATION_TIMEOUT,
+        _ => CALL_TIMEOUT,
+    }
+}
 /// How long the worker blocks when there is nothing to poll and nothing to do.
 /// Commands still wake it immediately.
 const PARK: Duration = Duration::from_secs(3_600);
@@ -362,6 +372,7 @@ pub(crate) enum BridgeEvent {
     Status(BridgeStatus),
     /// Advertised methods for the current connected helper session.
     Services(Vec<String>),
+    TranslationReply { request: u64, method: String, result: Result<serde_json::Value, String> },
     /// The container catalogue, emitted once per connected session.
     Containers(Vec<Container>),
     /// The catalogue re-read by an explicit Refresh in the same session: the
@@ -714,6 +725,7 @@ enum Command {
     /// Quit the application: the helper applies the stored kill-on-terminate
     /// policy before the session closes.
     ShutdownApplication,
+    TranslationCall { request: u64, method: String, params: serde_json::Value },
     LoadSystemInfo,
     LoadEntries(String),
     ConfigureRuntime(String),
@@ -1098,6 +1110,11 @@ impl BridgeSupervisor {
     /// Ask the worker to discard the current session and connect again now.
     pub(crate) fn retry(&self) {
         let _ = self.commands.send(Command::Retry);
+    }
+
+    pub(crate) fn translation_request(&self, request: u64, method: &str, params: serde_json::Value) -> Result<(), String> {
+        self.commands.send(Command::TranslationCall { request, method: method.to_owned(), params })
+            .map_err(|_| "Translation bridge supervisor is disconnected".to_owned())
     }
 
     /// Test seam: a supervisor whose command channel has no worker behind it.
@@ -2116,7 +2133,7 @@ fn run_with_spawner_and_backoff<F, B>(
                                                 container,
                                                 update: ScanUpdate::Failed {
                                                     status: JobStatus::Failed,
-                                                    reason,
+        reason: reason.clone(),
                                                 },
                                             },
                                         );
@@ -2617,6 +2634,16 @@ fn run_with_spawner_and_backoff<F, B>(
                     // frame after activation is not stale by up to a cadence.
                     if active && let Some(session) = live.as_mut() {
                         session.due = Instant::now();
+                    }
+                }
+                Some(Command::TranslationCall { request, method, params }) => {
+                    match client.call_with_timeout(&method, params, translation_call_timeout(&method)).map_err(classify) {
+                        Ok(result) => emit_event(&events, BridgeEvent::TranslationReply { request, method, result: Ok(result) }),
+                        Err(CallFailure::Remote(reason)) => emit_event(&events, BridgeEvent::TranslationReply { request, method, result: Err(reason) }),
+                        Err(CallFailure::Session(reason)) => {
+                            emit_event(&events, BridgeEvent::TranslationReply { request, method, result: Err(reason.clone()) });
+                            reconnect = Some(reason);
+                        }
                     }
                 }
                 Some(Command::LoadEntries(container)) => {
@@ -6558,11 +6585,11 @@ fn fail_and_wait<B: FnMut(u32) -> Duration>(
     emit(
         events,
         BridgeStatus::Failed {
-            reason,
+            reason: reason.clone(),
             retryable,
         },
     );
-    match wait(commands, delay(*attempt), foreground) {
+    match wait(events, commands, delay(*attempt), foreground, &reason) {
         Wake::Stop => true,
         Wake::Retry => {
             *attempt = 0;
@@ -6575,7 +6602,7 @@ fn fail_and_wait<B: FnMut(u32) -> Duration>(
     }
 }
 
-fn wait(commands: &CommandReceiver<Command>, delay: Duration, foreground: &mut bool) -> Wake {
+fn wait(events: &smol::channel::Sender<BridgeEvent>, commands: &CommandReceiver<Command>, delay: Duration, foreground: &mut bool, disconnected_reason: &str) -> Wake {
     let deadline = Instant::now() + delay;
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
@@ -6586,6 +6613,9 @@ fn wait(commands: &CommandReceiver<Command>, delay: Duration, foreground: &mut b
             }
             // Activation is the only command that outlives the session.
             Ok(Command::SetActive(active)) => *foreground = active,
+            Ok(Command::TranslationCall { request, method, params: _ }) => emit_event(events, BridgeEvent::TranslationReply {
+                request, method, result: Err(format!("Bridge session is reconnecting: {disconnected_reason}")),
+            }),
             // Reads and runtime intents queued for the failed session are
             // dropped; the catalogue event after reconnecting makes the UI
             // issue fresh requests.
@@ -8558,27 +8588,65 @@ mod tests {
     }
 
     #[test]
+    fn translation_calls_use_bounded_method_specific_timeouts() {
+        for method in ["translation.models", "translation.modelInfo", "translation.testConnection"] {
+            assert_eq!(translation_call_timeout(method), Duration::from_secs(240));
+        }
+        for method in ["translation.capture.start", "translation.capture.attach"] {
+            assert_eq!(translation_call_timeout(method), Duration::from_secs(60));
+        }
+        assert_eq!(translation_call_timeout("translation.snapshot"), CALL_TIMEOUT);
+        assert_eq!(translation_call_timeout("library.entries"), CALL_TIMEOUT);
+    }
+
+    #[test]
+    fn translation_call_in_live_backoff_gets_correlated_error() {
+        let (supervisor, events) = BridgeSupervisor::start_with_spawner_and_backoff(
+            || Err("offline".to_owned()),
+            |_| Duration::from_secs(30),
+        );
+        loop {
+            if matches!(
+                events.recv_blocking().unwrap(),
+                BridgeEvent::Status(BridgeStatus::Failed { .. })
+            ) {
+                break;
+            }
+        }
+        supervisor.translation_request(7401, "translation.models", json!({})).unwrap();
+        match events.recv_blocking().unwrap() {
+            BridgeEvent::TranslationReply { request, method, result } => {
+                assert_eq!(request, 7401);
+                assert_eq!(method, "translation.models");
+                assert!(result.unwrap_err().contains("reconnecting"));
+            }
+            _ => panic!("queued call did not receive a correlated reply"),
+        }
+    }
+
+    #[test]
     fn test_backoff_wait_is_interruptible_by_queued_commands() {
         // A queued Retry or Shutdown ends a capped backoff wait immediately
         // instead of blocking the worker for the full delay.
         let (tx, rx) = mpsc::channel::<Command>();
+        let (events, _receiver) = smol::channel::unbounded();
         let mut foreground = true;
 
         tx.send(Command::Retry).unwrap();
         assert!(matches!(
-            wait(&rx, Duration::from_secs(8), &mut foreground),
+            wait(&events, &rx, Duration::from_secs(8), &mut foreground, "test"),
             Wake::Retry
         ));
 
         tx.send(Command::Shutdown).unwrap();
         assert!(matches!(
-            wait(&rx, Duration::from_secs(8), &mut foreground),
+            wait(&events, &rx, Duration::from_secs(8), &mut foreground, "test"),
             Wake::Stop
         ));
 
         drop(tx);
         assert!(matches!(
-            wait(&rx, Duration::from_secs(8), &mut foreground),
+            wait(&events, &rx, Duration::from_secs(8), &mut foreground, "test"),
             Wake::Stop
         ));
     }
