@@ -24,7 +24,7 @@ def verify(resources=None):
             errors.append(message)
 
     expected = manifest["files"]
-    actual = {str(p.relative_to(directory)) for p in directory.rglob("*") if p.is_file()}
+    actual = {p.relative_to(directory).as_posix() for p in directory.rglob("*") if p.is_file()}
     check(actual == set(expected) | {"manifest.json"}, "ThirdParty file inventory changed")
     for name, sha in expected.items():
         path = directory / name
