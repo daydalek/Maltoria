@@ -42,11 +42,11 @@ public actor FileTranslationRepository: TranslationRepository {
         home: URL = FileManager.default.homeDirectoryForCurrentUser
     ) -> URL {
         #if os(macOS)
-        home.appending(path: "Library/Application Support/Maltoria/Translation", directoryHint: .isDirectory)
+        return home.appending(path: "Library/Application Support/Maltoria/Translation", directoryHint: .isDirectory)
         #else
         let stateRoot = environment["XDG_STATE_HOME"].map(URL.init(fileURLWithPath:))
             ?? home.appending(path: ".local/state", directoryHint: .isDirectory)
-        stateRoot.appending(path: "maltoria/translation", directoryHint: .isDirectory)
+        return stateRoot.appending(path: "maltoria/translation", directoryHint: .isDirectory)
         #endif
     }
 
