@@ -28,7 +28,7 @@ jobs:
       - name: Build pinned upstream sources
         shell: pwsh
         run: ./scripts/build-lunahook.ps1 -Architecture ${{ matrix.arch }} -Output "$env:RUNNER_TEMP/MaltoriaNative"
-      - name: Smoke-test local process inventory protocol
+      - name: Capture Unicode from the authored GDI fixture
         shell: pwsh
         run: |
           $bits = if ('${{ matrix.arch }}' -eq 'x86') { '32' } else { '64' }
@@ -41,6 +41,7 @@ jobs:
         shell: pwsh
         run: |
           python scripts/check-third-party.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/package-native-sources.py --output "$env:RUNNER_TEMP/MaltoriaNative/sources"
       - uses: actions/upload-artifact@v4
         with:

@@ -7,10 +7,19 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <cstdint>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <cwchar>
+#include <deque>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -252,23 +261,26 @@ std::string creation_time_hex(const FILETIME& creation) {
     return buffer;
 }
 
-bool process_record(DWORD pid, Json& record) {
-    HandleLifetime process(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid));
-    if (!process.get()) return false;
+bool process_record_from_handle(HANDLE process, DWORD pid, Json& record) {
     std::vector<wchar_t> image(32768);
     DWORD image_length = static_cast<DWORD>(image.size());
-    if (!QueryFullProcessImageNameW(process.get(), 0, image.data(), &image_length)) return false;
+    if (!QueryFullProcessImageNameW(process, 0, image.data(), &image_length)) return false;
     const std::string path = wide_to_utf8(image.data(), static_cast<int>(image_length));
     if (path.empty() || path.size() > kMaxImagePathBytes) return false;
     FILETIME creation{}, exit{}, kernel{}, user{};
-    if (!GetProcessTimes(process.get(), &creation, &exit, &kernel, &user)) return false;
+    if (!GetProcessTimes(process, &creation, &exit, &kernel, &user)) return false;
     record = Json{
         {"guestPID", pid},
         {"exePath", path},
-        {"arch", process_architecture(process.get())},
+        {"arch", process_architecture(process)},
         {"creationTime", creation_time_hex(creation)}
     };
     return true;
+}
+
+bool process_record(DWORD pid, Json& record) {
+    HandleLifetime process(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid));
+    return process.get() && process_record_from_handle(process.get(), pid, record);
 }
 
 Json make_response(const std::string& id, const std::string& session,
@@ -318,6 +330,8 @@ Json list_processes(const std::string& id, const std::string& session) {
                          Json{{"processes", std::move(records)}, {"truncated", truncated}});
 }
 
+#include "capture.inc"
+
 bool valid_ack(const Json& ack, const std::string& session) {
     std::string type;
     std::string response_session;
@@ -354,39 +368,46 @@ int run() {
         || !parse_object(frame, acknowledgement)
         || !valid_ack(acknowledgement, session)) return 6;
 
+    // Upstream callbacks may outlive a detach. Keep their state valid until the
+    // helper process exits; shutdown disables the queue before closing sockets.
+    auto* capture = new CaptureSession(socket.get(), session);
+    auto finish = [&](int code) {
+        capture->stop();
+        return code;
+    };
     for (;;) {
         Json request;
         if (receive_frame(socket.get(), pending, frame) != ReadResult::frame
-            || !parse_object(frame, request)) return 0;
+            || !parse_object(frame, request)) return finish(0);
         std::string type, request_session, id, command;
         if (!string_field(request, "type", 16, type) || type != "command"
             || !string_field(request, "session", kMaxSessionBytes, request_session)
             || request_session != session
             || !string_field(request, "id", kMaxRequestIDBytes, id)
-            || !string_field(request, "command", 64, command)) return 7;
+            || !string_field(request, "command", 64, command)) return finish(7);
 
+        Json response;
         if (command == "listProcesses") {
-            const Json response = list_processes(id, session);
-            if (!send_frame(socket.get(), response)) return 8;
+            response = list_processes(id, session);
         } else if (command == "shutdown") {
-            if (!send_frame(socket.get(), make_response(id, session, true, Json::object()))) return 0;
-            return 0;
+            capture->reply(make_response(id, session, true, Json::object()));
+            return finish(0);
+        } else if (command == "ping") {
+            response = make_response(id, session, true, Json::object());
         } else if (command == "attach" || command == "detach" || command == "insertHook") {
-            const Json error{
-                {"code", "unsupported_operation"},
-                {"message", "Target attachment and hook operations are disabled in this helper."}
-            };
-            if (!send_frame(socket.get(), make_response(id, session, false, error))) return 9;
+            response = capture->command(id, command, request.value("params", Json::object()));
         } else {
             const Json error{
                 {"code", "unknown_command"}, {"message", "Command is not supported."}
             };
-            if (!send_frame(socket.get(), make_response(id, session, false, error))) return 10;
+            response = make_response(id, session, false, error);
         }
+        if (!capture->reply(std::move(response))) return finish(8);
     }
 }
 } // namespace
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
-    return run();
+    try { return run(); }
+    catch (...) { return 11; } // Never print request, token, or dialogue data.
 }

@@ -1,4 +1,4 @@
-# LunaTranslator native source build and process inventory helper
+# LunaTranslator native source build and capture helper
 
 The native source lock is in `manifest.json`; archives are committed under
 `sources/native/`. `python3 scripts/prepare-native-sources.py --output <empty-dir>`
@@ -16,16 +16,20 @@ pwsh -File scripts/build-lunahook.ps1 -Architecture x64 -Output $env:RUNNER_TEMP
 The script uses CMake/MSVC with `BUILD_HOST=ON`, `BUILD_HOOK=ON`,
 `BUILD_GUI=OFF`, `WIN10ABOVE=ON`, `USE_VC_LTL=OFF`, and fully disconnected,
 locally prepared MinHook/uchardet sources. It also builds the separately authored
-process-inventory helper and GDI fixture. Outputs are `LunaHost32/64.dll`,
+capture helper and GDI fixture. Outputs are `LunaHost32/64.dll`,
 `LunaHook32/64.dll`, `LunaTmpFontLoader.dll`, `MaltoriaLunaHost32/64.exe`, and
 `MaltoriaUnicodeFixture.exe`.
 
-The helper is deliberately process-inventory-only in this revision. It does not
-load LunaHook into a target, call LunaHost attachment APIs, capture hook text, or
-perform attach/detach/hook insertion; those commands return
-`unsupported_operation`. Windows CI starts only the authored Unicode fixture,
-checks its process identity over IPC, and verifies the fixture remains alive.
-It does not run a game or prove hook capture.
+The helper uses the pinned LunaHost C ABI and normal same-bitness Windows DLL
+loading for an explicitly selected process. It validates the full image path,
+creation time and architecture on the same open process handle before and after
+attachment. It never elevates, copies DLLs into the game, or terminates a game or
+wineserver. Existing hooks owned by another host are rejected. DLL loading and
+connection waits are bounded; a timed-out loader's argument is deliberately
+left allocated because freeing memory still in use would damage the target.
+Windows CI captures Japanese Unicode text from our authored GDI fixture and
+checks identity rejection, detach and fixture survival. It is not evidence of
+Wine or real-game compatibility.
 
 ## Local IPC schema
 
@@ -63,15 +67,37 @@ string). A successful reply has the form:
 {"type":"response","id":"req-1","session":"<session-id>","ok":true,"result":{"processes":[],"truncated":false}}
 ```
 
-`attach`, `detach`, and `insertHook` receive an id-correlated error response:
+`attach` takes the exact process record selected from `listProcesses`:
 
 ```json
-{"type":"response","id":"req-2","session":"<session-id>","ok":false,"error":{"code":"unsupported_operation","message":"Target attachment and hook operations are disabled in this helper."}}
+{"type":"command","id":"req-2","session":"<session-id>","command":"attach","params":{"target":{"guestPID":72,"exePath":"C:\\Games\\game.exe","arch":"x64","creationTime":"01DC123456789ABC"}}}
 ```
 
-`shutdown` is acknowledged before the host closes the socket. EOF, malformed
-frames, an oversized frame, or a session mismatch closes the helper. This
-process-inventory build does not emit thread/text callback events.
+The response result contains `target`. Failures have `ok:false` and
+`error:{code,message}`; errors never contain dialogue. Only one target can be
+attached per helper. `detach` cleans up that attachment; `insertHook` takes
+`params:{hookCode:"..."}` for an explicit user-provided hook code. No automatic
+memory search or embedding is enabled. `ping` returns an empty result: send it
+at least every 15 seconds to stay within the 30-second receive timeout.
+
+Asynchronous events may arrive between any responses; all carry `session`:
+
+- `process`: `action` is `connected` or `disconnected`, with `guestPID`.
+- `thread`: `action` is `created` or `removed`, with `thread` below.
+- `text`: monotonic `sequence`, UTF-8 `text`, and `thread`.
+- `error`: safe `code`; `events_dropped` also includes `dropped`.
+
+The `thread` object contains `guestPID`, `hookCode`, `hookName`, and
+`addressHex`, `contextHex`, `context2Hex` as `0x`-prefixed hexadecimal strings.
+Callbacks only copy bounded data and try to enqueue it. The writer has a
+256-event queue and reports overflow; dialogue is never silently truncated or
+logged. Original LunaHost diagnostic text is discarded because it can contain
+game text. The native service selects which text threads become translations.
+
+`shutdown` is acknowledged before closing. EOF, malformed/oversized frames or
+a session mismatch also detach and close. A failed attach can leave a pending
+loader; stop that helper rather than retrying indefinitely. Only the helper's
+own sockets, handles and attachment are cleaned up.
 
 ## Reproducible source payload
 

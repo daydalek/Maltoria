@@ -25,6 +25,10 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lp
         DestroyWindow(window);
         return 0;
     }
+    if (message == WM_TIMER && wparam == 2) {
+        InvalidateRect(window, nullptr, FALSE);
+        return 0;
+    }
     return DefWindowProcW(window, message, wparam, lparam);
 }
 } // namespace
@@ -42,7 +46,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show_command) {
                                   CW_USEDEFAULT, CW_USEDEFAULT, 640, 180,
                                   nullptr, nullptr, instance, nullptr);
     if (!window) return 2;
-    SetTimer(window, 1, 60000, nullptr);
+    SetTimer(window, 1, 180000, nullptr);
+    SetTimer(window, 2, 350, nullptr);
     ShowWindow(window, show_command);
     UpdateWindow(window);
 

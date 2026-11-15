@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Exercise the Windows host's authenticated process-inventory wire protocol."""
+"""Exercise authenticated capture against our own Unicode GDI fixture only."""
 import argparse
 from collections import deque
 import ctypes
@@ -37,6 +37,7 @@ class Peer:
         self.connection = connection
         self.decoder = FrameDecoder()
         self.messages = deque()
+        self.events = deque(maxlen=512)
 
     def receive(self):
         while not self.messages:
@@ -46,6 +47,18 @@ class Peer:
                 raise EOFError("host closed the protocol connection")
             self.messages.extend(self.decoder.feed(chunk))
         return self.messages.popleft()
+
+    def response(self, request_id, session):
+        while True:
+            message = self.receive()
+            if message.get("session") != session:
+                raise AssertionError("unexpected event session")
+            if message.get("type") != "response":
+                self.events.append(message)
+                continue
+            if message.get("id") != request_id:
+                raise AssertionError("unexpected response ID")
+            return message
 
 
 def normalized_windows_path(path):
@@ -103,12 +116,17 @@ def send_command(connection, command, request_id, session, **fields):
     connection.sendall(encode_frame(request))
 
 
-def assert_unsupported(peer, request_id, session):
-    response = peer.receive()
-    if (response.get("type") != "response" or response.get("id") != request_id
-            or response.get("session") != session or response.get("ok") is not False
-            or response.get("error", {}).get("code") != "unsupported_operation"):
-        raise AssertionError("host did not safely reject the target operation")
+def assert_error(peer, request_id, session, code):
+    response = peer.response(request_id, session)
+    if response.get("ok") is not False or response.get("error", {}).get("code") != code:
+        raise AssertionError(f"expected {code}, received {response.get('error', {}).get('code')}")
+
+
+def assert_success(peer, request_id, session):
+    response = peer.response(request_id, session)
+    if response.get("ok") is not True:
+        raise AssertionError(f"command failed: {response.get('error', {}).get('code')}")
+    return response
 
 
 def close_fixture(process):
@@ -149,7 +167,7 @@ def run(host, fixture, architecture):
 
             process, connection, peer, token, session = start_host(host, server, architecture)
             send_command(connection, "listProcesses", "list-1", session)
-            response = peer.receive()
+            response = peer.response("list-1", session)
             if (response.get("type") != "response" or response.get("id") != "list-1"
                     or response.get("session") != session or response.get("ok") is not True):
                 raise AssertionError("listProcesses response did not match its request")
@@ -163,24 +181,43 @@ def run(host, fixture, architecture):
             if fixture_record["arch"] != architecture:
                 raise AssertionError("process list reported the wrong fixture architecture")
 
-            stale_identity = {
-                "pid": fixture_process.pid,
-                "exePath": str(fixture),
-                "arch": architecture,
-                "creationTime": "0000000000000000",
-            }
-            for command, request_id, fields in (
-                ("attach", "attach-disabled", stale_identity),
-                ("detach", "detach-disabled", {}),
-                ("insertHook", "hook-disabled", {"code": "HTEST"}),
-            ):
-                send_command(connection, command, request_id, session, **fields)
-                assert_unsupported(peer, request_id, session)
-                if fixture_process.poll() is not None:
-                    raise AssertionError("fixture exited after a disabled target operation")
+            stale_identity = {**fixture_record, "creationTime": "0000000000000000"}
+            send_command(connection, "attach", "stale", session, params={"target": stale_identity})
+            assert_error(peer, "stale", session, "stale_identity")
+            wrong_path = {**fixture_record, "exePath": r"C:\not-the-fixture.exe"}
+            send_command(connection, "attach", "wrong-path", session, params={"target": wrong_path})
+            assert_error(peer, "wrong-path", session, "stale_identity")
+            send_command(connection, "insertHook", "unattached", session, params={"hookCode": "HTEST"})
+            assert_error(peer, "unattached", session, "not_attached")
+            send_command(connection, "attach", "attach", session, params={"target": fixture_record})
+            assert_success(peer, "attach", session)
+            expected = "こんにちは、世界。雪国"
+            deadline = time.monotonic() + 15
+            captured = False
+            while time.monotonic() < deadline:
+                event = peer.events.popleft() if peer.events else peer.receive()
+                if event.get("session") != session:
+                    raise AssertionError("capture event escaped its session")
+                if event.get("type") == "text" and expected in event.get("text", ""):
+                    thread = event.get("thread", {})
+                    if thread.get("guestPID") != fixture_process.pid:
+                        raise AssertionError("capture belongs to another process")
+                    for field in ("addressHex", "contextHex", "context2Hex"):
+                        if not isinstance(thread.get(field), str) or not thread[field].startswith("0x"):
+                            raise AssertionError("address fields lost their hexadecimal encoding")
+                    captured = True
+                    break
+            if not captured:
+                raise AssertionError("Unicode GDI fixture text was not captured")
+            send_command(connection, "ping", "ping", session)
+            assert_success(peer, "ping", session)
+            send_command(connection, "detach", "detach", session)
+            assert_success(peer, "detach", session)
+            if fixture_process.poll() is not None:
+                raise AssertionError("fixture exited during detach")
 
             send_command(connection, "shutdown", "shutdown-1", session)
-            shutdown = peer.receive()
+            shutdown = peer.response("shutdown-1", session)
             if shutdown.get("id") != "shutdown-1" or shutdown.get("ok") is not True:
                 raise AssertionError("host did not acknowledge shutdown")
             connection.close()
@@ -194,7 +231,7 @@ def run(host, fixture, architecture):
 
         if fixture_process.poll() is not None:
             raise AssertionError("fixture exited after helper EOF")
-        print(f"Native host process-inventory smoke passed (arch={architecture}).")
+        print(f"Native host Unicode capture/identity/detach smoke passed (arch={architecture}).")
     finally:
         if fixture_process.poll() is None:
             close_fixture(fixture_process)
