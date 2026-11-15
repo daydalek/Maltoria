@@ -54,8 +54,7 @@ public actor FileTranslationRepository: TranslationRepository {
         do {
             try configuration.validate()
             try write(JSONEncoder.sorted.encode(configuration), to: "provider-\(configuration.id.uuidString).json")
-        } catch let error as TranslationError { throw error }
-        catch { throw TranslationError.persistenceUnavailable }
+        } catch let error as TranslationError { throw error } catch { throw TranslationError.persistenceUnavailable }
     }
 
     public func loadConfiguration(id: UUID) async throws -> ProviderConfiguration? {
@@ -67,16 +66,14 @@ public actor FileTranslationRepository: TranslationRepository {
             )
             try value.validate()
             return value
-        } catch let error as TranslationError { throw error }
-        catch { throw TranslationError.persistenceUnavailable }
+        } catch let error as TranslationError { throw error } catch { throw TranslationError.persistenceUnavailable }
     }
 
     public func saveSettings(_ settings: TranslationSettings) async throws {
         do {
             try settings.validate()
             try write(JSONEncoder.sorted.encode(settings), to: "settings.json")
-        } catch let error as TranslationError { throw error }
-        catch { throw TranslationError.persistenceUnavailable }
+        } catch let error as TranslationError { throw error } catch { throw TranslationError.persistenceUnavailable }
     }
 
     public func loadSettings() async throws -> TranslationSettings? {
@@ -85,8 +82,7 @@ public actor FileTranslationRepository: TranslationRepository {
             let value = try JSONDecoder().decode(TranslationSettings.self, from: Data(contentsOf: url("settings.json")))
             try value.validate()
             return value
-        } catch let error as TranslationError { throw error }
-        catch { throw TranslationError.persistenceUnavailable }
+        } catch let error as TranslationError { throw error } catch { throw TranslationError.persistenceUnavailable }
     }
 
     public func saveHistory(_ snapshot: TranslationSessionSnapshot) async throws {
@@ -109,8 +105,7 @@ public actor FileTranslationRepository: TranslationRepository {
     public func clearHistory(gameID: String, sessionID: UUID) async throws {
         let location = url(historyFilename(gameID: gameID, sessionID: sessionID))
         guard fileManager.fileExists(atPath: location.path) else { return }
-        do { try fileManager.removeItem(at: location) }
-        catch { throw TranslationError.persistenceUnavailable }
+        do { try fileManager.removeItem(at: location) } catch { throw TranslationError.persistenceUnavailable }
     }
 
     private func write(_ data: Data, to filename: String) throws {

@@ -442,8 +442,7 @@ public actor TranslationSession {
     private func trimHistory() {
         let count = settings.historyRetentionTurns
         if count == 0 {
-            if let activeEntryID, let active = entries.first(where: { $0.id == activeEntryID }) { entries = [active] }
-            else { entries.removeAll() }
+            if let activeEntryID, let active = entries.first(where: { $0.id == activeEntryID }) { entries = [active] } else { entries.removeAll() }
         } else if entries.count > count {
             entries.removeFirst(entries.count - count)
         }

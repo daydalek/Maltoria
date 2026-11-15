@@ -239,6 +239,7 @@ private func systemClose(_ descriptor: Int32) {
     #endif
 }
 
+// swiftlint:disable:next identifier_name
 private func systemSend(_ fd: Int32, _ bytes: UnsafeRawPointer, _ count: Int, _ flags: Int32) -> Int {
     #if canImport(Darwin)
     Darwin.send(fd, bytes, count, flags)
@@ -344,8 +345,7 @@ public actor HookIPCClient: HookClient {
             guard let id = frame["id"]?.string, let waiter = pending.removeValue(forKey: id) else {
                 throw hookFailure("unexpected_response")
             }
-            if frame["ok"] == .bool(true), let result = frame["result"] { waiter.resume(returning: result) }
-            else {
+            if frame["ok"] == .bool(true), let result = frame["result"] { waiter.resume(returning: result) } else {
                 // Only forward the bounded code. Never trust native diagnostics as display text.
                 let code = frame["error"]?.object?["code"]?.string ?? "operation_failed"
                 waiter.resume(throwing: hookFailure(String(code.prefix(80))))

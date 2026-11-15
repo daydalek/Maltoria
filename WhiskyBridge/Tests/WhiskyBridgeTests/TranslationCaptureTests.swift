@@ -89,6 +89,7 @@ private final class CaptureHarness {
     let profiles: ApplicationTranslationService
     let http = CaptureHTTP()
     var clients: [FixtureHookClient] = []
+    // swiftlint:disable:next large_tuple
     var launches: [(URL, URL, [String: String])] = []
     var stopped = 0
     var service: ApplicationCaptureService!

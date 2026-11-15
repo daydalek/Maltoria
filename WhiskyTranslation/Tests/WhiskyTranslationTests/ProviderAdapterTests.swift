@@ -128,7 +128,8 @@ struct ProviderAdapterTests {
             makeHTTPResponse("{\"models\":[{\"name\":\"fixture:latest\"}]}"),
             makeHTTPResponse("{\"model_info\":{\"llama.context_length\":8192,\"unsupported_limit\":99999}}"),
             makeHTTPResponse(
-                "{\"message\":{\"thinking\":\"hidden\",\"content\":\"こんにちは\"},\"done\":false}\n{\"message\":{\"content\":\"世界\"},\"done\":true,\"prompt_eval_count\":12,\"eval_count\":3}\n",
+                "{\"message\":{\"thinking\":\"hidden\",\"content\":\"こんにちは\"},\"done\":false}\n"
+                    + "{\"message\":{\"content\":\"世界\"},\"done\":true,\"prompt_eval_count\":12,\"eval_count\":3}\n",
                 chunkSize: 3
             )
         ])
@@ -186,7 +187,8 @@ struct ProviderAdapterTests {
 
         let geminiTransport = QueueHTTPTransport([
             makeHTTPResponse(
-                "{\"models\":[{\"name\":\"models/fixture-gemini\",\"displayName\":\"Fixture Gemini\",\"inputTokenLimit\":32000,\"supportedGenerationMethods\":[\"generateContent\"]}]}"
+                "{\"models\":[{\"name\":\"models/fixture-gemini\",\"displayName\":\"Fixture Gemini\","
+                    + "\"inputTokenLimit\":32000,\"supportedGenerationMethods\":[\"generateContent\"]}]}"
             ),
             makeHTTPResponse(
                 // swiftlint:disable:next line_length

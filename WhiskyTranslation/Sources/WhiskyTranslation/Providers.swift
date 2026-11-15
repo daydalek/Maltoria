@@ -263,8 +263,7 @@ public struct HTTPTranslationProvider: TranslationProvider, Sendable {
             if let choices = root["choices"] as? [[String: Any]] {
                 for choice in choices {
                     let fragment: String?
-                    if legacy { fragment = choice["text"] as? String }
-                    else { fragment = (choice["delta"] as? [String: Any])?["content"] as? String }
+                    if legacy { fragment = choice["text"] as? String } else { fragment = (choice["delta"] as? [String: Any])?["content"] as? String }
                     if let fragment, !fragment.isEmpty {
                         aggregate.append(fragment)
                         try yield(.delta(fragment), to: continuation)
@@ -713,6 +712,7 @@ private func consumeSSE(
     var complete = false
     outer: for try await chunk in stream {
         for frame in try parser.append(chunk) {
+            // swiftlint:disable:next for_where
             if try consume(frame, &aggregate) != .continue {
                 complete = true
                 break outer
@@ -721,6 +721,7 @@ private func consumeSSE(
     }
     if !complete {
         for frame in try parser.finish() {
+            // swiftlint:disable:next for_where
             if try consume(frame, &aggregate) != .continue {
                 complete = true
                 break
