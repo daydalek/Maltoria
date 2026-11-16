@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#faf9fc">
 <title>Maltoria — Visual Novels, Beyond Windows</title>
-<meta name="description" content="Maltoria 是面向视觉小说与 galgame 玩家打造的游戏库管理器，集成多数据源自动刮削、封面与画面超分及调优 Wine 运行时，支持 macOS (Apple Silicon) 与 Linux。">
+<meta name="description" content="Maltoria 是面向视觉小说与 galgame 玩家打造的跨平台游戏库管理器，集成 LunaHook 实时字幕翻译、多数据源自动刮削、封面与画面超分及调优 Wine 运行时，支持 macOS (Apple Silicon) 与 Linux。">
 <link rel="canonical" href="https://daydalek.github.io/Maltoria/">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Maltoria — Visual Novels, Beyond Windows">
-<meta property="og:description" content="为视觉小说玩家打造的游戏库管理、多数据源自动刮削、画面超分与调优 Wine 运行时，支持 macOS 与 Linux。">
+<meta property="og:description" content="跨平台视觉小说游戏库管理、LunaHook 实时字幕翻译、多数据源自动刮削与调优 Wine 运行时，支持 macOS 与 Linux。">
 <meta property="og:url" content="https://daydalek.github.io/Maltoria/">
 <meta property="og:image" content="https://raw.githubusercontent.com/daydalek/Maltoria/main/images/og-card.png">
 <meta name="twitter:card" content="summary_large_image">
@@ -660,6 +660,431 @@
     border: 1px solid var(--border);
   }
 
+  /* Live Translation Showcase */
+  #translation {
+    padding-top: 92px;
+  }
+  #translation .eyebrow { color: var(--violet-ink); }
+  .trans-demo {
+    margin: 34px auto 0;
+    max-width: 1020px;
+    padding: 18px;
+    border-radius: 26px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    box-shadow: var(--shadow-win);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    text-align: left;
+  }
+  .trans-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 14px;
+    padding-bottom: 14px;
+  }
+  .trans-group {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+  .trans-seg {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 999px;
+    background: rgba(244, 241, 248, 0.9);
+    border: 1px solid var(--border);
+  }
+  .trans-pill {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 6px 13px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+  }
+  .trans-pill:hover { color: var(--text); }
+  .trans-pill.on {
+    background: var(--surface-solid);
+    color: var(--violet-ink);
+    box-shadow: 0 2px 8px rgba(41, 55, 74, 0.08);
+  }
+  .trans-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface-solid);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 620;
+    padding: 6px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: var(--highlight-top);
+    transition: all 0.18s ease;
+  }
+  .trans-toggle:hover {
+    border-color: rgba(140, 107, 200, 0.42);
+    color: var(--violet-ink);
+  }
+  .trans-toggle.on {
+    background: var(--violet-bg);
+    border-color: rgba(140, 107, 200, 0.34);
+    color: var(--violet-ink);
+  }
+  .trans-toggle.mode-locked {
+    background: var(--sky-bg);
+    border-color: rgba(78, 152, 190, 0.36);
+    color: var(--sky-ink);
+  }
+  .trans-toggle .t-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.45;
+  }
+  .trans-toggle.on .t-dot,
+  .trans-toggle.mode-locked .t-dot {
+    opacity: 1;
+  }
+  .trans-stage {
+    position: relative;
+    height: 410px;
+    border-radius: 18px;
+    overflow: hidden;
+    border: 1px solid rgba(41, 55, 74, 0.12);
+    background:
+      radial-gradient(ellipse 75% 60% at 72% 24%, rgba(255, 196, 156, 0.42), transparent 62%),
+      radial-gradient(ellipse 68% 58% at 22% 30%, rgba(169, 146, 224, 0.36), transparent 64%),
+      linear-gradient(165deg, #2b2944 0%, #3d3659 42%, #594b6b 72%, #2b3146 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    user-select: none;
+  }
+  .trans-stage::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at 78% 28%, rgba(255, 238, 214, 0.55) 0 42px, rgba(255, 224, 188, 0.16) 76px, transparent 130px),
+      linear-gradient(to top, rgba(18, 20, 32, 0.65) 0%, transparent 48%);
+    pointer-events: none;
+  }
+  .trans-scene-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      radial-gradient(circle at 18% 26%, rgba(255, 214, 228, 0.35) 0 2px, transparent 3px),
+      radial-gradient(circle at 34% 18%, rgba(255, 232, 210, 0.35) 0 1.5px, transparent 2.5px),
+      radial-gradient(circle at 62% 36%, rgba(255, 214, 228, 0.28) 0 2px, transparent 3px),
+      radial-gradient(circle at 84% 48%, rgba(224, 212, 255, 0.32) 0 1.5px, transparent 2.5px);
+    pointer-events: none;
+  }
+  .hud-pill {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    z-index: 4;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 13px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.90);
+    border: 1px solid rgba(255, 255, 255, 0.65);
+    box-shadow: 0 10px 24px -8px rgba(18, 20, 32, 0.45);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 650;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  .hud-pill .live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--mint);
+    box-shadow: 0 0 0 4px rgba(74, 168, 134, 0.22);
+  }
+  .hud-pill .hud-meta {
+    color: var(--muted);
+    font-weight: 550;
+    padding-left: 8px;
+    border-left: 1px solid var(--border-strong);
+  }
+  .hud-mode-badge {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    z-index: 4;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: rgba(20, 24, 36, 0.58);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    color: rgba(246, 247, 251, 0.9);
+    font-size: 11.5px;
+    font-weight: 600;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .vn-dialogue {
+    position: absolute;
+    left: 24px;
+    right: 24px;
+    bottom: 18px;
+    z-index: 2;
+    padding: 14px 18px 16px;
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(255, 250, 252, 0.16), rgba(28, 26, 44, 0.72));
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: rgba(255, 255, 255, 0.92);
+    pointer-events: none;
+  }
+  .vn-speaker {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: rgba(243, 196, 107, 0.22);
+    border: 1px solid rgba(243, 196, 107, 0.45);
+    color: #ffe3ab;
+    font-size: 11.5px;
+    font-weight: 680;
+    margin-bottom: 6px;
+  }
+  .vn-jp {
+    font-size: 14px;
+    line-height: 1.55;
+    color: rgba(248, 248, 252, 0.88);
+  }
+
+  .sub-overlay {
+    position: absolute;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-radius: 14px;
+    background: rgba(17, 20, 31, 0.80);
+    border: 1px solid rgba(255, 255, 255, 0.20);
+    box-shadow: 0 22px 46px -14px rgba(10, 12, 22, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    color: #f8f9fc;
+    cursor: grab;
+    touch-action: none;
+    overflow: hidden;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  }
+  .sub-overlay:hover {
+    border-color: rgba(216, 197, 248, 0.48);
+  }
+  .sub-overlay.dragging {
+    cursor: grabbing;
+    border-color: rgba(243, 196, 107, 0.72);
+    box-shadow: 0 26px 56px -12px rgba(10, 12, 22, 0.78), 0 0 0 2px rgba(243, 196, 107, 0.22);
+  }
+  .sub-overlay.click-through {
+    cursor: default;
+    touch-action: auto;
+    pointer-events: none;
+    border-color: rgba(255, 255, 255, 0.12);
+    background: rgba(17, 20, 31, 0.68);
+  }
+  .sub-overlay-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+    color: rgba(226, 229, 242, 0.72);
+  }
+  .sub-model-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 650;
+    color: #e4d6ff;
+    white-space: nowrap;
+  }
+  .sub-status-tag {
+    font-size: 10.5px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: rgba(74, 168, 134, 0.20);
+    border: 1px solid rgba(74, 168, 134, 0.36);
+    color: #9ce6c7;
+    white-space: nowrap;
+  }
+  .sub-orig {
+    margin-top: 6px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: rgba(216, 222, 238, 0.68);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sub-zh {
+    margin-top: 4px;
+    font-size: 16px;
+    font-weight: 650;
+    line-height: 1.5;
+    color: #ffffff;
+    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.35);
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+  }
+  .grip {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    z-index: 6;
+    transition: opacity 0.18s ease;
+  }
+  .grip::after {
+    content: "";
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    border-color: rgba(243, 196, 107, 0.92);
+    border-style: solid;
+    border-width: 0;
+  }
+  .grip.nw { top: 4px; left: 4px; cursor: nwse-resize; }
+  .grip.nw::after { top: 0; left: 0; border-top-width: 2.5px; border-left-width: 2.5px; border-top-left-radius: 4px; }
+  .grip.ne { top: 4px; right: 4px; cursor: nesw-resize; }
+  .grip.ne::after { top: 0; right: 0; border-top-width: 2.5px; border-right-width: 2.5px; border-top-right-radius: 4px; }
+  .grip.sw { bottom: 4px; left: 4px; cursor: nesw-resize; }
+  .grip.sw::after { bottom: 0; left: 0; border-bottom-width: 2.5px; border-left-width: 2.5px; border-bottom-left-radius: 4px; }
+  .grip.se { bottom: 4px; right: 4px; cursor: nwse-resize; }
+  .grip.se::after { bottom: 0; right: 0; border-bottom-width: 2.5px; border-right-width: 2.5px; border-bottom-right-radius: 4px; }
+  .sub-overlay.click-through .grip {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .trans-footer {
+    margin-top: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 16px;
+  }
+  .trans-lines {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+  .trans-line-btn {
+    border: 1px solid var(--border-strong);
+    background: var(--surface-solid);
+    color: var(--text-secondary);
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+  }
+  .trans-line-btn:hover {
+    border-color: rgba(140, 107, 200, 0.42);
+    color: var(--violet-ink);
+  }
+  .trans-line-btn.on {
+    background: #7e5ea1;
+    border-color: #7e5ea1;
+    color: #ffffff;
+  }
+  .trans-readout {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .trans-reset-btn {
+    border: 1px solid var(--border-strong);
+    background: var(--surface-solid);
+    color: var(--text-secondary);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .trans-reset-btn:hover {
+    border-color: rgba(140, 107, 200, 0.45);
+    color: var(--violet-ink);
+  }
+
+  .trans-cards {
+    margin: 26px auto 0;
+    max-width: 1020px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    text-align: left;
+  }
+  .trans-card {
+    padding: 24px 22px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-card);
+    transition: transform 0.24s ease, box-shadow 0.24s ease, border-color 0.24s ease;
+  }
+  .trans-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-card-hover);
+    border-color: var(--border-strong);
+  }
+  .trans-card:nth-child(1) { background: linear-gradient(155deg, #faf7ff, #f1eafb); }
+  .trans-card:nth-child(2) { background: linear-gradient(155deg, #fffaf0, #fff1dd); }
+  .trans-card:nth-child(3) { background: linear-gradient(155deg, #f4fafe, #e6f4fa); }
+  .trans-card-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.88);
+    border: 1px solid var(--border);
+    margin-bottom: 12px;
+  }
+  .trans-card:nth-child(1) .trans-card-badge { color: var(--violet-ink); }
+  .trans-card:nth-child(2) .trans-card-badge { color: var(--gold-ink); }
+  .trans-card:nth-child(3) .trans-card-badge { color: var(--sky-ink); }
+  .trans-card h3 {
+    font-size: 16.5px;
+    font-weight: 740;
+    color: var(--text);
+  }
+  .trans-card p {
+    margin-top: 8px;
+    font-size: 13.5px;
+    color: var(--text-secondary);
+    line-height: 1.68;
+  }
+
   /* Alternating Feature Rows */
   .row {
     display: grid;
@@ -1049,6 +1474,7 @@
     .hero .sub { margin-left: auto; margin-right: auto; max-width: 560px; }
     .hero .cta, .hero .hero-pills { justify-content: center; }
     .flow { grid-template-columns: 1fr 1fr; }
+    .trans-cards { grid-template-columns: 1fr; }
     .credits-grid { grid-template-columns: 1fr; }
     .row, .row.flip { grid-template-columns: 1fr; gap: 32px; }
     .row.flip .txt { order: 0; }
@@ -1064,6 +1490,12 @@
     .hero .win { border-width: 5px; }
     .flow { grid-template-columns: 1fr; }
     .tab { padding: 7px 13px; font-size: 13px; }
+    .trans-demo { padding: 14px; border-radius: 20px; }
+    .trans-stage { height: 360px; }
+    .hud-pill .hud-meta { display: none; }
+    .hud-mode-badge { top: 54px; left: 16px; right: auto; }
+    .vn-dialogue { left: 14px; right: 14px; bottom: 12px; padding: 11px 14px; }
+    .sub-zh { font-size: 14.5px; }
     #download > .wrap { width: calc(100% - 32px); padding: 36px 18px 26px; border-radius: 24px; }
     .plat-card { padding: 24px 20px; }
     .plat-card li { align-items: flex-start; flex-direction: column; gap: 6px; }
@@ -1084,10 +1516,11 @@
       <img class="logo" src="assets/logo.png" alt="Maltoria">
       <span>Maltoria</span>
     </a>
-    <span class="version-pill tnum">v0.6.0</span>
+    <span class="version-pill tnum">v0.6.1</span>
     <div class="links">
       <a href="#flow">工作流</a>
       <a href="#views">视图</a>
+      <a href="#translation">实时翻译</a>
       <a href="#metadata">数据源</a>
       <a href="#runtime">核心架构</a>
       <a href="#download">下载</a>
@@ -1104,6 +1537,7 @@
   <div class="mobile-drawer" id="mobile-drawer">
     <a href="#flow">工作流</a>
     <a href="#views">视图</a>
+    <a href="#translation">实时翻译</a>
     <a href="#metadata">数据源</a>
     <a href="#runtime">核心架构</a>
     <a href="#download">下载</a>
@@ -1122,18 +1556,18 @@
       <img class="logo-big" src="assets/logo.png" alt="Maltoria">
       <h1><span class="grad-text">Maltoria</span></h1>
       <p class="en">Visual Novels, Beyond Windows</p>
-      <p class="sub">在 macOS 与 Linux 上，将散落的游戏目录收进桌面封面墙；集成多数据源自动刮削、封面超分与调优 Wine 运行时，打开故事就能沉浸游玩。</p>
+      <p class="sub">在 macOS 与 Linux 上，将散落的游戏目录收进桌面封面墙；集成 LunaHook 实时字幕翻译、多数据源自动刮削、画面超分与调优 Wine 运行时，打开故事就能沉浸游玩。</p>
       <div class="cta">
         <a class="btn btn-primary" href="#download">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
-          下载 v0.6.0
+          下载 v0.6.1
         </a>
         <a class="btn btn-ghost" href="https://github.com/daydalek/Maltoria" target="_blank" rel="noopener">查看源码</a>
       </div>
       <div class="hero-pills">
         <span><b>macOS</b> Apple Silicon</span>
         <span><b>Linux</b> x86_64</span>
-        <span><b>gpui-kit</b> 原生桌面</span>
+        <span><b>LunaHook</b> 实时字幕</span>
         <span><b>开源</b> GPL-3.0</span>
       </div>
     </div>
@@ -1145,7 +1579,7 @@
       <div class="hero-float">
         <span>5 大元数据刮削</span>
         <span>Real-CUGAN &amp; Anime4K 超分</span>
-        <span>自定义 Wine 运行时</span>
+        <span>原生全屏叠层翻译</span>
       </div>
       <figcaption>收藏故事，也收藏每一次心动。</figcaption>
     </figure>
@@ -1176,10 +1610,10 @@
         <p>每个游戏拥有隔离的 Wine Bottle 容器，支持自定义 Wine 引擎。</p>
       </div>
       <div class="step">
-        <div class="dot"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
+        <div class="dot"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/></svg></div>
         <span class="num tnum">Step 04</span>
-        <h3>沉浸浏览</h3>
-        <p>浏览角色声优、编辑条目详情，记录每一天游玩时长。</p>
+        <h3>实时字幕</h3>
+        <p>LunaHook 自动捕获文本并流式翻译，原生叠层置顶随行。</p>
       </div>
     </div>
   </div>
@@ -1217,6 +1651,95 @@
           <button class="stage-btn" id="slideshow-toggle" type="button" aria-pressed="false">暂停轮播</button>
         </div>
       </div>
+    </div>
+  </div>
+</section>
+
+<section id="translation">
+  <div class="wrap center reveal">
+    <p class="eyebrow">Many models, native overlay</p>
+    <h2>实时翻译与原生字幕</h2>
+    <p class="lead">游戏启动即由 LunaHook 原生钩取文本，流式送往云端或本地模型，并以置顶透明叠层悬浮于全屏画面之上。</p>
+
+    <div class="trans-demo" id="trans-demo">
+      <div class="trans-toolbar">
+        <div class="trans-group">
+          <div class="trans-seg" role="tablist" aria-label="翻译模型预设">
+            <button class="trans-pill on" type="button" data-provider="openai" role="tab" aria-selected="true">OpenAI Chat</button>
+            <button class="trans-pill" type="button" data-provider="deepl" role="tab" aria-selected="false">DeepL</button>
+            <button class="trans-pill" type="button" data-provider="ollama" role="tab" aria-selected="false">Ollama 本地</button>
+          </div>
+        </div>
+        <div class="trans-group">
+          <button class="trans-toggle on" id="toggle-debounce" type="button" aria-pressed="true">
+            <span class="t-dot" aria-hidden="true"></span>防快进防抖
+          </button>
+          <button class="trans-toggle on" id="toggle-cache" type="button" aria-pressed="true">
+            <span class="t-dot" aria-hidden="true"></span>同句缓存
+          </button>
+          <button class="trans-toggle" id="toggle-clickthrough" type="button" aria-pressed="false">
+            <span class="t-dot" aria-hidden="true"></span><span id="mode-btn-label">解锁编辑</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="trans-stage" id="trans-stage">
+        <div class="trans-scene-grid" aria-hidden="true"></div>
+        <div class="hud-pill">
+          <span class="live-dot" aria-hidden="true"></span>
+          <span>LunaHook 悬浮球 · 已附加</span>
+          <span class="hud-meta tnum" id="hud-hook-meta">ASLR 复用 · Hook #02</span>
+        </div>
+        <div class="hud-mode-badge tnum" id="hud-mode-badge">编辑模式 · 拖拽框体移动 / 拖拽四角缩放</div>
+
+        <div class="sub-overlay" id="sub-overlay" aria-label="可拖拽与缩放的实时字幕叠层演示">
+          <span class="grip nw" data-dir="nw" aria-hidden="true"></span>
+          <span class="grip ne" data-dir="ne" aria-hidden="true"></span>
+          <span class="grip sw" data-dir="sw" aria-hidden="true"></span>
+          <span class="grip se" data-dir="se" aria-hidden="true"></span>
+          <div class="sub-overlay-head">
+            <span class="sub-model-tag" id="sub-model-tag">OpenAI Chat · gpt-4o-mini · 流式</span>
+            <span class="sub-status-tag tnum" id="sub-status-tag">防抖 180ms · 命中缓存</span>
+          </div>
+          <div class="sub-orig" id="sub-orig">「桜が散る前に、もう一度ここで話そうって約束したよね」</div>
+          <div class="sub-zh" id="sub-zh">“在樱花凋落之前，我们约定过还要在这里再聊一次的吧。”</div>
+        </div>
+
+        <div class="vn-dialogue" aria-hidden="true">
+          <span class="vn-speaker" id="vn-speaker">小春</span>
+          <p class="vn-jp" id="vn-jp">「桜が散る前に、もう一度ここで話そうって約束したよね」</p>
+        </div>
+      </div>
+
+      <div class="trans-footer">
+        <div class="trans-lines" role="group" aria-label="示例台词切换">
+          <button class="trans-line-btn on" type="button" data-line="0">台词 01 · 樱花树下</button>
+          <button class="trans-line-btn" type="button" data-line="1">台词 02 · 黄昏电车</button>
+          <button class="trans-line-btn" type="button" data-line="2">台词 03 · 星空天台</button>
+        </div>
+        <div class="trans-readout">
+          <span class="tnum" id="sub-geo-readout">460 × 126 px · 可拖拽与缩放</span>
+          <button class="trans-reset-btn" id="sub-reset-btn" type="button">重置位置</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="trans-cards">
+      <article class="trans-card">
+        <span class="trans-card-badge">Native Hook</span>
+        <h3>LunaHook 原生捕获与悬浮球</h3>
+        <p>游戏启动自动弹出控制球，支持自动附加、ASLR 地址复用、进程筛选与自定义特殊码。</p>
+      </article>
+      <article class="trans-card">
+        <span class="trans-card-badge">Streaming &amp; Cache</span>
+        <h3>多模型流式译文与防抖缓存</h3>
+        <p>支持 OpenAI Chat Completions / Legacy Completions、Anthropic、Gemini、DeepL 与 Ollama（含思考深度、快进防累积防抖与持久化同句缓存）。</p>
+      </article>
+      <article class="trans-card">
+        <span class="trans-card-badge">Cross-Platform HUD</span>
+        <h3>全屏置顶叠层与双平台支持</h3>
+        <p>macOS 与 Linux 原生置顶于游戏全屏之上，支持自由拖拽、八方向边角缩放、透明度与配色定制，以及游戏退出自动隐藏。</p>
+      </article>
     </div>
   </div>
 </section>
@@ -1289,7 +1812,7 @@
   <div class="wrap center reveal">
     <p class="eyebrow">Download</p>
     <h2>开始使用 <span class="grad-text">Maltoria</span></h2>
-    <p class="lead tnum">v0.6.0 · 免费开源（GPL-3.0）· 预发布版本</p>
+    <p class="lead tnum">v0.6.1 · 免费开源（GPL-3.0）· 预发布版本</p>
     <div class="plat">
       <div class="plat-card">
         <div>
@@ -1298,14 +1821,14 @@
               <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.33c.64-.78 1.08-1.86.96-2.94-.93.04-2.06.62-2.72 1.4-.58.68-1.1 1.79-.96 2.84 1.04.08 2.08-.52 2.72-1.3z"/></svg>
               macOS
             </h3>
-            <small class="tnum">v0.6.0 · arm64</small>
+            <small class="tnum">v0.6.1 · arm64</small>
           </div>
           <p class="plat-sub">Apple Silicon</p>
           <ul>
             <li>
               <span class="pkg-type"><span class="pkg-badge">.zip</span> 应用程序包</span>
-              <a href="https://github.com/daydalek/Maltoria/releases/download/v0.6.0/Maltoria-0.6.0-arm64.zip">
-                Maltoria-0.6.0-arm64.zip
+              <a href="https://github.com/daydalek/Maltoria/releases/download/v0.6.1/Maltoria-0.6.1-arm64.zip">
+                Maltoria-0.6.1-arm64.zip
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M7 17L17 7M17 7H8M17 7V16"/></svg>
               </a>
             </li>
@@ -1327,28 +1850,28 @@
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01M9.5 15a3.5 3.5 0 0 0 5 0"/></svg>
               Linux
             </h3>
-            <small class="tnum">v0.6.0 · x86_64</small>
+            <small class="tnum">v0.6.1 · x86_64</small>
           </div>
           <p class="plat-sub">x86_64</p>
           <ul>
             <li>
               <span class="pkg-type"><span class="pkg-badge">.deb</span> Ubuntu 24.04+</span>
-              <a href="https://github.com/daydalek/Maltoria/releases/download/v0.6.0/whisky_0.6.0_amd64.deb">
-                whisky_0.6.0_amd64.deb
+              <a href="https://github.com/daydalek/Maltoria/releases/download/v0.6.1/whisky_0.6.1_amd64.deb">
+                whisky_0.6.1_amd64.deb
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M7 17L17 7M17 7H8M17 7V16"/></svg>
               </a>
             </li>
             <li>
               <span class="pkg-type"><span class="pkg-badge">.rpm</span> Fedora 44+</span>
-              <a href="https://github.com/daydalek/Maltoria/releases/download/v0.6.0/whisky-0.6.0-1.x86_64.rpm">
-                whisky-0.6.0-1.x86_64.rpm
+              <a href="https://github.com/daydalek/Maltoria/releases/download/v0.6.1/whisky-0.6.1-1.x86_64.rpm">
+                whisky-0.6.1-1.x86_64.rpm
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M7 17L17 7M17 7H8M17 7V16"/></svg>
               </a>
             </li>
             <li>
               <span class="pkg-type"><span class="pkg-badge">AppImage</span> 免安装便携版</span>
-              <a href="https://github.com/daydalek/Maltoria/releases/download/v0.6.0/Maltoria-0.6.0-x86_64.AppImage">
-                Maltoria-0.6.0-x86_64.AppImage
+              <a href="https://github.com/daydalek/Maltoria/releases/download/v0.6.1/Maltoria-0.6.1-x86_64.AppImage">
+                Maltoria-0.6.1-x86_64.AppImage
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M7 17L17 7M17 7H8M17 7V16"/></svg>
               </a>
             </li>
@@ -1356,7 +1879,7 @@
         </div>
       </div>
     </div>
-    <a class="release-link" href="https://github.com/daydalek/Maltoria/releases/tag/v0.6.0" target="_blank" rel="noopener">查看 v0.6.0 发布说明与校验文件 <span aria-hidden="true">↗</span></a>
+    <a class="release-link" href="https://github.com/daydalek/Maltoria/releases/tag/v0.6.1" target="_blank" rel="noopener">查看 v0.6.1 发布说明与校验文件 <span aria-hidden="true">↗</span></a>
   </div>
 </section>
 
@@ -1426,7 +1949,7 @@
 <footer>
   <div class="wrap">
     <span>
-      <b>Maltoria</b> · 基于 <a href="https://github.com/frankea/Whisky" target="_blank" rel="noopener">frankea/Whisky</a> 与 <a href="https://github.com/IsaacMarovitz" target="_blank" rel="noopener">Isaac Marovitz</a>
+      <b>Maltoria</b> · 基于 <a href="https://github.com/frankea/Whisky" target="_blank" rel="noopener">frankea/Whisky</a> 与 <a href="https://github.com/IsaacMarovitz" target="_blank" rel="noopener">Isaac Marovitz</a> · 实时字幕由 <a href="https://github.com/HIllya51/LunaTranslator" target="_blank" rel="noopener">LunaHook</a> 驱动
     </span>
     <div class="links">
       <a href="https://github.com/daydalek/Maltoria" target="_blank" rel="noopener">应用仓库</a>
@@ -1616,6 +2139,255 @@
     if (event.key === 'Escape') close();
     if (event.key === 'Tab') { event.preventDefault(); closeButton.focus(); }
   });
+
+  // Interactive live translation overlay demo
+  (() => {
+    const stage = document.getElementById('trans-stage');
+    const overlay = document.getElementById('sub-overlay');
+    if (!stage || !overlay) return;
+
+    const modelTag = document.getElementById('sub-model-tag');
+    const statusTag = document.getElementById('sub-status-tag');
+    const origEl = document.getElementById('sub-orig');
+    const zhEl = document.getElementById('sub-zh');
+    const vnSpeaker = document.getElementById('vn-speaker');
+    const vnJp = document.getElementById('vn-jp');
+    const geoReadout = document.getElementById('sub-geo-readout');
+    const modeBadge = document.getElementById('hud-mode-badge');
+    const modeBtn = document.getElementById('toggle-clickthrough');
+    const modeBtnLabel = document.getElementById('mode-btn-label');
+    const debounceBtn = document.getElementById('toggle-debounce');
+    const cacheBtn = document.getElementById('toggle-cache');
+    const resetBtn = document.getElementById('sub-reset-btn');
+    const providerBtns = [...document.querySelectorAll('[data-provider]')];
+    const lineBtns = [...document.querySelectorAll('[data-line]')];
+
+    const providers = {
+      openai: { label: 'OpenAI Chat · gpt-4o-mini · 流式', hookMeta: 'ASLR 复用 · Hook #02' },
+      deepl: { label: 'DeepL API · JA → ZH-HANS', hookMeta: '进程筛选 · Hook #02' },
+      ollama: { label: 'Ollama 本地 · qwen2.5:14b · 流式', hookMeta: '离线推理 · Hook #02' }
+    };
+
+    const lines = [
+      {
+        speaker: '小春',
+        jp: '「桜が散る前に、もう一度ここで話そうって約束したよね」',
+        zh: {
+          openai: '“在樱花凋落之前，我们约定过还要在这里再聊一次的吧。”',
+          deepl: '“在樱花凋落之前，我们约定好还要在这里再谈一次的吧。”',
+          ollama: '“樱花还没落完之前，我们说好要再来这里聊一次的吧。”'
+        },
+        cached: true
+      },
+      {
+        speaker: '凪',
+        jp: '「夕暮れの電車に揺られながら、君の名前を何度も思い返していた」',
+        zh: {
+          openai: '“在暮色摇晃的电车里，我一遍又一遍地回想起你的名字。”',
+          deepl: '“乘着黄昏的电车摇晃前行时，我无数次想起你的名字。”',
+          ollama: '“坐着傍晚的电车晃晃悠悠时，脑海里反复浮现出你的名字。”'
+        },
+        cached: false
+      },
+      {
+        speaker: '诗织',
+        jp: '「屋上から見上げた夜空は、あの夏と少しも変わっていなかった」',
+        zh: {
+          openai: '“从天台仰望的那片夜空，和那个夏天相比丝毫没有改变。”',
+          deepl: '“从屋顶仰望的夜空，和那个夏天一点也没有改变。”',
+          ollama: '“站在天台上抬头看到的夜空，跟那个夏天一模一样呢。”'
+        },
+        cached: true
+      }
+    ];
+
+    let activeProvider = 'openai';
+    let activeLine = 0;
+    let debounceOn = true;
+    let cacheOn = true;
+    let clickThrough = false;
+    let box = { x: 0, y: 0, w: 0, h: 0 };
+    const MIN_W = 240;
+    const MIN_H = 92;
+    const PAD = 12;
+
+    function updateStatus() {
+      const p = providers[activeProvider];
+      const line = lines[activeLine];
+      modelTag.textContent = p.label;
+      document.getElementById('hud-hook-meta').textContent = p.hookMeta;
+      vnSpeaker.textContent = line.speaker;
+      vnJp.textContent = line.jp;
+      origEl.textContent = line.jp;
+      zhEl.textContent = line.zh[activeProvider];
+
+      const parts = [];
+      parts.push(debounceOn ? '防抖 180ms' : '直通无防抖');
+      if (cacheOn) {
+        parts.push(line.cached ? '命中缓存 0.4ms' : '已写入缓存');
+      } else {
+        parts.push('缓存已关闭');
+      }
+      statusTag.textContent = parts.join(' · ');
+
+      overlay.classList.toggle('click-through', clickThrough);
+      modeBtn.classList.toggle('mode-locked', clickThrough);
+      modeBtn.setAttribute('aria-pressed', String(clickThrough));
+      modeBtnLabel.textContent = clickThrough ? '点击穿透' : '解锁编辑';
+      modeBadge.textContent = clickThrough
+        ? '点击穿透中 · 鼠标操作直达游戏'
+        : '编辑模式 · 拖拽框体移动 / 拖拽四角缩放';
+      updateReadout();
+    }
+
+    function updateReadout() {
+      geoReadout.textContent = clickThrough
+        ? `${Math.round(box.w)} × ${Math.round(box.h)} px · 点击穿透已开启`
+        : `${Math.round(box.w)} × ${Math.round(box.h)} px · 可拖拽与缩放`;
+    }
+
+    function clampBox(next) {
+      const sw = stage.clientWidth || 720;
+      const sh = stage.clientHeight || 410;
+      const maxW = Math.max(MIN_W, sw - PAD * 2);
+      const maxH = Math.max(MIN_H, sh - PAD * 2);
+      const w = Math.min(maxW, Math.max(MIN_W, next.w));
+      const h = Math.min(maxH, Math.max(MIN_H, next.h));
+      const x = Math.min(sw - w - PAD, Math.max(PAD, next.x));
+      const y = Math.min(sh - h - PAD, Math.max(PAD, next.y));
+      return { x, y, w, h };
+    }
+
+    function applyBox(next) {
+      box = clampBox(next);
+      overlay.style.left = box.x + 'px';
+      overlay.style.top = box.y + 'px';
+      overlay.style.width = box.w + 'px';
+      overlay.style.height = box.h + 'px';
+      updateReadout();
+    }
+
+    function resetBox() {
+      const sw = stage.clientWidth || 720;
+      const sh = stage.clientHeight || 410;
+      const w = Math.min(540, Math.max(MIN_W, sw - 56));
+      const h = 132;
+      const x = (sw - w) / 2;
+      const y = Math.max(70, Math.min(sh - h - 108, Math.round(sh * 0.28)));
+      applyBox({ x, y, w, h });
+    }
+
+    providerBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeProvider = btn.dataset.provider;
+        providerBtns.forEach(b => {
+          const on = b === btn;
+          b.classList.toggle('on', on);
+          b.setAttribute('aria-selected', String(on));
+        });
+        updateStatus();
+      });
+    });
+
+    lineBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeLine = Number(btn.dataset.line) || 0;
+        lineBtns.forEach(b => b.classList.toggle('on', b === btn));
+        updateStatus();
+      });
+    });
+
+    debounceBtn.addEventListener('click', () => {
+      debounceOn = !debounceOn;
+      debounceBtn.classList.toggle('on', debounceOn);
+      debounceBtn.setAttribute('aria-pressed', String(debounceOn));
+      updateStatus();
+    });
+
+    cacheBtn.addEventListener('click', () => {
+      cacheOn = !cacheOn;
+      cacheBtn.classList.toggle('on', cacheOn);
+      cacheBtn.setAttribute('aria-pressed', String(cacheOn));
+      updateStatus();
+    });
+
+    modeBtn.addEventListener('click', () => {
+      clickThrough = !clickThrough;
+      updateStatus();
+    });
+
+    resetBtn.addEventListener('click', resetBox);
+
+    let gesture = null;
+    overlay.addEventListener('pointerdown', event => {
+      if (clickThrough) return;
+      const grip = event.target.closest('.grip');
+      const dir = grip ? grip.dataset.dir : 'move';
+      event.preventDefault();
+      overlay.setPointerCapture(event.pointerId);
+      overlay.classList.add('dragging');
+      gesture = {
+        id: event.pointerId,
+        dir,
+        startX: event.clientX,
+        startY: event.clientY,
+        origin: { ...box }
+      };
+    });
+
+    overlay.addEventListener('pointermove', event => {
+      if (!gesture || event.pointerId !== gesture.id) return;
+      const dx = event.clientX - gesture.startX;
+      const dy = event.clientY - gesture.startY;
+      const o = gesture.origin;
+      const sw = stage.clientWidth || 720;
+      const sh = stage.clientHeight || 410;
+
+      if (gesture.dir === 'move') {
+        applyBox({ x: o.x + dx, y: o.y + dy, w: o.w, h: o.h });
+        return;
+      }
+
+      let left = o.x;
+      let top = o.y;
+      let right = o.x + o.w;
+      let bottom = o.y + o.h;
+
+      if (gesture.dir.includes('w')) {
+        left = Math.max(PAD, Math.min(right - MIN_W, o.x + dx));
+      }
+      if (gesture.dir.includes('e')) {
+        right = Math.min(sw - PAD, Math.max(left + MIN_W, o.x + o.w + dx));
+      }
+      if (gesture.dir.includes('n')) {
+        top = Math.max(PAD, Math.min(bottom - MIN_H, o.y + dy));
+      }
+      if (gesture.dir.includes('s')) {
+        bottom = Math.min(sh - PAD, Math.max(top + MIN_H, o.y + o.h + dy));
+      }
+      applyBox({ x: left, y: top, w: right - left, h: bottom - top });
+    });
+
+    const endGesture = event => {
+      if (!gesture || event.pointerId !== gesture.id) return;
+      overlay.classList.remove('dragging');
+      if (overlay.hasPointerCapture(event.pointerId)) {
+        overlay.releasePointerCapture(event.pointerId);
+      }
+      gesture = null;
+    };
+    overlay.addEventListener('pointerup', endGesture);
+    overlay.addEventListener('pointercancel', endGesture);
+
+    if (typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(() => applyBox(box)).observe(stage);
+    } else {
+      addEventListener('resize', () => applyBox(box));
+    }
+
+    resetBox();
+    updateStatus();
+  })();
 
   // Scroll reveal
   const io = new IntersectionObserver(es => es.forEach(e => {
