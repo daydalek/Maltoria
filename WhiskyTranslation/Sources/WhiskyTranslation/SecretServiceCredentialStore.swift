@@ -1,6 +1,8 @@
 import Foundation
 
 #if os(Linux)
+import Synchronization
+
 struct SecretToolResult: Sendable {
     let status: Int32
     let output: Data
@@ -11,18 +13,23 @@ public actor SecretServiceCredentialStore: CredentialStore {
     typealias Runner = @Sendable ([String], Data?) throws -> SecretToolResult
     private let run: Runner
     private let service: String
+    private let executableAvailable: @Sendable () -> Bool
 
-    public init(service: String = "com.daydalek.Maltoria.translation") {
+    public init(service: String = "com.daydalek.Maltoria.translation", executableURL: URL = URL(fileURLWithPath: "/usr/bin/secret-tool")) {
         self.service = service
-        self.run = Self.execute
+        self.run = { try Self.execute($0, $1, executableURL: executableURL) }
+        self.executableAvailable = { FileManager.default.isExecutableFile(atPath: executableURL.path) }
     }
 
     init(service: String = "com.daydalek.Maltoria.translation", runner: @escaping Runner) {
         self.service = service
         self.run = runner
+        self.executableAvailable = { true }
     }
 
-    public func availability() async -> CredentialStoreAvailability { .persistentSecretService }
+    public func availability() async -> CredentialStoreAvailability {
+        executableAvailable() ? .persistentSecretService : .unavailable
+    }
 
     public func store(_ secret: String, for reference: String) async throws {
         guard !reference.isEmpty, reference.utf8.count <= 256,
@@ -60,9 +67,9 @@ public actor SecretServiceCredentialStore: CredentialStore {
         catch { throw TranslationError.credentialUnavailable }
     }
 
-    private static func execute(_ arguments: [String], _ input: Data?) throws -> SecretToolResult {
+    static func execute(_ arguments: [String], _ input: Data?, executableURL: URL = URL(fileURLWithPath: "/usr/bin/secret-tool")) throws -> SecretToolResult {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/secret-tool")
+        process.executableURL = executableURL
         process.arguments = arguments
         let stdin = Pipe()
         let stdout = Pipe()
@@ -71,12 +78,20 @@ public actor SecretServiceCredentialStore: CredentialStore {
         process.standardOutput = stdout
         process.standardError = stderr
         try process.run()
+        let readers = DispatchGroup()
+        let output = Mutex(Data())
+        let diagnostic = Mutex(Data())
+        DispatchQueue.global().async(group: readers) {
+            output.withLock { $0 = stdout.fileHandleForReading.readDataToEndOfFile() }
+        }
+        DispatchQueue.global().async(group: readers) {
+            diagnostic.withLock { $0 = stderr.fileHandleForReading.readDataToEndOfFile() }
+        }
         if let input { try stdin.fileHandleForWriting.write(contentsOf: input) }
         try stdin.fileHandleForWriting.close()
-        let output = stdout.fileHandleForReading.readDataToEndOfFile()
-        let diagnostic = stderr.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-        return SecretToolResult(status: process.terminationStatus, output: output, diagnostic: diagnostic)
+        readers.wait()
+        return SecretToolResult(status: process.terminationStatus, output: output.withLock { $0 }, diagnostic: diagnostic.withLock { $0 })
     }
 }
 #endif

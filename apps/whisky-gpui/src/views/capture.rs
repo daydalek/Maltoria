@@ -242,7 +242,7 @@ impl WhiskyApp {
                 || self.capture.is_pending("translation.capture.autoAttach"),
             self.capture.is_pending("translation.capture.preset/save")
                 || self.capture.is_pending("translation.capture.preset/clear"),
-            self.service_available("translation.capture.hud/show"),
+            self.capture_hud_available(),
             self.capture.is_pending("translation.capture.hud/show"),
             cx,
         );

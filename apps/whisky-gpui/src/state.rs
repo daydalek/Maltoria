@@ -1496,12 +1496,20 @@ impl WhiskyApp {
                 }
             }
             BridgeEvent::RuntimeLaunched {
-                container: _,
+                container,
                 entry_id,
                 backend,
                 backend_from,
             } => {
                 if !self.demo {
+                    #[cfg(target_os = "linux")]
+                    {
+                        self.capture.presets_by_game.remove(&(container.clone(), entry_id.clone()));
+                        self.capture.hud.launch_requested = Some((container.clone(), entry_id.clone()));
+                        self.capture.load_preset_for_game(&self.bridge, &container, &entry_id);
+                    }
+                    #[cfg(not(target_os = "linux"))]
+                    let _ = container;
                     // The badge keeps the effective backend alone; the toast
                     // spells out a fallback when one was taken.
                     self.active_backends.insert(
@@ -3649,6 +3657,14 @@ impl WhiskyApp {
         }
         if self.capture.provider_id.is_none() && self.translation_page.providers.len() == 1 {
             self.capture.provider_id = Some(self.translation_page.providers[0].id.clone());
+        }
+    }
+
+    pub(crate) fn capture_hud_available(&self) -> bool {
+        if cfg!(target_os = "linux") {
+            !self.demo && self.service_available("translation.capture.start")
+        } else {
+            self.service_available("translation.capture.hud/show")
         }
     }
 
@@ -7455,7 +7471,7 @@ impl WhiskyApp {
                 self.show_notice(format!("正在启动 {title}"), cx);
                 self.runtime.set_state(&entry_id, RuntimeState::Preparing);
                 self.bridge.launch(&container, &entry_id, None);
-                if self.capture.panel_open
+                if !cfg!(target_os = "linux") && self.capture.panel_open
                     && self
                         .capture
                         .context

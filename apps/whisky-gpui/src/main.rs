@@ -23,6 +23,8 @@ mod library_layout;
 mod library_view;
 #[cfg(target_os = "linux")]
 mod linux_overlay;
+#[cfg(target_os = "linux")]
+mod linux_hud;
 mod model;
 mod metadata_editor;
 mod platform;
@@ -823,6 +825,7 @@ fn main() {
                     }
                 }).detach();
                 linux_overlay::start(&_view, cx);
+                linux_hud::start(&_view, cx);
             }
             if let Some(file) = startup_file.clone() {
                 let _ = _view.update(cx, |this, cx| this.receive_external_file(file, cx));

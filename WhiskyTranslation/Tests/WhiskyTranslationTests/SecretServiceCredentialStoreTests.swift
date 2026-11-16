@@ -12,7 +12,6 @@ struct SecretServiceCredentialStoreTests {
             return SecretToolResult(status: 0, output: Data(), diagnostic: Data())
         }
         #expect(await store.availability() == .persistentSecretService)
-        #expect(await TranslationService.platformCredentialStore().availability() == .persistentSecretService)
         try await store.store("private-value", for: "fixture")
     }
 
@@ -50,6 +49,23 @@ struct SecretServiceCredentialStoreTests {
         await #expect(throws: TranslationError.credentialUnavailable) { try await store.secret(for: "fixture") }
         await #expect(throws: TranslationError.credentialUnavailable) { try await store.store("", for: "fixture") }
         await #expect(throws: TranslationError.credentialUnavailable) { try await store.store("value", for: "") }
+    }
+
+    @Test func availabilityReflectsExecutablePresence() async {
+        let missing = SecretServiceCredentialStore(executableURL: URL(fileURLWithPath: "/nonexistent/secret-tool"))
+        #expect(await missing.availability() == .unavailable)
+        let available = SecretServiceCredentialStore(executableURL: URL(fileURLWithPath: "/bin/sh"))
+        #expect(await available.availability() == .persistentSecretService)
+        await #expect(throws: TranslationError.credentialUnavailable) { try await missing.secret(for: "fixture") }
+    }
+
+    @Test func drainsBothProcessPipesWithoutDeadlock() throws {
+        let result = try SecretServiceCredentialStore.execute([
+            "-c", "i=0; while [ $i -lt 8192 ]; do printf 'diagnostic-data-0123456789\\n' >&2; i=$((i+1)); done; printf 'value\\n'"
+        ], nil, executableURL: URL(fileURLWithPath: "/bin/sh"))
+        #expect(result.status == 0)
+        #expect(result.output == Data("value\n".utf8))
+        #expect(result.diagnostic.count > 131_072)
     }
 
     @Test(.enabled(if: ProcessInfo.processInfo.environment["WHISKY_TEST_SECRET_SERVICE"] == "1"))

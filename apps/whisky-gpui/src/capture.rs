@@ -366,6 +366,8 @@ struct Pending {
 
 #[derive(Clone)]
 pub(crate) struct CaptureState {
+    #[cfg(target_os = "linux")]
+    pub(crate) hud: crate::linux_hud::HudState,
     pub(crate) panel_open: bool,
     pub(crate) context: Option<(String, String, String)>,
     pub(crate) active_game: Option<(String, String, String)>,
@@ -414,6 +416,8 @@ pub(crate) struct CaptureState {
 impl Default for CaptureState {
     fn default() -> Self {
         Self {
+            #[cfg(target_os = "linux")]
+            hud: crate::linux_hud::HudState::default(),
             panel_open: false,
             context: None,
             active_game: None,
@@ -703,18 +707,32 @@ impl CaptureState {
 
     pub(crate) fn open_capture_hud(
         &mut self,
-        bridge: &BridgeSupervisor,
+        _bridge: &BridgeSupervisor,
         container: &str,
         entry_id: &str,
     ) {
+        #[cfg(target_os = "linux")]
+        {
+            self.hud.open_requested = Some((container.into(), entry_id.into()));
+        }
+        #[cfg(not(target_os = "linux"))]
         let _ = self.request(
-            bridge,
+            _bridge,
             "translation.capture.hud/show",
             json!({
                 "container": container,
                 "entryID": entry_id,
             }),
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn save_hud_selection(&mut self, bridge: &BridgeSupervisor) {
+        let Some((container, entry, _)) = self.context.clone() else { return };
+        let _ = self.request_for_preset(bridge, "translation.capture.preset/save", &container, &entry, json!({
+            "container": container, "entryID": entry, "providerID": self.provider_id,
+            "architecture": self.effective_architecture(), "restoreHistory": self.restore_history
+        }));
     }
 
     pub(crate) fn toggle_preset_auto_attach(&mut self, bridge: &BridgeSupervisor) {
@@ -981,6 +999,8 @@ impl CaptureState {
         }
     }
     pub(crate) fn stop(&mut self, bridge: &BridgeSupervisor, method: &str) {
+        #[cfg(target_os = "linux")]
+        { self.hud.hide(); }
         let was_active = self.active_game.is_some();
         self.generation = self.generation.wrapping_add(1);
         self.role_edit_generation = self.role_edit_generation.wrapping_add(1);
@@ -1264,6 +1284,8 @@ impl CaptureState {
         match result {
             Err(error) => self.apply_error(method, error),
             Ok(value) => match method {
+                #[cfg(target_os = "linux")]
+                "runtime.snapshot" => { self.hud.runtime_snapshot(&value); }
                 "translation.capture.start"
                 | "translation.capture.attach"
                 | "translation.capture.detach"
@@ -2216,14 +2238,21 @@ mod tests {
                         .is_some_and(|p| p.translation_enabled && !p.prompt_attach_on_launch)
                 );
 
-                // open_capture_hud sends translation.capture.hud/show with container + entryID.
                 this.capture
                     .open_capture_hud(&this.bridge, "c-other", "g-other");
                 let calls = drain();
+                #[cfg(target_os = "linux")]
+                {
+                    assert!(calls.is_empty());
+                    assert_eq!(this.capture.hud.open_requested, Some(("c-other".into(), "g-other".into())));
+                }
+                #[cfg(not(target_os = "linux"))]
+                {
                 assert_eq!(calls.len(), 1);
                 assert_eq!(calls[0].0, "translation.capture.hud/show");
                 assert_eq!(calls[0].1["container"], "c-other");
                 assert_eq!(calls[0].1["entryID"], "g-other");
+                }
 
                 // open_translation_for_game auto-reads overlay settings when service is available.
                 this.bridge_status = crate::bridge::BridgeStatus::Connected {

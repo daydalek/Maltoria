@@ -389,7 +389,7 @@ fn moved_frame(gesture: Gesture, pointer: (i32, i32), scale: f32) -> Frame {
     frame
 }
 
-struct X11Overlay {
+pub(crate) struct X11Overlay {
     connection: RustConnection,
     id: u32,
     root: u32,
@@ -401,7 +401,7 @@ struct X11Overlay {
 }
 
 impl X11Overlay {
-    fn new(window: &Window, bounds: Bounds<Pixels>) -> Option<Self> {
+    pub(crate) fn new(window: &Window, bounds: Bounds<Pixels>) -> Option<Self> {
         let raw = HasWindowHandle::window_handle(window).ok()?.as_raw();
         let id = match raw {
             RawWindowHandle::Xcb(handle) => handle.window.get(),
@@ -431,6 +431,38 @@ impl X11Overlay {
             raised: Instant::now(),
             shaped: None,
         })
+    }
+
+    pub(crate) fn sync_hud(&mut self) {
+        let c = &self.connection;
+        if self.raised.elapsed() >= Duration::from_millis(500) {
+            let _ = c.configure_window(self.id, &ConfigureWindowAux::new().stack_mode(StackMode::ABOVE));
+            self.raised = Instant::now();
+        }
+        let Some(pointer) = c.query_pointer(self.root).ok().and_then(|p| p.reply().ok()) else { return };
+        let down = pointer.mask.contains(KeyButMask::BUTTON1);
+        let position = (pointer.root_x as i32, pointer.root_y as i32);
+        if down && !self.was_down && pointer.child == self.id {
+            if let (Some(g), Some(p)) = (
+                c.get_geometry(self.id).ok().and_then(|g| g.reply().ok()),
+                c.translate_coordinates(self.id, self.root, 0, 0).ok().and_then(|p| p.reply().ok())
+            ) {
+                let local = (position.0 - p.dst_x as i32, position.1 - p.dst_y as i32);
+                if local.1 >= 0 && local.1 < (34. * self.scale) as i32 && local.0 >= 0 && local.0 < (100. * self.scale) as i32 {
+                    self.gesture = Some(Gesture { pointer: position, frame: Frame {
+                        x: p.dst_x as i32, y: p.dst_y as i32, width: g.width as u32, height: g.height as u32
+                    }, edges: 0 });
+                }
+            }
+        }
+        if down {
+            if let Some(gesture) = self.gesture {
+                let frame = moved_frame(gesture, position, self.scale);
+                let _ = c.configure_window(self.id, &ConfigureWindowAux::new().x(frame.x).y(frame.y));
+            }
+        } else { self.gesture = None; }
+        self.was_down = down;
+        let _ = c.flush();
     }
 
     fn sync(
