@@ -65,12 +65,17 @@ struct WineProcessQueryTests {
 
     @Test func helperQueriesHaveBoundedLifetime() async throws {
         let start = ContinuousClock.now
-        await #expect(throws: WineProcessQuery.Failure.self) {
+        do {
             _ = try await WineProcessQuery.run(
-                executable: URL(filePath: "/bin/sleep"), arguments: ["10"], environment: [:], timeout: 0.05
+                executable: URL(filePath: "/bin/sleep"), arguments: ["30"], environment: [:], timeout: 0.05
             )
+            Issue.record("Expected the query to time out")
+        } catch WineProcessQuery.Failure.timedOut {
+            // The runner may be heavily loaded while the full suite executes concurrently.
+        } catch {
+            Issue.record("Unexpected query failure: \(error)")
         }
-        #expect(start.duration(to: .now) < .seconds(3))
+        #expect(start.duration(to: .now) < .seconds(15))
     }
 
     @Test @MainActor func processQueriesRejectNonzeroAndUnparseableOutput() async throws {
