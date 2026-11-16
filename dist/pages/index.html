@@ -792,49 +792,48 @@
   .hud-pill {
     position: absolute;
     top: 16px;
-    left: 16px;
-    z-index: 4;
+    right: 16px;
+    z-index: 6;
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 13px;
+    padding: 5px 8px 5px 12px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.90);
-    border: 1px solid rgba(255, 255, 255, 0.65);
-    box-shadow: 0 10px 24px -8px rgba(18, 20, 32, 0.45);
-    color: var(--text);
-    font-size: 12px;
-    font-weight: 650;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-  }
-  .hud-pill .live-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--mint);
-    box-shadow: 0 0 0 4px rgba(74, 168, 134, 0.22);
-  }
-  .hud-pill .hud-meta {
-    color: var(--muted);
-    font-weight: 550;
-    padding-left: 8px;
-    border-left: 1px solid var(--border-strong);
-  }
-  .hud-mode-badge {
-    position: absolute;
-    top: 16px;
-    right: 16px;
-    z-index: 4;
-    padding: 5px 12px;
-    border-radius: 999px;
-    background: rgba(20, 24, 36, 0.58);
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    color: rgba(246, 247, 251, 0.9);
+    background: rgba(24, 26, 36, 0.88);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 10px 24px -8px rgba(10, 12, 22, 0.55);
+    color: rgba(246, 247, 251, 0.94);
     font-size: 11.5px;
     font-weight: 600;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .hud-pill .live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--mint);
+    box-shadow: 0 0 0 3px rgba(74, 168, 134, 0.25);
+  }
+  .hud-pill-btn {
+    border: 0;
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(246, 247, 251, 0.92);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.16s ease, color 0.16s ease;
+  }
+  .hud-pill-btn:hover { background: rgba(255, 255, 255, 0.2); }
+  .hud-pill-btn.on {
+    background: rgba(16, 185, 129, 0.26);
+    color: #a7f3d0;
+  }
+  .hud-pill-btn.drag-on {
+    background: rgba(59, 130, 246, 0.36);
+    color: #dbeafe;
   }
   .vn-dialogue {
     position: absolute;
@@ -873,80 +872,49 @@
     z-index: 5;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
+    justify-content: center;
+    gap: 8px;
     padding: 14px 18px;
-    border-radius: 14px;
-    background: rgba(17, 20, 31, 0.80);
-    border: 1px solid rgba(255, 255, 255, 0.20);
-    box-shadow: 0 22px 46px -14px rgba(10, 12, 22, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    color: #f8f9fc;
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.85);
+    border: 1.5px solid rgba(255, 255, 255, 0.35);
+    box-shadow: 0 18px 42px -12px rgba(10, 12, 22, 0.72);
+    color: #ffffff;
     cursor: grab;
     touch-action: none;
     overflow: hidden;
-    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+  }
+  .sub-overlay.hidden-sub {
+    opacity: 0;
+    pointer-events: none;
   }
   .sub-overlay:hover {
-    border-color: rgba(216, 197, 248, 0.48);
+    border-color: rgba(255, 255, 255, 0.55);
   }
   .sub-overlay.dragging {
     cursor: grabbing;
-    border-color: rgba(243, 196, 107, 0.72);
-    box-shadow: 0 26px 56px -12px rgba(10, 12, 22, 0.78), 0 0 0 2px rgba(243, 196, 107, 0.22);
+    border-color: rgba(255, 255, 255, 0.78);
+    box-shadow: 0 24px 52px -12px rgba(10, 12, 22, 0.82);
   }
   .sub-overlay.click-through {
     cursor: default;
     touch-action: auto;
     pointer-events: none;
-    border-color: rgba(255, 255, 255, 0.12);
-    background: rgba(17, 20, 31, 0.68);
-  }
-  .sub-overlay-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    font-size: 11px;
-    color: rgba(226, 229, 242, 0.72);
-  }
-  .sub-model-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-weight: 650;
-    color: #e4d6ff;
-    white-space: nowrap;
-  }
-  .sub-status-tag {
-    font-size: 10.5px;
-    padding: 1px 7px;
-    border-radius: 999px;
-    background: rgba(74, 168, 134, 0.20);
-    border: 1px solid rgba(74, 168, 134, 0.36);
-    color: #9ce6c7;
-    white-space: nowrap;
+    border-color: transparent;
   }
   .sub-orig {
-    margin-top: 6px;
-    font-size: 12px;
+    font-size: 14px;
     line-height: 1.45;
-    color: rgba(216, 222, 238, 0.68);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    color: #d4d4d8;
+    word-break: break-word;
   }
   .sub-zh {
-    margin-top: 4px;
-    font-size: 16px;
-    font-weight: 650;
-    line-height: 1.5;
+    font-size: 18px;
+    font-weight: 560;
+    line-height: 1.48;
     color: #ffffff;
-    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.35);
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
+    word-break: break-word;
   }
   .grip {
     position: absolute;
@@ -958,58 +926,34 @@
   .grip::after {
     content: "";
     position: absolute;
-    width: 9px;
-    height: 9px;
-    border-color: rgba(243, 196, 107, 0.92);
+    width: 8px;
+    height: 8px;
+    border-color: rgba(255, 255, 255, 0.62);
     border-style: solid;
     border-width: 0;
   }
-  .grip.nw { top: 4px; left: 4px; cursor: nwse-resize; }
-  .grip.nw::after { top: 0; left: 0; border-top-width: 2.5px; border-left-width: 2.5px; border-top-left-radius: 4px; }
-  .grip.ne { top: 4px; right: 4px; cursor: nesw-resize; }
-  .grip.ne::after { top: 0; right: 0; border-top-width: 2.5px; border-right-width: 2.5px; border-top-right-radius: 4px; }
-  .grip.sw { bottom: 4px; left: 4px; cursor: nesw-resize; }
-  .grip.sw::after { bottom: 0; left: 0; border-bottom-width: 2.5px; border-left-width: 2.5px; border-bottom-left-radius: 4px; }
-  .grip.se { bottom: 4px; right: 4px; cursor: nwse-resize; }
-  .grip.se::after { bottom: 0; right: 0; border-bottom-width: 2.5px; border-right-width: 2.5px; border-bottom-right-radius: 4px; }
+  .grip.nw { top: 5px; left: 5px; cursor: nwse-resize; }
+  .grip.nw::after { top: 0; left: 0; border-top-width: 1.5px; border-left-width: 1.5px; border-top-left-radius: 3px; }
+  .grip.ne { top: 5px; right: 5px; cursor: nesw-resize; }
+  .grip.ne::after { top: 0; right: 0; border-top-width: 1.5px; border-right-width: 1.5px; border-top-right-radius: 3px; }
+  .grip.sw { bottom: 5px; left: 5px; cursor: nesw-resize; }
+  .grip.sw::after { bottom: 0; left: 0; border-bottom-width: 1.5px; border-left-width: 1.5px; border-bottom-left-radius: 3px; }
+  .grip.se { bottom: 5px; right: 5px; cursor: nwse-resize; }
+  .grip.se::after { bottom: 0; right: 0; border-bottom-width: 1.5px; border-right-width: 1.5px; border-bottom-right-radius: 3px; }
   .sub-overlay.click-through .grip {
     opacity: 0;
     pointer-events: none;
   }
 
   .trans-footer {
-    margin-top: 14px;
+    margin-top: 12px;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: 10px 16px;
-  }
-  .trans-lines {
-    display: inline-flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-  }
-  .trans-line-btn {
-    border: 1px solid var(--border-strong);
-    background: var(--surface-solid);
-    color: var(--text-secondary);
-    font-size: 12.5px;
-    font-weight: 600;
-    padding: 5px 12px;
-    border-radius: 999px;
-    cursor: pointer;
-    transition: all 0.18s ease;
-  }
-  .trans-line-btn:hover {
-    border-color: rgba(140, 107, 200, 0.42);
-    color: var(--violet-ink);
-  }
-  .trans-line-btn.on {
-    background: #7e5ea1;
-    border-color: #7e5ea1;
-    color: #ffffff;
+    font-size: 12px;
+    color: var(--muted);
   }
   .trans-readout {
     display: inline-flex;
@@ -1492,8 +1436,6 @@
     .tab { padding: 7px 13px; font-size: 13px; }
     .trans-demo { padding: 14px; border-radius: 20px; }
     .trans-stage { height: 360px; }
-    .hud-pill .hud-meta { display: none; }
-    .hud-mode-badge { top: 54px; left: 16px; right: auto; }
     .vn-dialogue { left: 14px; right: 14px; bottom: 12px; padding: 11px 14px; }
     .sub-zh { font-size: 14.5px; }
     #download > .wrap { width: calc(100% - 32px); padding: 36px 18px 26px; border-radius: 24px; }
@@ -1664,61 +1606,50 @@
     <div class="trans-demo" id="trans-demo">
       <div class="trans-toolbar">
         <div class="trans-group">
-          <div class="trans-seg" role="tablist" aria-label="翻译模型预设">
-            <button class="trans-pill on" type="button" data-provider="openai" role="tab" aria-selected="true">OpenAI Chat</button>
+          <div class="trans-seg" role="tablist" aria-label="翻译服务示例">
+            <button class="trans-pill on" type="button" data-provider="openai" role="tab" aria-selected="true">OpenAI Chat Completions</button>
             <button class="trans-pill" type="button" data-provider="deepl" role="tab" aria-selected="false">DeepL</button>
             <button class="trans-pill" type="button" data-provider="ollama" role="tab" aria-selected="false">Ollama 本地</button>
           </div>
         </div>
         <div class="trans-group">
-          <button class="trans-toggle on" id="toggle-debounce" type="button" aria-pressed="true">
-            <span class="t-dot" aria-hidden="true"></span>防快进防抖
-          </button>
-          <button class="trans-toggle on" id="toggle-cache" type="button" aria-pressed="true">
-            <span class="t-dot" aria-hidden="true"></span>同句缓存
+          <button class="trans-toggle on" id="toggle-visible" type="button" aria-pressed="true">
+            <span class="t-dot" aria-hidden="true"></span><span id="visible-btn-label">字幕开</span>
           </button>
           <button class="trans-toggle" id="toggle-clickthrough" type="button" aria-pressed="false">
-            <span class="t-dot" aria-hidden="true"></span><span id="mode-btn-label">解锁编辑</span>
+            <span class="t-dot" aria-hidden="true"></span><span id="mode-btn-label">可拖动</span>
           </button>
         </div>
       </div>
 
       <div class="trans-stage" id="trans-stage">
         <div class="trans-scene-grid" aria-hidden="true"></div>
-        <div class="hud-pill">
+        <div class="hud-pill" aria-label="捕获悬浮球快捷控制">
           <span class="live-dot" aria-hidden="true"></span>
-          <span>LunaHook 悬浮球 · 已附加</span>
-          <span class="hud-meta tnum" id="hud-hook-meta">ASLR 复用 · Hook #02</span>
+          <span>捕获中</span>
+          <button class="hud-pill-btn on" id="hud-vis-btn" type="button">字幕开</button>
+          <button class="hud-pill-btn drag-on" id="hud-drag-btn" type="button">可拖动</button>
         </div>
-        <div class="hud-mode-badge tnum" id="hud-mode-badge">编辑模式 · 拖拽框体移动 / 拖拽四角缩放</div>
 
-        <div class="sub-overlay" id="sub-overlay" aria-label="可拖拽与缩放的实时字幕叠层演示">
+        <div class="sub-overlay" id="sub-overlay" aria-label="可拖拽与边角缩放的实时字幕叠层">
           <span class="grip nw" data-dir="nw" aria-hidden="true"></span>
           <span class="grip ne" data-dir="ne" aria-hidden="true"></span>
           <span class="grip sw" data-dir="sw" aria-hidden="true"></span>
           <span class="grip se" data-dir="se" aria-hidden="true"></span>
-          <div class="sub-overlay-head">
-            <span class="sub-model-tag" id="sub-model-tag">OpenAI Chat · gpt-4o-mini · 流式</span>
-            <span class="sub-status-tag tnum" id="sub-status-tag">防抖 180ms · 命中缓存</span>
-          </div>
           <div class="sub-orig" id="sub-orig">「桜が散る前に、もう一度ここで話そうって約束したよね」</div>
           <div class="sub-zh" id="sub-zh">“在樱花凋落之前，我们约定过还要在这里再聊一次的吧。”</div>
         </div>
 
         <div class="vn-dialogue" aria-hidden="true">
-          <span class="vn-speaker" id="vn-speaker">小春</span>
-          <p class="vn-jp" id="vn-jp">「桜が散る前に、もう一度ここで話そうって約束したよね」</p>
+          <span class="vn-speaker">小春</span>
+          <p class="vn-jp">「桜が散る前に、もう一度ここで話そうって約束したよね」</p>
         </div>
       </div>
 
       <div class="trans-footer">
-        <div class="trans-lines" role="group" aria-label="示例台词切换">
-          <button class="trans-line-btn on" type="button" data-line="0">台词 01 · 樱花树下</button>
-          <button class="trans-line-btn" type="button" data-line="1">台词 02 · 黄昏电车</button>
-          <button class="trans-line-btn" type="button" data-line="2">台词 03 · 星空天台</button>
-        </div>
+        <span>试着拖动字幕窗移动位置，或拖拽四个边角调整大小</span>
         <div class="trans-readout">
-          <span class="tnum" id="sub-geo-readout">460 × 126 px · 可拖拽与缩放</span>
+          <span class="tnum" id="sub-geo-readout">520 × 124 px</span>
           <button class="trans-reset-btn" id="sub-reset-btn" type="button">重置位置</button>
         </div>
       </div>
@@ -2140,71 +2071,31 @@
     if (event.key === 'Tab') { event.preventDefault(); closeButton.focus(); }
   });
 
-  // Interactive live translation overlay demo
+  // Interactive live translation overlay demo (faithful to Maltoria HUD + overlay)
   (() => {
     const stage = document.getElementById('trans-stage');
     const overlay = document.getElementById('sub-overlay');
     if (!stage || !overlay) return;
 
-    const modelTag = document.getElementById('sub-model-tag');
-    const statusTag = document.getElementById('sub-status-tag');
-    const origEl = document.getElementById('sub-orig');
     const zhEl = document.getElementById('sub-zh');
-    const vnSpeaker = document.getElementById('vn-speaker');
-    const vnJp = document.getElementById('vn-jp');
     const geoReadout = document.getElementById('sub-geo-readout');
-    const modeBadge = document.getElementById('hud-mode-badge');
+    const visibleBtn = document.getElementById('toggle-visible');
+    const visibleBtnLabel = document.getElementById('visible-btn-label');
     const modeBtn = document.getElementById('toggle-clickthrough');
     const modeBtnLabel = document.getElementById('mode-btn-label');
-    const debounceBtn = document.getElementById('toggle-debounce');
-    const cacheBtn = document.getElementById('toggle-cache');
+    const hudVisBtn = document.getElementById('hud-vis-btn');
+    const hudDragBtn = document.getElementById('hud-drag-btn');
     const resetBtn = document.getElementById('sub-reset-btn');
     const providerBtns = [...document.querySelectorAll('[data-provider]')];
-    const lineBtns = [...document.querySelectorAll('[data-line]')];
 
-    const providers = {
-      openai: { label: 'OpenAI Chat · gpt-4o-mini · 流式', hookMeta: 'ASLR 复用 · Hook #02' },
-      deepl: { label: 'DeepL API · JA → ZH-HANS', hookMeta: '进程筛选 · Hook #02' },
-      ollama: { label: 'Ollama 本地 · qwen2.5:14b · 流式', hookMeta: '离线推理 · Hook #02' }
+    const translations = {
+      openai: '“在樱花凋落之前，我们约定过还要在这里再聊一次的吧。”',
+      deepl: '“在樱花凋落之前，我们约定好还要在这里再谈一次的吧。”',
+      ollama: '“樱花还没落完之前，我们说好要再来这里聊一次的吧。”'
     };
 
-    const lines = [
-      {
-        speaker: '小春',
-        jp: '「桜が散る前に、もう一度ここで話そうって約束したよね」',
-        zh: {
-          openai: '“在樱花凋落之前，我们约定过还要在这里再聊一次的吧。”',
-          deepl: '“在樱花凋落之前，我们约定好还要在这里再谈一次的吧。”',
-          ollama: '“樱花还没落完之前，我们说好要再来这里聊一次的吧。”'
-        },
-        cached: true
-      },
-      {
-        speaker: '凪',
-        jp: '「夕暮れの電車に揺られながら、君の名前を何度も思い返していた」',
-        zh: {
-          openai: '“在暮色摇晃的电车里，我一遍又一遍地回想起你的名字。”',
-          deepl: '“乘着黄昏的电车摇晃前行时，我无数次想起你的名字。”',
-          ollama: '“坐着傍晚的电车晃晃悠悠时，脑海里反复浮现出你的名字。”'
-        },
-        cached: false
-      },
-      {
-        speaker: '诗织',
-        jp: '「屋上から見上げた夜空は、あの夏と少しも変わっていなかった」',
-        zh: {
-          openai: '“从天台仰望的那片夜空，和那个夏天相比丝毫没有改变。”',
-          deepl: '“从屋顶仰望的夜空，和那个夏天一点也没有改变。”',
-          ollama: '“站在天台上抬头看到的夜空，跟那个夏天一模一样呢。”'
-        },
-        cached: true
-      }
-    ];
-
     let activeProvider = 'openai';
-    let activeLine = 0;
-    let debounceOn = true;
-    let cacheOn = true;
+    let overlayVisible = true;
     let clickThrough = false;
     let box = { x: 0, y: 0, w: 0, h: 0 };
     const MIN_W = 240;
@@ -2212,38 +2103,33 @@
     const PAD = 12;
 
     function updateStatus() {
-      const p = providers[activeProvider];
-      const line = lines[activeLine];
-      modelTag.textContent = p.label;
-      document.getElementById('hud-hook-meta').textContent = p.hookMeta;
-      vnSpeaker.textContent = line.speaker;
-      vnJp.textContent = line.jp;
-      origEl.textContent = line.jp;
-      zhEl.textContent = line.zh[activeProvider];
+      zhEl.textContent = translations[activeProvider];
 
-      const parts = [];
-      parts.push(debounceOn ? '防抖 180ms' : '直通无防抖');
-      if (cacheOn) {
-        parts.push(line.cached ? '命中缓存 0.4ms' : '已写入缓存');
-      } else {
-        parts.push('缓存已关闭');
-      }
-      statusTag.textContent = parts.join(' · ');
-
+      overlay.classList.toggle('hidden-sub', !overlayVisible);
       overlay.classList.toggle('click-through', clickThrough);
+
+      visibleBtn.classList.toggle('on', overlayVisible);
+      visibleBtn.setAttribute('aria-pressed', String(overlayVisible));
+      visibleBtnLabel.textContent = overlayVisible ? '字幕开' : '字幕关';
+      hudVisBtn.classList.toggle('on', overlayVisible);
+      hudVisBtn.textContent = overlayVisible ? '字幕开' : '字幕关';
+
       modeBtn.classList.toggle('mode-locked', clickThrough);
       modeBtn.setAttribute('aria-pressed', String(clickThrough));
-      modeBtnLabel.textContent = clickThrough ? '点击穿透' : '解锁编辑';
-      modeBadge.textContent = clickThrough
-        ? '点击穿透中 · 鼠标操作直达游戏'
-        : '编辑模式 · 拖拽框体移动 / 拖拽四角缩放';
+      modeBtnLabel.textContent = clickThrough ? '锁定（穿透）' : '可拖动';
+      hudDragBtn.classList.toggle('drag-on', !clickThrough);
+      hudDragBtn.textContent = clickThrough ? '锁定' : '可拖动';
       updateReadout();
     }
 
     function updateReadout() {
+      if (!overlayVisible) {
+        geoReadout.textContent = `${Math.round(box.w)} × ${Math.round(box.h)} px · 字幕已隐藏`;
+        return;
+      }
       geoReadout.textContent = clickThrough
-        ? `${Math.round(box.w)} × ${Math.round(box.h)} px · 点击穿透已开启`
-        : `${Math.round(box.w)} × ${Math.round(box.h)} px · 可拖拽与缩放`;
+        ? `${Math.round(box.w)} × ${Math.round(box.h)} px · 点击穿透中`
+        : `${Math.round(box.w)} × ${Math.round(box.h)} px · 可拖动与缩放`;
     }
 
     function clampBox(next) {
@@ -2270,8 +2156,8 @@
     function resetBox() {
       const sw = stage.clientWidth || 720;
       const sh = stage.clientHeight || 410;
-      const w = Math.min(540, Math.max(MIN_W, sw - 56));
-      const h = 132;
+      const w = Math.min(520, Math.max(MIN_W, sw - 56));
+      const h = 124;
       const x = (sw - w) / 2;
       const y = Math.max(70, Math.min(sh - h - 108, Math.round(sh * 0.28)));
       applyBox({ x, y, w, h });
@@ -2289,38 +2175,24 @@
       });
     });
 
-    lineBtns.forEach(btn => {
-      btn.addEventListener('click', () => {
-        activeLine = Number(btn.dataset.line) || 0;
-        lineBtns.forEach(b => b.classList.toggle('on', b === btn));
-        updateStatus();
-      });
-    });
-
-    debounceBtn.addEventListener('click', () => {
-      debounceOn = !debounceOn;
-      debounceBtn.classList.toggle('on', debounceOn);
-      debounceBtn.setAttribute('aria-pressed', String(debounceOn));
+    const toggleVisible = () => {
+      overlayVisible = !overlayVisible;
       updateStatus();
-    });
-
-    cacheBtn.addEventListener('click', () => {
-      cacheOn = !cacheOn;
-      cacheBtn.classList.toggle('on', cacheOn);
-      cacheBtn.setAttribute('aria-pressed', String(cacheOn));
-      updateStatus();
-    });
-
-    modeBtn.addEventListener('click', () => {
+    };
+    const toggleLock = () => {
       clickThrough = !clickThrough;
       updateStatus();
-    });
+    };
 
+    visibleBtn.addEventListener('click', toggleVisible);
+    hudVisBtn.addEventListener('click', toggleVisible);
+    modeBtn.addEventListener('click', toggleLock);
+    hudDragBtn.addEventListener('click', toggleLock);
     resetBtn.addEventListener('click', resetBox);
 
     let gesture = null;
     overlay.addEventListener('pointerdown', event => {
-      if (clickThrough) return;
+      if (clickThrough || !overlayVisible) return;
       const grip = event.target.closest('.grip');
       const dir = grip ? grip.dataset.dir : 'move';
       event.preventDefault();
