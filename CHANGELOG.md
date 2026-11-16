@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Linux GPUI capture HUD with shared process/thread controls, provider and architecture presets, subtitle quick controls, and automatic launch prompts.
 
 ### Fixed
+- Linux capture HUD stop responses keep the final preset associated with the captured game, refreshing its own settings without overwriting another game's translation settings or remembered process.
 - Linux runtime process tracking falls back to `winedbg info proc` when Wine's `tasklist` returns no output, preserving launch detection and game-exit cleanup.
 - Linux (GPUI): show client-side window controls, including a close button that preserves the existing graceful shutdown and Wine cleanup policy; retain native controls when the desktop supplies server-side decorations.
 - Robustness: replaced release-build `fatalError` crash paths in the bundled GameDB and diagnostics-pattern loaders with `assertionFailure` + logged graceful degradation.
