@@ -139,6 +139,9 @@ jobs:
   package:
     name: deb / rpm / AppImage from one payload
     needs: build
+    # The optional native job can be skipped when CI supplies its artifacts.
+    # An explicit status check allows downstream jobs to run in that case.
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -207,6 +210,7 @@ jobs:
   smoke:
     name: ${{ matrix.target }} / install and production window
     needs: package
+    if: ${{ !cancelled() && needs.package.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -276,4 +280,24 @@ jobs:
             format-evidence/wine-update/fixture-*/responses.jsonl
           if-no-files-found: ignore
           retention-days: 14
+
+  release-gate:
+    name: Require all Linux package checks
+    needs: [native, build, package, smoke]
+    if: ${{ always() && !cancelled() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check required job results
+        env:
+          NATIVE_RESULT: ${{ needs.native.result }}
+          USE_EXISTING_NATIVE: ${{ inputs.use_existing_native }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          PACKAGE_RESULT: ${{ needs.package.result }}
+          SMOKE_RESULT: ${{ needs.smoke.result }}
+        run: |
+          echo "native=$NATIVE_RESULT build=$BUILD_RESULT package=$PACKAGE_RESULT smoke=$SMOKE_RESULT"
+          if [[ "$NATIVE_RESULT" != success && !( "$USE_EXISTING_NATIVE" == true && "$NATIVE_RESULT" == skipped ) ]]; then
+            exit 1
+          fi
+          [[ "$BUILD_RESULT" == success && "$PACKAGE_RESULT" == success && "$SMOKE_RESULT" == success ]]
 
