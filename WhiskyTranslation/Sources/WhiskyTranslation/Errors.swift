@@ -71,7 +71,9 @@ public enum TranslationError: Error, Equatable, Sendable, LocalizedError {
 }
 
 public enum CredentialStoreAvailability: String, Codable, Sendable {
+    case unavailable
     case persistentKeychain
+    case persistentSecretService
     case localPlaintextFile
     case sessionOnly
 }

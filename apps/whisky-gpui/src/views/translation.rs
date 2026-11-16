@@ -37,10 +37,15 @@ const LANGUAGE_PRESETS: [(&str, &str); 6] = [
 ];
 
 const CREDENTIAL_STORAGE_MODES: [(&str, &str); 3] = [
-    ("keychain", "macOS 钥匙串（加密）"),
+    ("keychain", SYSTEM_CREDENTIAL_LABEL),
     ("localFile", "本地文件（明文，免弹窗）"),
     ("sessionOnly", "仅本次运行（不落盘）"),
 ];
+
+#[cfg(target_os = "linux")]
+const SYSTEM_CREDENTIAL_LABEL: &str = "系统密钥环（Secret Service，加密）";
+#[cfg(not(target_os = "linux"))]
+const SYSTEM_CREDENTIAL_LABEL: &str = "macOS 钥匙串（加密）";
 
 const DEBOUNCE_PRESETS: [(u64, &str); 5] = [
     (0, "0 ms 即时"),
@@ -1268,7 +1273,7 @@ impl WhiskyApp {
                                         .child("凭证存储方式"),
                                 )
                                 .child(
-                                    muted("接口不会回显密钥明文；除「本地文件」模式以 0600 权限明文落盘外，其余模式均不落盘或由系统钥匙串加密。")
+                                    muted(if cfg!(target_os = "linux") { "接口不会回显密钥明文；除「本地文件」模式以 0600 权限明文落盘外，其余模式均不落盘或由系统密钥环（Secret Service）加密。" } else { "接口不会回显密钥明文；除「本地文件」模式以 0600 权限明文落盘外，其余模式均不落盘或由系统钥匙串加密。" })
                                         .text_size(px(11.))
                                         .line_height(relative(1.4)),
                                 ),
@@ -1777,17 +1782,17 @@ fn storage_mode_callout(mode: &str) -> AnyElement {
                     .text_size(px(12.))
                     .line_height(relative(1.45))
                     .text_color(rgb(warning_fg()))
-                    .child("⚠️ 安全提示：本地文件模式会以未加密明文将 API 密钥写入本机受限目录（0600 权限），虽可彻底避免系统钥匙串反复弹窗，但同一账户下其他软件或磁盘备份仍可能读取该密钥，仅建议可信个人设备或测试环境使用。切换模式后请先点击「保存翻译设置」，再到提供商页面重新保存密钥。"),
+                    .child(if cfg!(target_os = "linux") { "⚠️ 安全提示：本地文件模式会以未加密明文将 API 密钥写入本机受限目录（0600 权限），不使用系统密钥环（Secret Service）；同一账户下其他软件或磁盘备份仍可能读取该密钥，仅建议可信个人设备或测试环境使用。切换模式后请先点击「保存翻译设置」，再到提供商页面重新保存密钥。" } else { "⚠️ 安全提示：本地文件模式会以未加密明文将 API 密钥写入本机受限目录（0600 权限），虽可彻底避免系统钥匙串反复弹窗，但同一账户下其他软件或磁盘备份仍可能读取该密钥，仅建议可信个人设备或测试环境使用。切换模式后请先点击「保存翻译设置」，再到提供商页面重新保存密钥。" }),
             )
             .into_any_element();
     }
 
     let message = match mode {
         "sessionOnly" => {
-            "仅本次运行模式会将 API 密钥仅保留在当前进程内存中，不写入钥匙串或磁盘文件；退出 Maltoria 后密钥将自动清除，下次启动需重新输入。"
+            if cfg!(target_os = "linux") { "仅本次运行模式会将 API 密钥仅保留在当前进程内存中，不写入系统密钥环或磁盘文件；退出 Maltoria 后密钥将自动清除，下次启动需重新输入。" } else { "仅本次运行模式会将 API 密钥仅保留在当前进程内存中，不写入钥匙串或磁盘文件；退出 Maltoria 后密钥将自动清除，下次启动需重新输入。" }
         }
         _ => {
-            "macOS 钥匙串模式会加密保存凭证，并在运行期间启用内存缓存以减少重复访问；若使用本地 ad-hoc 签名构建，每次重新编译导致二进制签名变化时，系统钥匙串仍可能弹窗授权一次。"
+            if cfg!(target_os = "linux") { "系统密钥环模式通过 Secret Service 加密保存凭证，需要安装 libsecret-tools 并运行已解锁的系统密钥环服务；服务不可用时会明确报错，不会退回仅会话存储。" } else { "macOS 钥匙串模式会加密保存凭证，并在运行期间启用内存缓存以减少重复访问；若使用本地 ad-hoc 签名构建，每次重新编译导致二进制签名变化时，系统钥匙串仍可能弹窗授权一次。" }
         }
     };
 

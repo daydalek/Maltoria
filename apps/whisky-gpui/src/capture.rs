@@ -366,6 +366,8 @@ struct Pending {
 
 #[derive(Clone)]
 pub(crate) struct CaptureState {
+    #[cfg(target_os = "linux")]
+    pub(crate) hud: crate::linux_hud::HudState,
     pub(crate) panel_open: bool,
     pub(crate) context: Option<(String, String, String)>,
     pub(crate) active_game: Option<(String, String, String)>,
@@ -398,6 +400,7 @@ pub(crate) struct CaptureState {
     pub(crate) error: Option<String>,
     pub(crate) overlay: Option<OverlaySettings>,
     pub(crate) overlay_platform: String,
+    pub(crate) overlay_supports_click_through: bool,
     pending: BTreeMap<u64, Pending>,
     generation: u64,
     poll_request: Option<u64>,
@@ -413,6 +416,8 @@ pub(crate) struct CaptureState {
 impl Default for CaptureState {
     fn default() -> Self {
         Self {
+            #[cfg(target_os = "linux")]
+            hud: crate::linux_hud::HudState::default(),
             panel_open: false,
             context: None,
             active_game: None,
@@ -445,6 +450,7 @@ impl Default for CaptureState {
             error: None,
             overlay: None,
             overlay_platform: String::new(),
+            overlay_supports_click_through: false,
             pending: BTreeMap::new(),
             generation: 0,
             poll_request: None,
@@ -507,6 +513,11 @@ impl CaptureState {
         self.snapshot
             .as_ref()
             .is_some_and(|s| s.target.is_some() || s.capture_state == "attached")
+    }
+
+    pub(crate) fn context_matches_active_game(&self) -> bool {
+        self.active_game.as_ref().zip(self.context.as_ref())
+            .is_some_and(|(active, context)| active.0 == context.0 && active.1 == context.1)
     }
 
     pub(crate) fn is_selecting(&self) -> bool {
@@ -701,18 +712,32 @@ impl CaptureState {
 
     pub(crate) fn open_capture_hud(
         &mut self,
-        bridge: &BridgeSupervisor,
+        _bridge: &BridgeSupervisor,
         container: &str,
         entry_id: &str,
     ) {
+        #[cfg(target_os = "linux")]
+        {
+            self.hud.open_requested = Some((container.into(), entry_id.into()));
+        }
+        #[cfg(not(target_os = "linux"))]
         let _ = self.request(
-            bridge,
+            _bridge,
             "translation.capture.hud/show",
             json!({
                 "container": container,
                 "entryID": entry_id,
             }),
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn save_hud_selection(&mut self, bridge: &BridgeSupervisor) {
+        let Some((container, entry, _)) = self.context.clone() else { return };
+        let _ = self.request_for_preset(bridge, "translation.capture.preset/save", &container, &entry, json!({
+            "container": container, "entryID": entry, "providerID": self.provider_id,
+            "architecture": self.effective_architecture(), "restoreHistory": self.restore_history
+        }));
     }
 
     pub(crate) fn toggle_preset_auto_attach(&mut self, bridge: &BridgeSupervisor) {
@@ -894,7 +919,7 @@ impl CaptureState {
         let Some(preset) = &self.preset else {
             return;
         };
-        if self.is_actively_attached() {
+        if self.is_actively_attached() && self.context_matches_active_game() {
             return;
         }
         if let Some(pid) = &preset.provider_id {
@@ -979,6 +1004,8 @@ impl CaptureState {
         }
     }
     pub(crate) fn stop(&mut self, bridge: &BridgeSupervisor, method: &str) {
+        #[cfg(target_os = "linux")]
+        { self.hud.hide(); }
         let was_active = self.active_game.is_some();
         self.generation = self.generation.wrapping_add(1);
         self.role_edit_generation = self.role_edit_generation.wrapping_add(1);
@@ -1074,10 +1101,11 @@ impl CaptureState {
         }
     }
     fn can_poll(&self) -> bool {
-        self.active_game.is_some() && self.poll_request.is_none()
+        (self.active_game.is_some() || self.overlay.as_ref().is_some_and(|s| s.visible))
+            && self.poll_request.is_none()
     }
     pub(crate) fn schedule_poll(&mut self, cx: &mut Context<WhiskyApp>) {
-        if self.active_game.is_none() || self.poll_scheduled {
+        if (self.active_game.is_none() && !self.overlay.as_ref().is_some_and(|s| s.visible)) || self.poll_scheduled {
             return;
         }
         self.poll_scheduled = true;
@@ -1174,7 +1202,9 @@ impl CaptureState {
         self.sync_thread_roles_from_server(&snapshot.threads, role_gen_matches);
         self.thread_total = snapshot.threads_total;
         if let Some(preset) = snapshot.preset.clone() {
-            self.preset = Some(preset.clone());
+            if self.active_game.is_none() || self.context_matches_active_game() {
+                self.preset = Some(preset.clone());
+            }
             if let Some((c, e, _)) = self.active_game.as_ref().or(self.context.as_ref())
                 && snapshot
                     .game_id
@@ -1261,6 +1291,8 @@ impl CaptureState {
         match result {
             Err(error) => self.apply_error(method, error),
             Ok(value) => match method {
+                #[cfg(target_os = "linux")]
+                "runtime.snapshot" => { self.hud.runtime_snapshot(&value); }
                 "translation.capture.start"
                 | "translation.capture.attach"
                 | "translation.capture.detach"
@@ -1393,11 +1425,13 @@ impl CaptureState {
                         .and_then(Value::as_str)
                         .unwrap_or("")
                         .into();
+                    self.overlay_supports_click_through = value.get("supportsClickThrough").and_then(Value::as_bool).unwrap_or(false);
+                    if self.overlay.as_ref().is_some_and(|s| s.visible) { self.schedule_poll(cx); }
                 }
                 _ => {}
             },
         }
-        if method == "translation.snapshot" && self.active_game.is_some() {
+        if method == "translation.snapshot" && (self.active_game.is_some() || self.overlay.as_ref().is_some_and(|s| s.visible)) {
             self.schedule_poll(cx);
         }
         cx.notify();
@@ -1606,6 +1640,10 @@ mod tests {
     #[test]
     fn polling_is_single_flight_and_stale_generations_are_rejected() {
         let mut state = CaptureState::default();
+        assert!(!state.can_poll());
+        state.overlay = Some(OverlaySettings { visible: true, ..OverlaySettings::default() });
+        assert!(state.can_poll());
+        state.overlay = None;
         state.active_game = Some(("c".into(), "e".into(), "g".into()));
         state.panel_open = false;
         assert!(state.can_poll());
@@ -2207,14 +2245,21 @@ mod tests {
                         .is_some_and(|p| p.translation_enabled && !p.prompt_attach_on_launch)
                 );
 
-                // open_capture_hud sends translation.capture.hud/show with container + entryID.
                 this.capture
                     .open_capture_hud(&this.bridge, "c-other", "g-other");
                 let calls = drain();
+                #[cfg(target_os = "linux")]
+                {
+                    assert!(calls.is_empty());
+                    assert_eq!(this.capture.hud.open_requested, Some(("c-other".into(), "g-other".into())));
+                }
+                #[cfg(not(target_os = "linux"))]
+                {
                 assert_eq!(calls.len(), 1);
                 assert_eq!(calls[0].0, "translation.capture.hud/show");
                 assert_eq!(calls[0].1["container"], "c-other");
                 assert_eq!(calls[0].1["entryID"], "g-other");
+                }
 
                 // open_translation_for_game auto-reads overlay settings when service is available.
                 this.bridge_status = crate::bridge::BridgeStatus::Connected {

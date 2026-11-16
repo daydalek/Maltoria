@@ -416,7 +416,7 @@ impl WhiskyApp {
         let entry_for_enable = entry_id.clone();
         let container_for_prompt = container.clone();
         let entry_for_prompt = entry_id.clone();
-        let hud_available = self.service_available("translation.capture.hud/show");
+        let hud_available = self.capture_hud_available();
         let hud_pending = self.capture.is_pending("translation.capture.hud/show");
 
         Some(self.section(

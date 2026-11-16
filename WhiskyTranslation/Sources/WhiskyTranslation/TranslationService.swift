@@ -41,6 +41,8 @@ public struct TranslationService: Sendable {
     public static func platformCredentialStore() -> any CredentialStore {
         #if canImport(Security)
         KeychainCredentialStore()
+        #elseif os(Linux)
+        SecretServiceCredentialStore()
         #else
         SessionOnlyCredentialStore()
         #endif

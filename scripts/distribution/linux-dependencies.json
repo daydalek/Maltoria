@@ -2,6 +2,8 @@
   "baseline": "Ubuntu 24.04 / glibc 2.39",
   "deb": [
     "ca-certificates",
+    "libsecret-tools",
+    "gnome-keyring",
     "python3 (>= 3.12)",
     "libc6 (>= 2.39)",
     "libgcc-s1",
@@ -34,6 +36,8 @@
   "rpm": [
     "ca-certificates",
     "python3 >= 3.12",
+    "libsecret",
+    "gnome-keyring",
     "glibc >= 2.39",
     "libgcc",
     "libstdc++",

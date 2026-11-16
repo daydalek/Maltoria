@@ -142,6 +142,8 @@ pub(crate) fn normalize_credential_storage_mode(mode: &str) -> String {
 pub(crate) fn credential_storage_label(storage: &str) -> String {
     match storage {
         "persistentKeychain" => "macOS 钥匙串".to_owned(),
+        "persistentSecretService" => "系统密钥环（Secret Service，加密）".to_owned(),
+        "unavailable" => "系统凭据存储不可用（请安装 libsecret-tools）".to_owned(),
         "localPlaintextFile" => "本地文件（明文存储，免弹窗）".to_owned(),
         "sessionOnly" => "仅当前会话内存（关闭后清除）".to_owned(),
         "" => "正在读取".to_owned(),
@@ -2387,6 +2389,8 @@ mod tests {
             credential_storage_label("persistentKeychain"),
             "macOS 钥匙串"
         );
+        assert_eq!(credential_storage_label("persistentSecretService"), "系统密钥环（Secret Service，加密）");
+        assert_eq!(credential_storage_label("unavailable"), "系统凭据存储不可用（请安装 libsecret-tools）");
         assert_eq!(
             credential_storage_label("localPlaintextFile"),
             "本地文件（明文存储，免弹窗）"

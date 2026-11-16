@@ -42,6 +42,7 @@ public final class LinuxApplicationServices: NativeApplicationServices {
     private let wineSetup: LinuxWineSetupService?
     private let shutdownContainers: (() throws -> [URL])?
     private let finalObservation: (() async -> Void)?
+    private let subtitleOverlay: LinuxSubtitleOverlay
 
     public init(
         runtime: RuntimeService? = nil,
@@ -55,9 +56,11 @@ public final class LinuxApplicationServices: NativeApplicationServices {
         shutdownContainers: (() throws -> [URL])? = nil,
         finalObservation: (() async -> Void)? = nil,
         host: LinuxWineHost? = nil,
-        wineserverProbe: WineserverProbe? = nil
+        wineserverProbe: WineserverProbe? = nil,
+        overlayDirectory: URL? = nil
     ) {
         runtimeService = runtime
+        subtitleOverlay = overlayDirectory.map { LinuxSubtitleOverlay(directory: $0) } ?? LinuxSubtitleOverlay()
         self.wineSetup = wineSetup
         self.engineStore = engineStore
         self.shutdownContainers = shutdownContainers
@@ -96,7 +99,14 @@ public final class LinuxApplicationServices: NativeApplicationServices {
     }
 
     public var capabilities: [String] {
-        var values = ["system.files", "system.picker", "system.terminal", "system.desktop", "programs.shortcut"]
+        var values = [
+            "system.files",
+            "system.picker",
+            "system.terminal",
+            "system.desktop",
+            "programs.shortcut",
+            "translation.overlay"
+        ]
         if wineSetup != nil || bottleCreation != nil {
             values.append("setup")
         }
@@ -127,7 +137,7 @@ public final class LinuxApplicationServices: NativeApplicationServices {
         var values = [
             "system.reveal", "system.open", "system.resources", "system.terminals",
             "bottle.tools", "bottle.cleanCache"
-        ] + LinuxFilePicker.methods + LinuxDesktopService.methods
+        ] + LinuxFilePicker.methods + LinuxDesktopService.methods + LinuxSubtitleOverlay.methods
         if engineStore != nil {
             values += Self.engineMethods
         }
@@ -191,6 +201,9 @@ public final class LinuxApplicationServices: NativeApplicationServices {
     ) async throws -> JSONValue {
         guard methods.contains(method) else {
             throw BridgeFailure("method_unavailable", "Native method is unavailable")
+        }
+        if LinuxSubtitleOverlay.methods.contains(method) {
+            return try subtitleOverlay.call(method, params: params)
         }
         if Self.engineMethods.contains(method) {
             return try await callEngineMethod(method, params: params, workspace: workspace)
@@ -312,7 +325,20 @@ public final class LinuxApplicationServices: NativeApplicationServices {
     }
 
     public func shutdown(applyExitPolicy: Bool) async {
+        subtitleOverlay.hide()
         runtimeService?.stopTracking()
+    }
+
+    public func registerCaptureContext(
+        capture: ApplicationCaptureService,
+        translation: ApplicationTranslationService,
+        workspace: ApplicationWorkspace
+    ) {
+        capture.onStateUpdate = { [weak self] snapshot in self?.subtitleOverlay.updateCapture(snapshot) }
+    }
+
+    public func handleRuntimeEntriesEnded(_ entryIDs: Set<String>, stoppedCapture: Bool) {
+        subtitleOverlay.runtimeEntriesEnded(entryIDs, stoppedCapture: stoppedCapture)
     }
 
     public func prepareShutdown(applyExitPolicy: Bool) async throws {

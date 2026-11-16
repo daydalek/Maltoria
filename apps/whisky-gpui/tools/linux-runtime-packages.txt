@@ -10,6 +10,8 @@ libssl3t64
 libgdk-pixbuf-2.0-0
 libglib2.0-bin
 libgtk-4-1
+libsecret-tools
+gnome-keyring
 webp-pixbuf-loader
 libxcb1
 libxcb-cursor0

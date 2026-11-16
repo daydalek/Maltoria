@@ -21,6 +21,10 @@ mod gallery;
 mod immersive;
 mod library_layout;
 mod library_view;
+#[cfg(target_os = "linux")]
+mod linux_overlay;
+#[cfg(target_os = "linux")]
+mod linux_hud;
 mod model;
 mod metadata_editor;
 mod platform;
@@ -786,12 +790,12 @@ fn main() {
             let appearance = ui_state::load_appearance();
             cx.set_window_appearance(appearance.window_override());
             theme::sync_theme(appearance, None, cx);
+            #[cfg(not(target_os = "linux"))]
             cx.on_window_closed(|cx, _| {
                 if cx.windows().is_empty() {
                     cx.quit();
                 }
-            })
-            .detach();
+            }).detach();
             let bounds = ui_state::initial_window_bounds(cx);
             let (_handle, _view) = gpui_kit::open_window(
                 WindowOptions {
@@ -812,6 +816,17 @@ fn main() {
                 |window, cx| cx.new(|cx| WhiskyApp::new(window, cx)),
             )
             .expect("Failed to open GPUI preview");
+            #[cfg(target_os = "linux")]
+            {
+                let main_id = _handle.window_id();
+                cx.on_window_closed(move |cx, _| {
+                    if !cx.windows().iter().any(|handle| handle.window_id() == main_id) {
+                        cx.quit();
+                    }
+                }).detach();
+                linux_overlay::start(&_view, cx);
+                linux_hud::start(&_view, cx);
+            }
             if let Some(file) = startup_file.clone() {
                 let _ = _view.update(cx, |this, cx| this.receive_external_file(file, cx));
             }

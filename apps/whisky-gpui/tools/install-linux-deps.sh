@@ -3,7 +3,7 @@
 set -euo pipefail
 apt-get update
 apt-get install -y --no-install-recommends \
-    build-essential clang curl ca-certificates pkg-config patchelf libssl-dev \
+    build-essential clang curl ca-certificates pkg-config patchelf libssl-dev libsecret-tools gnome-keyring \
     libasound2-dev libudev-dev libfontconfig1-dev libfreetype-dev libzstd-dev \
     libgdk-pixbuf-2.0-dev libgtk-4-dev webp-pixbuf-loader \
     libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-xcb-dev \
