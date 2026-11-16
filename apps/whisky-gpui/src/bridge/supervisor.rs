@@ -2659,7 +2659,15 @@ fn run_with_spawner_and_backoff<F, B>(
                 }
                 Some(Command::TranslationCall { request, method, params }) => {
                     match client.call_with_timeout(&method, params, translation_call_timeout(&method)).map_err(classify) {
-                        Ok(result) => emit_event(&events, BridgeEvent::TranslationReply { request, method, result: Ok(result) }),
+                        Ok(result) => {
+                            #[cfg(target_os = "linux")]
+                            if let Some(session) = live.as_ref()
+                                && let Some(update) = hud_runtime_update(&method, &result, &session.container)
+                            {
+                                emit_event(&events, BridgeEvent::Runtime(update));
+                            }
+                            emit_event(&events, BridgeEvent::TranslationReply { request, method, result: Ok(result) });
+                        }
                         Err(CallFailure::Remote(reason)) => emit_event(&events, BridgeEvent::TranslationReply { request, method, result: Err(reason) }),
                         Err(CallFailure::Session(reason)) => {
                             emit_event(&events, BridgeEvent::TranslationReply { request, method, result: Err(reason.clone()) });
@@ -5164,6 +5172,15 @@ fn fetch_snapshot(client: &mut Client) -> Result<RuntimeSnapshotDto, CallFailure
 /// Read the cursor. The reply's `snapshot` is current as of the request, so it
 /// wins over anything the buffered events carry; the events are still read for
 /// launch results and driver failures.
+#[cfg(target_os = "linux")]
+fn hud_runtime_update(method: &str, result: &serde_json::Value, container: &str) -> Option<RuntimeUpdate> {
+    if method != "runtime.snapshot" {
+        return None;
+    }
+    let snapshot: RuntimeSnapshotDto = serde_json::from_value(result.clone()).ok()?;
+    Some(RuntimeUpdate::merge(container, snapshot.entries))
+}
+
 fn poll_runtime(
     client: &mut Client,
     session: &mut LiveRuntime,
@@ -8036,6 +8053,25 @@ pub(crate) fn diagnose_launch(bottle: Option<&str>, entry: Option<&str>) -> i32 
 mod tests {
     use super::*;
     use std::sync::Arc;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn hud_runtime_snapshot_updates_shared_state_without_foreground_polling() {
+        use crate::runtime::{RuntimeState, RuntimeTable};
+        let mut table = RuntimeTable::default();
+        let update = |state| super::hud_runtime_update("runtime.snapshot", &serde_json::json!({
+            "entries": [{"id": "game", "state": state, "capabilities": 7}]
+        }), "bottle").unwrap();
+        table.apply(update("preparing"));
+        table.apply(update("running"));
+        assert_eq!(table.entry("game").unwrap().state, RuntimeState::Running);
+        table.apply(super::hud_runtime_update("runtime.snapshot", &serde_json::json!({"entries": []}), "bottle").unwrap());
+        assert_eq!(table.entry("game").unwrap().state, RuntimeState::Running);
+        table.apply(update("idle"));
+        assert_eq!(table.entry("game").unwrap().state, RuntimeState::Idle);
+        assert!(super::hud_runtime_update("translation.snapshot", &serde_json::json!({"entries": []}), "bottle").is_none());
+        assert!(super::hud_runtime_update("runtime.snapshot", &serde_json::json!({"entries": "invalid"}), "bottle").is_none());
+    }
 
     #[test]
     fn metadata_jobs_wait_without_blocking_and_keep_terminal_failures() {

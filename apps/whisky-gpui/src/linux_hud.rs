@@ -123,7 +123,7 @@ impl WhiskyApp {
         self.capture.error = None;
     }
 
-    fn render_capture_hud(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    fn render_capture_hud(&mut self, scroll: &ScrollHandle, cx: &mut Context<Self>) -> AnyElement {
         let collapsed = self.capture.hud.collapsed;
         let attached = self.capture.is_actively_attached();
         let selecting = self.capture.is_selecting();
@@ -157,6 +157,7 @@ impl WhiskyApp {
         };
         let header = row()
             .h(px(34.))
+            .flex_shrink_0()
             .px(px(8.))
             .justify_between()
             .child(
@@ -254,10 +255,8 @@ impl WhiskyApp {
             return root.into_any_element();
         }
         let mut body = col()
-            .id("capture-hud-body")
-            .flex_1()
-            .min_h_0()
-            .overflow_y_scroll()
+            .w_full()
+            .flex_shrink_0()
             .p(px(10.))
             .gap(px(8.));
         body = body.child(muted(
@@ -521,17 +520,31 @@ impl WhiskyApp {
                     })),
             );
         }
-        body = body.child(
-            Button::new("hud-stop")
-                .label("停止捕获")
-                .danger()
-                .disabled(self.capture.active_game.is_none() || working)
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.capture.stop(&this.bridge, "translation.capture.stop");
-                    cx.notify();
-                })),
+        root = root.child(
+            div()
+                .id("capture-hud-body")
+                .flex_1()
+                .min_h_0()
+                .overflow_y_scroll()
+                .track_scroll(scroll)
+                .child(body),
         );
-        root = root.child(body);
+        root = root.child(
+            col()
+                .h(px(52.))
+                .flex_shrink_0()
+                .p(px(10.))
+                .child(
+                    Button::new("hud-stop")
+                        .label("停止捕获")
+                        .danger()
+                        .disabled(self.capture.active_game.is_none() || working)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.capture.stop(&this.bridge, "translation.capture.stop");
+                            cx.notify();
+                        })),
+                ),
+        );
         root.into_any_element()
     }
 }
@@ -720,7 +733,7 @@ impl HudController {
                 ));
             let bounds = Bounds::new(
                 point(screen.right() - px(420.), screen.top() + px(40.)),
-                size(px(400.), px(460.)),
+                size(px(400.), px(240.)),
             );
             let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some();
             let kind = if wayland {
@@ -752,7 +765,7 @@ impl HudController {
                         app: entity.downgrade(),
                         _subscription: subscription,
                         x11: X11Overlay::new(window, bounds),
-                        collapsed: false,
+                        scroll: ScrollHandle::new(),
                     }
                 })
             };
@@ -775,14 +788,19 @@ impl HudController {
         }
         if let Some(handle) = self.window {
             if handle
-                .update(cx, |view, window, _| {
-                    if collapsed != view.collapsed {
-                        window.resize(if collapsed {
-                            size(px(286.), px(34.))
-                        } else {
-                            size(px(400.), px(460.))
-                        });
-                        view.collapsed = collapsed;
+                .update(cx, |view, window, cx| {
+                    let height = view.scroll.bounds_for_item(0).map(|b| f32::from(b.size.height));
+                    let screen_height = window
+                        .display(cx)
+                        .map(|d| f32::from(d.bounds().size.height))
+                        .unwrap_or(900.);
+                    let desired = if collapsed {
+                        size(px(286.), px(34.))
+                    } else {
+                        size(px(400.), px(expanded_height(height.unwrap_or(152.), screen_height)))
+                    };
+                    if window.viewport_size() != desired {
+                        window.resize(desired);
                     }
                     if let Some(x11) = &mut view.x11 {
                         x11.sync_hud();
@@ -804,13 +822,17 @@ struct HudWindow {
     app: WeakEntity<WhiskyApp>,
     _subscription: Subscription,
     x11: Option<X11Overlay>,
-    collapsed: bool,
+    scroll: ScrollHandle,
+}
+
+fn expanded_height(content_height: f32, screen_height: f32) -> f32 {
+    (content_height + 88.).clamp(168., 460.).min((screen_height - 80.).max(34.))
 }
 
 impl Render for HudWindow {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.app
-            .update(cx, |app, cx| app.render_capture_hud(cx))
+            .update(cx, |app, cx| app.render_capture_hud(&self.scroll, cx))
             .unwrap_or_else(|_| div().into_any_element())
     }
 }
@@ -824,6 +846,14 @@ mod tests {
     use serde_json::json;
     use std::time::{Duration, Instant};
 
+    #[test]
+    fn expanded_height_fits_content_and_caps_at_screen_and_scroll_limits() {
+        assert_eq!(super::expanded_height(0., 900.), 168.);
+        assert_eq!(super::expanded_height(200., 900.), 288.);
+        assert_eq!(super::expanded_height(2000., 900.), 460.);
+        assert_eq!(super::expanded_height(2000., 400.), 320.);
+        assert_eq!(super::expanded_height(2000., 100.), 34.);
+    }
     #[gpui_kit::test]
     fn launch_flags_delay_and_shared_capture_commands(cx: &mut gpui_kit::TestAppContext) {
         cx.update(|app| gpui_kit::init(app));
