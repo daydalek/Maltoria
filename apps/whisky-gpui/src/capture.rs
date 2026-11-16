@@ -515,6 +515,11 @@ impl CaptureState {
             .is_some_and(|s| s.target.is_some() || s.capture_state == "attached")
     }
 
+    pub(crate) fn context_matches_active_game(&self) -> bool {
+        self.active_game.as_ref().zip(self.context.as_ref())
+            .is_some_and(|(active, context)| active.0 == context.0 && active.1 == context.1)
+    }
+
     pub(crate) fn is_selecting(&self) -> bool {
         self.active_game.is_some()
             && self
@@ -914,7 +919,7 @@ impl CaptureState {
         let Some(preset) = &self.preset else {
             return;
         };
-        if self.is_actively_attached() {
+        if self.is_actively_attached() && self.context_matches_active_game() {
             return;
         }
         if let Some(pid) = &preset.provider_id {
@@ -1197,7 +1202,9 @@ impl CaptureState {
         self.sync_thread_roles_from_server(&snapshot.threads, role_gen_matches);
         self.thread_total = snapshot.threads_total;
         if let Some(preset) = snapshot.preset.clone() {
-            self.preset = Some(preset.clone());
+            if self.active_game.is_none() || self.context_matches_active_game() {
+                self.preset = Some(preset.clone());
+            }
             if let Some((c, e, _)) = self.active_game.as_ref().or(self.context.as_ref())
                 && snapshot
                     .game_id

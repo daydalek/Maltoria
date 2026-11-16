@@ -87,13 +87,11 @@ impl WhiskyApp {
             .find(|g| g.id == entry)
             .map(|g| g.title.clone())
             .unwrap_or_else(|| entry.clone());
-        let context = self
-            .capture
-            .active_game
-            .clone()
-            .unwrap_or((container, entry.clone(), title));
+        let context = (container, entry.clone(), title);
+        let other_session = self.capture.active_game.as_ref().filter(|g| g.0 != context.0 || g.1 != context.1);
+        let warning = other_session.map(|g| format!("正在捕获 {}；请先停止该会话，再开始当前游戏的捕获。", g.2));
         self.capture.set_context(Some(context.clone()));
-        if self.capture.active_game.is_none() {
+        if self.capture.active_game.as_ref().is_none_or(|g| g.0 != context.0 || g.1 != context.1) {
             let preset = self.capture.preset.clone().unwrap_or_default();
             let providers: Vec<_> = self
                 .translation_page
@@ -120,7 +118,7 @@ impl WhiskyApp {
             .as_ref()
             .map(|s| s.capture_state.clone())
             .unwrap_or_default();
-        self.capture.error = None;
+        self.capture.error = warning;
     }
 
     fn render_capture_hud(&mut self, scroll: &ScrollHandle, cx: &mut Context<Self>) -> AnyElement {
@@ -144,8 +142,10 @@ impl WhiskyApp {
             ]
             .iter()
             .any(|m| self.capture.is_pending(m));
+        let other_session = self.capture.active_game.as_ref().zip(self.capture.context.as_ref())
+            .is_some_and(|(active, context)| active.0 != context.0 || active.1 != context.1);
         let settings_disabled =
-            attached || working || self.capture.is_pending("translation.capture.preset/save");
+            (attached && !other_session) || working || self.capture.is_pending("translation.capture.preset/save");
         let badge = if self.capture.hud.launch_at.is_some() {
             "等待游戏…"
         } else if attached {
@@ -261,9 +261,9 @@ impl WhiskyApp {
             .gap(px(8.));
         body = body.child(muted(
             self.capture
-                .active_game
+                .context
                 .as_ref()
-                .or(self.capture.context.as_ref())
+                .or(self.capture.active_game.as_ref())
                 .map(|g| g.2.clone())
                 .unwrap_or_else(|| "请从游戏菜单打开悬浮捕获窗".into()),
         ));
@@ -854,6 +854,48 @@ mod tests {
         assert_eq!(super::expanded_height(2000., 400.), 320.);
         assert_eq!(super::expanded_height(2000., 100.), 34.);
     }
+
+    #[gpui_kit::test]
+    fn manual_hud_open_keeps_requested_game_and_existing_session(cx: &mut gpui_kit::TestAppContext) {
+        cx.update(|app| gpui_kit::init(app));
+        let (_tx, rx) = smol::channel::unbounded();
+        let (bridge, drain) = BridgeSupervisor::recording_for_tests();
+        let window = cx.add_window(|window, cx| WhiskyApp::new_with_bridge(window, cx, bridge, rx, false));
+        window.update(cx, |app, _, cx| {
+            let active = ("container-a".into(), "entry-a".into(), "Game A".into());
+            app.capture.active_game = Some(active.clone());
+            app.capture.snapshot = Some(crate::capture::Snapshot {
+                capture_state: "attached".into(), ..Default::default()
+            });
+            app.capture.presets_by_game.insert(("container-b".into(), "entry-b".into()), CapturePreset {
+                provider_id: Some("provider-b".into()), architecture: "x86".into(), ..Default::default()
+            });
+            app.show_linux_hud("container-b".into(), "entry-b".into());
+            assert_eq!(app.capture.context.as_ref().unwrap().1, "entry-b");
+            assert_eq!(app.capture.active_game.as_ref(), Some(&active));
+            assert_eq!(app.capture.provider_id.as_deref(), Some("provider-b"));
+            assert_eq!(app.capture.architecture, "x86");
+            assert!(app.capture.error.as_deref().unwrap().contains("Game A"));
+            let request = app.capture.request(&app.bridge, "translation.snapshot", json!({})).unwrap();
+            app.capture.reply(request, "translation.snapshot", Ok(serde_json::to_value(crate::capture::Snapshot {
+                capture_state: "attached".into(), preset: Some(CapturePreset::default()), ..Default::default()
+            }).unwrap()), &app.bridge, cx);
+            assert_eq!(app.capture.preset.as_ref().unwrap().provider_id.as_deref(), Some("provider-b"));
+            app.capture.save_hud_selection(&app.bridge);
+            let calls = drain();
+            let (_, saved) = calls.iter().find(|(m, _)| m == "translation.capture.preset/save").unwrap();
+            assert_eq!(saved["entryID"], "entry-b");
+            assert_eq!(saved["providerID"], "provider-b");
+            assert!(!calls.iter().any(|(m, _)| m == "translation.capture.start" || m == "translation.capture.stop"));
+            app.show_linux_hud("container-a".into(), "entry-a".into());
+            assert!(app.capture.error.is_none());
+            assert_eq!(app.capture.active_game.as_ref(), Some(&active));
+            app.capture.active_game = None;
+            app.show_linux_hud("container-b".into(), "entry-b".into());
+            assert!(app.capture.error.is_none());
+            assert_eq!(app.capture.context.as_ref().unwrap().1, "entry-b");
+        }).unwrap();
+    }
     #[gpui_kit::test]
     fn launch_flags_delay_and_shared_capture_commands(cx: &mut gpui_kit::TestAppContext) {
         cx.update(|app| gpui_kit::init(app));
@@ -907,7 +949,7 @@ mod tests {
             controller.sync(app, cx);
             assert!(app.capture.hud.visible);
             assert!(app.capture.hud.launch_at.is_none());
-            assert_eq!(app.capture.context, app.capture.active_game);
+            assert_eq!(app.capture.context.as_ref().map(|g| g.1.as_str()), Some("entry"));
             assert!(app.capture.error.is_some());
             assert!(!drain().iter().any(|(m, _)| m == "translation.capture.start"));
 
