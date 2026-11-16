@@ -9,6 +9,9 @@ on:
       run_tests:
         type: boolean
         default: true
+      use_existing_native:
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       version:
@@ -30,11 +33,13 @@ concurrency:
 
 jobs:
   native:
+    if: ${{ !inputs.use_existing_native }}
     uses: ./.github/workflows/NativeLunaHook.yml
 
   build:
     name: amd64 / one Release payload
     needs: native
+    if: ${{ !cancelled() && (needs.native.result == 'success' || (inputs.use_existing_native && needs.native.result == 'skipped')) }}
     runs-on: ubuntu-24.04
     container: swift:6.4.0-noble
     timeout-minutes: 90
@@ -241,6 +246,7 @@ jobs:
               shutil.copyfile(pathlib.Path('scripts/distribution') / name, context / name)
           for name in ('check-linux-wine-update.py', 'check-diagnostics.py'):
               shutil.copyfile(pathlib.Path('apps/whisky-gpui/tools') / name, context / name)
+          shutil.copyfile('scripts/stage-lunahook-payload.py', context / 'stage-lunahook-payload.py')
           PY
       - name: Install with the distro package manager
         run: docker build --target '${{ matrix.target }}' -t whisky-format-test -f smoke-context/package-smoke.Dockerfile smoke-context

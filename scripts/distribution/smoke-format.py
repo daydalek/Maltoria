@@ -155,6 +155,12 @@ def main():
                 assert hashlib.file_digest(stream, 'sha256').hexdigest() == expected['sha256'], relative
             assert path.stat().st_size == expected['size']
         report['checks'].append('installed-payload-hashes')
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('lunahook', '/tests/stage-lunahook-payload.py')
+        lunahook = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(lunahook)
+        lunahook.verify(bundle / 'bin/LunaHook')
+        report['checks'].append('installed-lunahook-hashes-and-architectures')
         subprocess.run(['python3', '/tests/check-linux-wine-update.py', '--helper',
                         str(bundle / 'bin/whisky-bridge'), '--output', str(output / 'wine-update')],
                        env=env, check=True, timeout=180)

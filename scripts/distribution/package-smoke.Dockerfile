@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 RUN useradd --create-home --uid 10001 whisky-test && mkdir /evidence && chown whisky-test:whisky-test /evidence
 COPY smoke-format.py /tests/smoke-format.py
+COPY stage-lunahook-payload.py /tests/stage-lunahook-payload.py
 COPY check-linux-wine-update.py check-diagnostics.py /tests/
 ENV HOME=/home/whisky-test
 WORKDIR /home/whisky-test
@@ -30,6 +31,7 @@ RUN --mount=type=cache,id=whisky-fedora44-metadata,target=/var/cache/libdnf5,sha
     glib2 xdg-utils desktop-file-utils util-linux
 RUN useradd --create-home --uid 10001 whisky-test && mkdir /evidence && chown whisky-test:whisky-test /evidence
 COPY smoke-format.py /tests/smoke-format.py
+COPY stage-lunahook-payload.py /tests/stage-lunahook-payload.py
 COPY check-linux-wine-update.py check-diagnostics.py /tests/
 ENV HOME=/home/whisky-test
 WORKDIR /home/whisky-test

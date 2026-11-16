@@ -37,6 +37,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  native-lunahook:
+    uses: ./.github/workflows/NativeLunaHook.yml
+
   # Lint job runs first on cheaper ubuntu runner
   lint:
     name: SwiftLint
@@ -224,7 +227,7 @@ jobs:
 
   gpui:
     name: GPUI (macOS)
-    needs: [lint, format, localization, test]
+    needs: [lint, format, localization, test, native-lunahook]
     runs-on: macos-26
     steps:
       - name: Checkout
@@ -259,9 +262,17 @@ jobs:
         run: swift test --package-path WhiskyBridge
       - name: Run GPUI tests
         run: cargo test --locked --manifest-path apps/whisky-gpui/Cargo.toml
+      - name: Download pinned LunaHook payloads
+        uses: actions/download-artifact@v4
+        with:
+          pattern: Maltoria-LunaHook-*
+          path: ${{ runner.temp }}/lunahook
+          merge-multiple: true
       - name: Verify GPUI app packaging
         env:
           APP_VERSION: ${{ steps.version.outputs.value }}
+          MALTORIA_LUNAHOOK_ARTIFACTS: ${{ runner.temp }}/lunahook
+          MALTORIA_REQUIRE_LUNAHOOK: '1'
         run: |
           ./build.sh run whisky-macos-gpui-arm64 --version "$APP_VERSION" \
             --build-number "$GITHUB_RUN_NUMBER" --output build/ci-gpui
@@ -284,7 +295,8 @@ jobs:
   linux-packages:
     name: Linux packages
     if: github.event_name != 'pull_request'
-    needs: [lint, format, localization, test]
+    needs: [lint, format, localization, test, native-lunahook]
     uses: ./.github/workflows/LinuxDistribution.yml
     with:
       run_tests: true
+      use_existing_native: true
