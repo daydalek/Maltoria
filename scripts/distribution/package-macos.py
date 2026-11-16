@@ -3,6 +3,7 @@
 """Package a verified macOS GPUI Maltoria.app into release ZIP, source archive and checksums."""
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -19,6 +20,15 @@ def digest(path: Path) -> str:
         while chunk := stream.read(65536):
             h.update(chunk)
     return h.hexdigest()
+
+
+def verify_lunahook(app: Path) -> None:
+    payload = app / 'Contents/Resources/LunaHook'
+    if payload.exists() or os.environ.get('MALTORIA_REQUIRE_LUNAHOOK') == '1':
+        spec = importlib.util.spec_from_file_location('lunahook', ROOT / 'scripts/stage-lunahook-payload.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.verify(payload)
 
 
 def verify_app(app: Path, version: str) -> None:
@@ -75,6 +85,7 @@ def package(app: Path, version: str, output: Path, build_number: int = 1) -> Non
         subprocess.run(['ditto', '-x', '-k', str(archive_path), tmpdir], check=True)
         extracted_app = Path(tmpdir) / 'Maltoria.app'
         subprocess.run(['codesign', '--verify', '--deep', '--strict', str(extracted_app)], check=True)
+        verify_lunahook(extracted_app)
 
     sources_name = f"Maltoria-{version}-sources.tar.gz"
     sources_path = output / sources_name

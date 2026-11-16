@@ -1,15 +1,20 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 import importlib.util
 import json
+import os
 from pathlib import Path
 import struct
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('stage_lunahook', ROOT / 'scripts/stage-lunahook-payload.py')
 stage_lunahook = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(stage_lunahook)
+macos_spec = importlib.util.spec_from_file_location('package_macos', ROOT / 'scripts/distribution/package-macos.py')
+package_macos = importlib.util.module_from_spec(macos_spec)
+macos_spec.loader.exec_module(package_macos)
 
 
 def pe(machine, body=b''):
@@ -38,6 +43,21 @@ def artifacts(folder, machines=None):
 
 
 class LunaHookPayloadTests(unittest.TestCase):
+    def test_macos_release_requires_and_verifies_payload(self):
+        with tempfile.TemporaryDirectory() as folder, mock.patch.dict(os.environ, {'MALTORIA_REQUIRE_LUNAHOOK': '1'}):
+            folder = Path(folder)
+            app = folder / 'Maltoria.app'
+            with self.assertRaises(FileNotFoundError):
+                package_macos.verify_lunahook(app)
+            artifacts(folder / 'in')
+            payload = app / 'Contents/Resources/LunaHook'
+            payload.parent.mkdir(parents=True)
+            stage_lunahook.stage(folder / 'in', payload, ROOT)
+            package_macos.verify_lunahook(app)
+            (payload / 'x64/LunaHook64.dll').write_bytes(pe(0x8664, b'tampered'))
+            with self.assertRaisesRegex(ValueError, 'hash mismatch'):
+                package_macos.verify_lunahook(app)
+
     def test_stages_both_architectures_with_sources_and_manifest(self):
         with tempfile.TemporaryDirectory() as folder:
             folder = Path(folder)
