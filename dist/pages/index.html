@@ -1189,14 +1189,13 @@
   <div class="wrap center reveal">
     <p class="eyebrow">Many ways to browse</p>
     <h2>一个库，多种浏览方式</h2>
-    <p class="lead">按当下的心情，一键切换 6 种界面视图与外观配置。</p>
+    <p class="lead">按当下的心情，一键切换 5 种游戏库浏览视图。</p>
     <div class="tabs" id="tabs" role="tablist" aria-label="界面视图切换">
       <button class="tab on" data-i="0" type="button">沉浸</button>
       <button class="tab" data-i="1" type="button">画廊</button>
       <button class="tab" data-i="2" type="button">网格</button>
       <button class="tab" data-i="3" type="button">列表</button>
       <button class="tab" data-i="4" type="button">双列</button>
-      <button class="tab" data-i="5" type="button">设置</button>
     </div>
     <div class="stage">
       <div class="win" id="stage">
@@ -1205,13 +1204,12 @@
         <img src="assets/demo-grid-layout.jpg" alt="网格视图" loading="lazy" width="1600" height="1027">
         <img src="assets/demo-list-layout.jpg" alt="列表视图" loading="lazy" width="1600" height="1027">
         <img src="assets/demo-duallist-layout.jpg" alt="双列列表视图" loading="lazy" width="1600" height="1027">
-        <img src="assets/demo-settings.jpg" alt="偏好与外观设置" loading="lazy" width="1600" height="1027">
       </div>
       <div class="stage-progress-track" aria-hidden="true">
         <div class="stage-progress-fill" id="stage-progress"></div>
       </div>
       <div class="stage-bar">
-        <span class="stage-counter tnum" id="stage-counter">01 / 06</span>
+        <span class="stage-counter tnum" id="stage-counter">01 / 05</span>
         <span id="cap"></span>
         <div class="stage-controls">
           <button class="stage-btn" id="prev-slide" type="button" aria-label="上一张截图">上一张</button>
@@ -1475,8 +1473,7 @@
     '画廊 — 封面墙与游戏档案并排',
     '网格 — 紧凑封面墙，快速浏览',
     '列表 — 按游玩时间顺序查看',
-    '双列 — 宽屏下一次看更多',
-    '设置 — 视图、模糊背景与封面超分'
+    '双列 — 宽屏下一次看更多'
   ];
   const tabs = [...document.querySelectorAll('.tab')];
   const imgs = [...document.querySelectorAll('#stage img')];
