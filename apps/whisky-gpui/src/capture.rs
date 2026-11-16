@@ -1201,18 +1201,14 @@ impl CaptureState {
         }
         self.sync_thread_roles_from_server(&snapshot.threads, role_gen_matches);
         self.thread_total = snapshot.threads_total;
-        if let Some(preset) = snapshot.preset.clone() {
-            if self.active_game.is_none() || self.context_matches_active_game() {
+        if let (Some(preset), Some((container, entry_id, _))) =
+            (snapshot.preset.as_ref(), self.active_game.as_ref())
+        {
+            if self.context_matches_active_game() {
                 self.preset = Some(preset.clone());
             }
-            if let Some((c, e, _)) = self.active_game.as_ref().or(self.context.as_ref())
-                && snapshot
-                    .game_id
-                    .as_deref()
-                    .is_none_or(|gid| gid == e.as_str())
-            {
-                self.presets_by_game.insert((c.clone(), e.clone()), preset);
-            }
+            self.presets_by_game
+                .insert((container.clone(), entry_id.clone()), preset.clone());
         }
         let stopped = matches!(
             snapshot.capture_state.as_str(),
@@ -2112,6 +2108,89 @@ mod tests {
                 assert!(this.capture.preset_notice.is_some());
             })
             .unwrap();
+    }
+
+    #[gpui_kit::test]
+    fn stopping_from_another_games_hud_cannot_attribute_or_save_the_session_preset(
+        cx: &mut gpui_kit::TestAppContext,
+    ) {
+        cx.update(|app| gpui_kit::init(app));
+        let (_tx, rx) = smol::channel::unbounded();
+        let (bridge, drain) = BridgeSupervisor::recording_for_tests();
+        let window = cx.add_window(|window, cx| {
+            WhiskyApp::new_with_bridge(window, cx, bridge, rx, false)
+        });
+        window.update(cx, |app, _, cx| {
+            let a = ("container".into(), "game-a".into(), "Game A".into());
+            let preset_a = CapturePreset {
+                provider_id: Some("provider-a".into()),
+                architecture: "x64".into(),
+                restore_history: true,
+                auto_attach: true,
+                translation_enabled: true,
+                target_exe_path: Some("C:\\e2e-gdi.exe".into()),
+                ..Default::default()
+            };
+            let preset_b = CapturePreset {
+                architecture: "x86".into(), ..Default::default()
+            };
+            for expected_b in [None, Some(preset_b)] {
+                app.capture = CaptureState::default();
+                app.capture.set_context(Some(a.clone()));
+                app.capture.provider_id = Some("provider-a".into());
+                app.capture.start(&app.bridge);
+                let start = *app.capture.pending.keys().next().unwrap();
+                let mut snapshot = Snapshot {
+                    session_id: Some("session-a".into()),
+                    game_id: Some("opaque-game-a-storage-hash".into()),
+                    capture_state: "attached".into(),
+                    preset: Some(preset_a.clone()),
+                    ..Default::default()
+                };
+                app.capture.reply(start, "translation.capture.start",
+                    Ok(serde_json::to_value(&snapshot).unwrap()), &app.bridge, cx);
+                assert_eq!(app.capture.preset_for_game("container", "game-a"), Some(&preset_a));
+                app.capture.set_context(Some(("container".into(), "game-b".into(), "Game B".into())));
+                app.capture.load_preset_for_game(&app.bridge, "container", "game-b");
+                let get = *app.capture.pending.iter()
+                    .find(|(_, p)| p.method == "translation.capture.preset/get").unwrap().0;
+                app.capture.reply(get, "translation.capture.preset/get",
+                    Ok(json!({"preset": expected_b})), &app.bridge, cx);
+                assert_eq!(app.capture.preset.as_ref(), expected_b.as_ref());
+
+                app.capture.stop(&app.bridge, "translation.capture.stop");
+                assert!(app.capture.active_game.is_none());
+                let stop = *app.capture.pending.keys().next().unwrap();
+                snapshot.capture_state = "stopped".into();
+                app.capture.reply(stop, "translation.capture.stop",
+                    Ok(serde_json::to_value(&snapshot).unwrap()), &app.bridge, cx);
+                assert_eq!(app.capture.preset.as_ref(), expected_b.as_ref());
+                for state in ["stopped", "targetExited", "error"] {
+                    snapshot.capture_state = state.into();
+                    for game_id in [Some("opaque-game-a-storage-hash".into()), None] {
+                        snapshot.game_id = game_id;
+                        let poll = app.capture.request(&app.bridge, "translation.snapshot", json!({})).unwrap();
+                        app.capture.reply(poll, "translation.snapshot",
+                            Ok(serde_json::to_value(&snapshot).unwrap()), &app.bridge, cx);
+                        assert_eq!(app.capture.preset_for_game("container", "game-b"), expected_b.as_ref());
+                        assert_eq!(app.capture.preset.as_ref(), expected_b.as_ref());
+                        assert_eq!(app.capture.preset_for_game("container", "game-a"), Some(&preset_a));
+                    }
+                }
+                assert!(!drain().iter().any(|(m, _)| m == "translation.capture.preset/save"));
+
+                app.capture.architecture = "x86".into();
+                app.capture.toggle_preset_auto_attach(&app.bridge);
+                let calls = drain();
+                let (_, saved) = calls.iter().find(|(m, _)| m == "translation.capture.preset/save").unwrap();
+                assert_eq!(saved["entryID"], "game-b");
+                assert_eq!(saved["restoreHistory"], false);
+                assert_eq!(saved["architecture"], "x86");
+                assert!(saved.get("translationEnabled").is_none());
+                assert!(saved.get("targetExePath").is_none());
+                assert!(saved.get("threadBindings").is_none());
+            }
+        }).unwrap();
     }
 
     #[test]
