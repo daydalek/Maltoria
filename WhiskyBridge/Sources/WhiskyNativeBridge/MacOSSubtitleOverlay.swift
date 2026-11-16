@@ -94,6 +94,7 @@ final class OverlayResizeHandleView: NSView {
             }
         }
     }
+
     private var resizeTrackingArea: NSTrackingArea?
 
     override var mouseDownCanMoveWindow: Bool { false }
@@ -250,10 +251,38 @@ final class OverlayResizeHandleView: NSView {
             (NSRect(x: bounds.maxX - cornerX, y: bounds.maxY - cornerY, width: cornerX, height: cornerY), .topRight),
             (NSRect(x: bounds.minX, y: bounds.minY, width: cornerX, height: cornerY), .bottomLeft),
             (NSRect(x: bounds.maxX - cornerX, y: bounds.minY, width: cornerX, height: cornerY), .bottomRight),
-            (NSRect(x: bounds.minX, y: bounds.minY + cornerY, width: edgeX, height: max(0, bounds.height - 2 * cornerY)), .left),
-            (NSRect(x: bounds.maxX - edgeX, y: bounds.minY + cornerY, width: edgeX, height: max(0, bounds.height - 2 * cornerY)), .right),
-            (NSRect(x: bounds.minX + cornerX, y: bounds.minY, width: max(0, bounds.width - 2 * cornerX), height: edgeY), .bottom),
-            (NSRect(x: bounds.minX + cornerX, y: bounds.maxY - edgeY, width: max(0, bounds.width - 2 * cornerX), height: edgeY), .top)
+            (
+                NSRect(x: bounds.minX, y: bounds.minY + cornerY, width: edgeX, height: max(
+                    0,
+                    bounds.height - 2 * cornerY
+                )),
+                .left
+            ),
+            (
+                NSRect(x: bounds.maxX - edgeX, y: bounds.minY + cornerY, width: edgeX, height: max(
+                    0,
+                    bounds.height - 2 * cornerY
+                )),
+                .right
+            ),
+            (
+                NSRect(
+                    x: bounds.minX + cornerX,
+                    y: bounds.minY,
+                    width: max(0, bounds.width - 2 * cornerX),
+                    height: edgeY
+                ),
+                .bottom
+            ),
+            (
+                NSRect(
+                    x: bounds.minX + cornerX,
+                    y: bounds.maxY - edgeY,
+                    width: max(0, bounds.width - 2 * cornerX),
+                    height: edgeY
+                ),
+                .top
+            )
         ]
 
         for (rect, edges) in regions where !rect.isEmpty {
@@ -348,6 +377,7 @@ final class OverlayResizeHandleView: NSView {
         path.lineCapStyle = .round
         path.lineJoinStyle = .round
 
+        // swiftlint:disable:next large_tuple
         let corners: [(origin: NSPoint, dx: CGFloat, dy: CGFloat)] = [
             (NSPoint(x: bounds.minX + inset, y: bounds.minY + inset), arm, arm),
             (NSPoint(x: bounds.maxX - inset, y: bounds.minY + inset), -arm, arm),
@@ -469,7 +499,8 @@ final class MacOSSubtitleOverlay: NSObject, NSWindowDelegate {
         guard let panel else { return }
         let targetScreen = NSScreen.main ?? NSScreen.screens.first
         let screenChanged = targetScreen != nil && panel.screen != nil && panel.screen != targetScreen
-        if !panel.isVisible || !panel.isOnActiveSpace || screenChanged || panel.level != FullscreenOverlaySupport.windowLevel {
+        if !panel.isVisible || !panel.isOnActiveSpace || screenChanged || panel.level != FullscreenOverlaySupport
+            .windowLevel {
             reassertPanelForFullscreen()
         }
     }
@@ -669,6 +700,7 @@ final class MacOSSubtitleOverlay: NSObject, NSWindowDelegate {
             updateWrappingWidths(for: width)
         }
     }
+
     private func rememberFrame() {
         guard !applying, let frame = panel?.frame else { return }
         settings.x = frame.origin.x

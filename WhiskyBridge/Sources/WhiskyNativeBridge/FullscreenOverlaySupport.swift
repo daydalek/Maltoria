@@ -66,8 +66,8 @@ enum FullscreenOverlaySupport {
 /// Manages workspace Space/activation and display-parameter observers for overlay panels.
 @MainActor
 final class OverlayReassertObserver {
-    nonisolated(unsafe) private var workspaceTokens: [any NSObjectProtocol] = []
-    nonisolated(unsafe) private var defaultTokens: [any NSObjectProtocol] = []
+    private nonisolated(unsafe) var workspaceTokens: [any NSObjectProtocol] = []
+    private nonisolated(unsafe) var defaultTokens: [any NSObjectProtocol] = []
 
     init(onReassert: @escaping @MainActor () -> Void) {
         let workspaceCenter = NSWorkspace.shared.notificationCenter

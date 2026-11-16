@@ -161,6 +161,7 @@ public final class ApplicationCaptureService {
         return executable.deletingLastPathComponent().appendingPathComponent("LunaHook")
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     public func call(
         _ method: String,
         params: [String: JSONValue],
@@ -279,7 +280,8 @@ public final class ApplicationCaptureService {
         guard let selectedProvider = try UUID(uuidString: params.text("providerID"))
         else { throw hookFailure("invalid_provider") }
         let resolvedGameID = LibraryStorageLayout.key(prefix.standardizedFileURL.path + "\n" + entry.id)
-        let existingPreset = try? await CapturePresetRepository(directory: presetDirectory, gameID: resolvedGameID).load()
+        let existingPreset = try? await CapturePresetRepository(directory: presetDirectory, gameID: resolvedGameID)
+            .load()
         let arch = params["architecture"]?.string ?? existingPreset?.architecture ?? "x64"
         guard ["x86", "x64"].contains(arch) else { throw hookFailure("invalid_architecture") }
         let restoreHistory = params["restoreHistory"]?.bool ?? existingPreset?.restoreHistory ?? false
@@ -410,16 +412,16 @@ public final class ApplicationCaptureService {
 
     private func autoAttach() async throws -> JSONValue {
         guard captureState == "selecting", let currentGameID = gameID, target == nil else {
-            return .object(["attached": .bool(false), "snapshot": await snapshot()])
+            return await .object(["attached": .bool(false), "snapshot": snapshot()])
         }
         guard let preset = try await CapturePresetRepository(directory: presetDirectory, gameID: currentGameID).load(),
               let savedPath = preset.targetExePath, !savedPath.isEmpty
         else {
-            return .object(["attached": .bool(false), "snapshot": await snapshot()])
+            return await .object(["attached": .bool(false), "snapshot": snapshot()])
         }
         _ = try await listProcesses()
         let attached = try await matchAndAttach(using: preset)
-        return .object(["attached": .bool(attached), "snapshot": await snapshot()])
+        return await .object(["attached": .bool(attached), "snapshot": snapshot()])
     }
 
     private func matchAndAttach(using preset: CapturePreset) async throws -> Bool {
@@ -528,6 +530,7 @@ public final class ApplicationCaptureService {
         return .object(["selected": .integer(Int64(roles.count))])
     }
 
+    // swiftlint:disable:next function_body_length
     private func consume(_ value: JSONValue, channel: String) async {
         guard channel == channelID, let frame = value.object, let target,
               let pid = target.object?["guestPID"]
@@ -738,6 +741,7 @@ public final class ApplicationCaptureService {
         pendingDebounceText = nil
     }
 
+    // swiftlint:disable:next function_parameter_count
     private func submitCapturedText(
         text: String,
         speaker: String?,
@@ -819,8 +823,11 @@ public final class ApplicationCaptureService {
         await refreshSubtitle()
         let count = await session?.history().count ?? 0
         let presetValue: JSONValue = if let gameID,
-           let saved = try? await CapturePresetRepository(directory: presetDirectory, gameID: gameID).load(),
-           let encoded = try? JSONValue.encoded(saved) {
+                                        let saved = try? await CapturePresetRepository(
+                                            directory: presetDirectory,
+                                            gameID: gameID
+                                        ).load(),
+                                        let encoded = try? JSONValue.encoded(saved) {
             encoded
         } else {
             .null
@@ -1020,7 +1027,8 @@ public final class ApplicationCaptureService {
             for: thread,
             in: pendingBindings,
             activeRoles: roles
-        ) else { return false }
+        )
+        else { return false }
         let binding = pendingBindings.remove(at: index)
         roles[key] = binding.role
         autoBoundCount += 1
@@ -1106,7 +1114,7 @@ public final class ApplicationCaptureService {
         mutate: (inout CapturePreset) -> Void
     ) async throws -> CapturePreset {
         let repo = CapturePresetRepository(directory: presetDirectory, gameID: gameID)
-        var preset = (try? await repo.load()) ?? CapturePreset(autoAttach: true)
+        var preset = await (try? repo.load()) ?? CapturePreset(autoAttach: true)
         mutate(&preset)
         try await repo.save(preset)
         return preset

@@ -111,6 +111,7 @@ public protocol SentenceTranslationCaching: Sendable {
     ) async throws -> SentenceCacheRecord?
 
     @discardableResult
+    // swiftlint:disable:next function_parameter_count
     func store(
         gameID: String,
         sourceText: String,
@@ -200,6 +201,7 @@ public actor PersistentSentenceCache: SentenceTranslationCaching {
     }
 
     @discardableResult
+    // swiftlint:disable:next function_parameter_count
     public func store(
         gameID: String,
         sourceText: String,
@@ -344,13 +346,12 @@ public actor PersistentSentenceCache: SentenceTranslationCaching {
         } else {
             totalCount
         }
-        let totalBytes: Int
-        if fileManager.fileExists(atPath: fileURL.path),
-           let attributes = try? fileManager.attributesOfItem(atPath: fileURL.path),
-           let size = attributes[.size] as? NSNumber {
-            totalBytes = size.intValue
+        let totalBytes: Int = if fileManager.fileExists(atPath: fileURL.path),
+                                 let attributes = try? fileManager.attributesOfItem(atPath: fileURL.path),
+                                 let size = attributes[.size] as? NSNumber {
+            size.intValue
         } else {
-            totalBytes = 0
+            0
         }
         return (totalCount: totalCount, gameCount: gameCount, totalBytes: totalBytes)
     }

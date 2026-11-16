@@ -508,9 +508,13 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
         }
         runAction { [weak self] in
             guard let self else { return }
-            if let result = try? await capture.call("translation.capture.preset/save", params: params, workspace: workspace),
-               let presetValue = result.object?["preset"],
-               let decoded = try? presetValue.decoded(CapturePreset.self) {
+            if let result = try? await capture.call(
+                "translation.capture.preset/save",
+                params: params,
+                workspace: workspace
+            ),
+                let presetValue = result.object?["preset"],
+                let decoded = try? presetValue.decoded(CapturePreset.self) {
                 self.activePreset = decoded
             }
         }
@@ -873,13 +877,13 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
     }
 
     private func makeStatusBadge() -> NSView {
-        let (text, bg, fg) = statusAppearance()
+        let (text, backgroundColor, foregroundColor) = statusAppearance()
         let container = NSView()
         container.wantsLayer = true
-        container.layer?.backgroundColor = bg.cgColor
+        container.layer?.backgroundColor = backgroundColor.cgColor
         container.layer?.cornerRadius = 5
         container.translatesAutoresizingMaskIntoConstraints = false
-        let label = makeLabel(text, size: 10, weight: .medium, color: fg, lines: 1)
+        let label = makeLabel(text, size: 10, weight: .medium, color: foregroundColor, lines: 1)
         label.lineBreakMode = .byTruncatingTail
         label.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(label)
@@ -893,22 +897,43 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
         return container
     }
 
+    // swiftlint:disable:next large_tuple
     private func statusAppearance() -> (String, NSColor, NSColor) {
         if isWaitingForLaunch {
-            return ("正在等待游戏进程启动…", NSColor.systemBlue.withAlphaComponent(0.24), NSColor(calibratedRed: 0.65, green: 0.85, blue: 1, alpha: 1))
+            return (
+                "正在等待游戏进程启动…",
+                NSColor.systemBlue.withAlphaComponent(0.24),
+                NSColor(calibratedRed: 0.65, green: 0.85, blue: 1, alpha: 1)
+            )
         }
         if errorMessage != nil || currentCaptureState() == "error" {
-            return ("错误", NSColor.systemRed.withAlphaComponent(0.25), NSColor(calibratedRed: 1, green: 0.62, blue: 0.62, alpha: 1))
+            return (
+                "错误",
+                NSColor.systemRed.withAlphaComponent(0.25),
+                NSColor(calibratedRed: 1, green: 0.62, blue: 0.62, alpha: 1)
+            )
         }
         switch currentCaptureState() {
         case "selecting":
-            return ("请选择游戏进程", NSColor.systemOrange.withAlphaComponent(0.24), NSColor(calibratedRed: 1, green: 0.82, blue: 0.52, alpha: 1))
+            return (
+                "请选择游戏进程",
+                NSColor.systemOrange.withAlphaComponent(0.24),
+                NSColor(calibratedRed: 1, green: 0.82, blue: 0.52, alpha: 1)
+            )
         case "connecting", "attaching":
-            return ("正在连接…", NSColor.systemBlue.withAlphaComponent(0.24), NSColor(calibratedRed: 0.65, green: 0.85, blue: 1, alpha: 1))
+            return (
+                "正在连接…",
+                NSColor.systemBlue.withAlphaComponent(0.24),
+                NSColor(calibratedRed: 0.65, green: 0.85, blue: 1, alpha: 1)
+            )
         case "attached":
             let exe = windowsBasename(latestSnapshot.object?["target"]?.object?["exePath"]?.string ?? "")
             let label = exe.isEmpty ? "已附加" : "已附加 · \(exe)"
-            return (label, NSColor.systemGreen.withAlphaComponent(0.24), NSColor(calibratedRed: 0.58, green: 0.94, blue: 0.68, alpha: 1))
+            return (
+                label,
+                NSColor.systemGreen.withAlphaComponent(0.24),
+                NSColor(calibratedRed: 0.58, green: 0.94, blue: 0.68, alpha: 1)
+            )
         default:
             return ("准备扫描", NSColor.white.withAlphaComponent(0.10), NSColor.lightGray)
         }
@@ -1246,14 +1271,14 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
         ]
         let roleButtons = buttons.map { title, roleValue -> NSView in
             let isSelected = (roleValue != nil && currentRole == roleValue)
-            let bg = isSelected
+            let backgroundColor = isSelected
                 ? NSColor.systemBlue.withAlphaComponent(0.78)
                 : NSColor.white.withAlphaComponent(0.11)
-            let fg: NSColor = isSelected ? .white : NSColor(calibratedWhite: 0.88, alpha: 1)
+            let foregroundColor: NSColor = isSelected ? .white : NSColor(calibratedWhite: 0.88, alpha: 1)
             return HUDActionButton(
                 title: title,
-                background: bg,
-                foreground: fg,
+                background: backgroundColor,
+                foreground: foregroundColor,
                 fontSize: 10,
                 weight: isSelected ? .semibold : .regular,
                 cornerRadius: 5,

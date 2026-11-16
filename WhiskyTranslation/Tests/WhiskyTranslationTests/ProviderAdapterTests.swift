@@ -501,6 +501,7 @@ struct ProviderAdapterTests {
         #expect(decoded.thinkingLevel == .default)
     }
 
+    // swiftlint:disable:next function_body_length
     @Test func thinkingLevelMapsAcrossProvidersAndOmitsWhenDefault() async throws {
         let openAISSE = "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n"
         let openAICases: [(ThinkingLevel, String?)] = [

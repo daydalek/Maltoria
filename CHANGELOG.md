@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-16
+
 ### Added
 - Linux translation credentials persist securely through Secret Service instead of silently falling back to session-only storage; the UI now uses Linux system-keyring wording.
 - Linux GPUI subtitle overlay with persistent settings, X11 click-through and geometry controls, and session-specific capability reporting.
@@ -22,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Correctness: `RosettaView` setup now performs its check on the main actor instead of a detached task that mutated `@State` off-actor.
 - CI: `WhiskyCore` and `WhiskyMetadata` unit tests are now actually run in CI (previously their targets existed but no step invoked them).
 - Docs/hygiene: fixed `.gitignore` `/dist/` contradiction (kept `dist/pages/`), added `/.delta/`, corrected GameDB/toolchain pointers, repaired doc links, and clarified frontend roles.
+
+### Distribution
+- Unified prerelease for macOS Apple Silicon and Linux amd64 packages.
 
 ## [0.4.3] - 2026-10-26 (GPUI prerelease)
 

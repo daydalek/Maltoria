@@ -209,7 +209,9 @@ import WhiskyBridgeProtocol
         guard let view else { return [] }
         var result: [NSButton] = []
         if let button = view as? NSButton { result.append(button) }
-        for subview in view.subviews { result.append(contentsOf: buttons(in: subview)) }
+        for subview in view.subviews {
+            result.append(contentsOf: buttons(in: subview))
+        }
         return result
     }
 
@@ -326,6 +328,7 @@ import WhiskyBridgeProtocol
     #expect(OverlayResizeHandleView.hitTestEdges(at: NSPoint(x: 0, y: 0), in: .zero) == [])
 }
 
+// swiftlint:disable:next function_body_length
 @Test @MainActor func overlayResizedFrameSupportsAllEightDirectionsAndClamping() {
     let initial = NSRect(x: 400, y: 200, width: 600, height: 180)
     let minSize = NSSize(width: 320, height: 100)
@@ -642,7 +645,10 @@ import WhiskyBridgeProtocol
 
     let container = root.appendingPathComponent("Bottle")
     let executable = container.appendingPathComponent("drive_c/Game/play.exe")
-    try FileManager.default.createDirectory(at: executable.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(
+        at: executable.deletingLastPathComponent(),
+        withIntermediateDirectories: true
+    )
     try Data([0x4D, 0x5A]).write(to: executable)
     let metadata: [String: Any] = ["info": ["name": "Test", "pins": [], "blocklist": []]]
     try PropertyListSerialization.data(fromPropertyList: metadata, format: .xml, options: 0)

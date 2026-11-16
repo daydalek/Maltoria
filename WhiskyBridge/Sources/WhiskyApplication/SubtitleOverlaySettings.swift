@@ -40,6 +40,7 @@ public struct SubtitleOverlaySettings: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case visible, clickThrough, showSource, showTranslation, fontSize, opacity,
+             // swiftlint:disable:next identifier_name
              textColor, sourceTextColor, width, height, x, y
     }
 

@@ -269,7 +269,8 @@ private final class CaptureHarness {
     #expect(settings.sourceTextColor == "#D4D4D8")
     #expect(try settings.merging(["fontSize": .integer(36)]).fontSize == 36)
     #expect(try settings.merging(["opacity": .number(0)]).opacity == 0)
-    #expect(try settings.merging(["textColor": .string("#12abEF"), "sourceTextColor": .string("#000000")]).textColor == "#12abEF")
+    #expect(try settings.merging(["textColor": .string("#12abEF"), "sourceTextColor": .string("#000000")])
+        .textColor == "#12abEF")
     #expect(throws: BridgeFailure.self) { try settings.merging(["opacity": .number(2)]) }
     #expect(throws: BridgeFailure.self) { try settings.merging(["opacity": .number(-0.01)]) }
     #expect(throws: BridgeFailure.self) { try settings.merging(["textColor": .string("FFFFFF")]) }
@@ -440,8 +441,16 @@ private final class CaptureHarness {
         "context2Hex": .string("0x0000000000000040"),
         "hookName": .string("TextOutW")
     ])
-    await client2.emit(.object(["type": .string("thread"), "action": .string("created"), "thread": shiftedCustomThread]))
-    await client2.emit(.object(["type": .string("thread"), "action": .string("created"), "thread": shiftedSpeakerThread]))
+    await client2.emit(.object([
+        "type": .string("thread"),
+        "action": .string("created"),
+        "thread": shiftedCustomThread
+    ]))
+    await client2.emit(.object([
+        "type": .string("thread"),
+        "action": .string("created"),
+        "thread": shiftedSpeakerThread
+    ]))
     try await harness.wait { await (harness.service.snapshot()).object?["autoBoundCount"] == .integer(2) }
 
     let snapAfterBind = await harness.service.snapshot()
@@ -516,12 +525,22 @@ private final class CaptureHarness {
     try await harness.wait { await (harness.service.snapshot()).object?["threadsTotal"] == .integer(7) }
 
     // Give t2 an older preview, t3 a newer preview, and t7 newer empty activity than t1
-    await client.emit(.object(["type": .string("text"), "thread": makeThread("2"), "text": .string("older"), "sequence": .integer(1)]))
-    await client.emit(.object(["type": .string("text"), "thread": makeThread("3"), "text": .string("newer"), "sequence": .integer(1)]))
+    await client.emit(.object([
+        "type": .string("text"),
+        "thread": makeThread("2"),
+        "text": .string("older"),
+        "sequence": .integer(1)
+    ]))
+    await client.emit(.object([
+        "type": .string("text"),
+        "thread": makeThread("3"),
+        "text": .string("newer"),
+        "sequence": .integer(1)
+    ]))
     await client.emit(.object(["type": .string("thread"), "action": .string("created"), "thread": makeThread("7")]))
 
     try await harness.wait {
-        let list = (try? await harness.call("translation.threads.list"))?.object?["threads"]?.array ?? []
+        let list = await (try? harness.call("translation.threads.list"))?.object?["threads"]?.array ?? []
         return list.first { $0.object?["id"] == .string(ids[2]) }?.object?["preview"] == .string("newer")
     }
 
@@ -541,7 +560,7 @@ private final class CaptureHarness {
         ids[2], // preview + newer activity
         ids[1], // preview + older activity
         ids[6], // no preview + newer activity
-        ids[0]  // no preview + older activity
+        ids[0] // no preview + older activity
     ])
     await harness.service.stop()
 }
@@ -614,7 +633,10 @@ private final class LaunchHUDDriver: LibraryRuntimeDriver {
     func capabilities(for entry: LibraryEntry) -> LibraryRuntimeCapabilities { [.launch] }
     func retainContainers(_ urls: Set<URL>) {}
     func configure(entries: [LibraryEntry], containerURL: URL) async {}
-    func launchProgram(_ request: LibraryLaunchRequest, onStarted: @escaping @MainActor () -> Void) async -> LaunchResult {
+    func launchProgram(
+        _ request: LibraryLaunchRequest,
+        onStarted: @escaping @MainActor () -> Void
+    ) async -> LaunchResult {
         onStarted()
         return .launchedSuccessfully(programName: request.entry.name)
     }
@@ -631,6 +653,7 @@ private final class LaunchHUDNativeStub: NativeApplicationServices {
     var methods: [String] { ["translation.capture.hud/show", "translation.capture.hud/hide"] }
     var capabilities: [String] { [] }
     var registeredCapture: ApplicationCaptureService?
+    // swiftlint:disable:next large_tuple
     var presentedLaunches: [(container: URL, entryID: String, preset: CapturePreset)] = []
     var hudCalls: [(String, [String: JSONValue])] = []
 
@@ -646,7 +669,11 @@ private final class LaunchHUDNativeStub: NativeApplicationServices {
         presentedLaunches.append((container, entry.id, preset))
     }
 
-    func call(_ method: String, params: [String: JSONValue], workspace: ApplicationWorkspace) async throws -> JSONValue {
+    func call(
+        _ method: String,
+        params: [String: JSONValue],
+        workspace: ApplicationWorkspace
+    ) async throws -> JSONValue {
         hudCalls.append((method, params))
         return .object(["visible": .bool(method == "translation.capture.hud/show")])
     }
@@ -955,12 +982,12 @@ private func threadWithHookCode(_ hookCode: String) -> JSONValue {
     // Non-matching game ID leaves capture active
     let ignored = await harness.service.stopIfMatching(gameIDs: ["unrelated-game-id"])
     #expect(!ignored)
-    #expect((await harness.service.snapshot()).object?["captureState"] == .string("attached"))
+    #expect(await (harness.service.snapshot()).object?["captureState"] == .string("attached"))
 
     // Matching game ID stops active capture
     let stopped = await harness.service.stopIfMatching(gameIDs: [gameID])
     #expect(stopped)
-    #expect((await harness.service.snapshot()).object?["captureState"] == .string("stopped"))
+    #expect(await (harness.service.snapshot()).object?["captureState"] == .string("stopped"))
 
     // Already stopped capture returns false
     let alreadyStopped = await harness.service.stopIfMatching(gameIDs: [gameID])

@@ -152,6 +152,7 @@ struct RuntimeAndLinuxBridgeTests {
         await service.shutdown()
     }
 
+    // swiftlint:disable:next function_body_length
     @Test @MainActor func runtimeServiceOnEntriesEndedFiresOnStopAndLaunchFailure() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("whisky-rt-ended-\(UUID())")
         defer { try? FileManager.default.removeItem(at: root) }

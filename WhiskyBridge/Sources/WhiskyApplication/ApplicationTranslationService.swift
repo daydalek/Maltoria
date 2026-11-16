@@ -390,7 +390,7 @@ public final class ApplicationTranslationService {
     func captureSettings() async throws -> TranslationSettings { try await catalog.snapshot().settings }
 
     func currentDebounceMs() async -> Int {
-        (try? await catalog.snapshot().settings.translationDebounceMs) ?? 150
+        await (try? catalog.snapshot().settings.translationDebounceMs) ?? 150
     }
 
     func clearSentenceCache(gameID: String?) async throws -> (totalCount: Int, totalBytes: Int) {
