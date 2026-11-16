@@ -79,7 +79,9 @@ actor CaptureHistoryRepository: TranslationRepository {
 public final class ApplicationCaptureService {
     public static let methods = [
         "translation.capture.start", "translation.capture.processes", "translation.capture.attach",
+        "translation.capture.autoAttach",
         "translation.capture.detach", "translation.capture.stop", "translation.capture.insertHook",
+        "translation.capture.preset/get", "translation.capture.preset/save", "translation.capture.preset/clear",
         "translation.threads.select", "translation.threads.list", "translation.snapshot", "translation.events",
         "translation.history",
         "translation.history.text",
@@ -88,16 +90,23 @@ public final class ApplicationCaptureService {
     public typealias Launcher = @MainActor (URL, URL, [String: String]) throws -> TranslationHelperHandle
     public typealias ClientFactory = @MainActor (String, String) throws -> HookClientBootstrap
     public var onSubtitle: ((JSONValue) -> Void)?
+    public var onStateUpdate: ((JSONValue) -> Void)?
     private let profiles: ApplicationTranslationService
     private let launcher: Launcher
     private let clientFactory: ClientFactory
     private let payloadRoot: URL
+    private let presetDirectory: URL
     private let requirePayload: Bool
     private var client: (any HookClient)?
     private var helper: TranslationHelperHandle?
     private var incoming: Task<Void, Never>?
     private var heartbeat: Task<Void, Never>?
     private var updates: Task<Void, Never>?
+    private var stateUpdateTask: Task<Void, Never>?
+    private var debounceTask: Task<Void, Never>?
+    private var debounceGeneration: UInt64 = 0
+    private var pendingDebounceKey: String?
+    private var pendingDebounceText: String?
     private var session: TranslationSession?
     private var captureID: String?
     private var channelID: String?
@@ -110,6 +119,10 @@ public final class ApplicationCaptureService {
     private var threads: [String: [String: JSONValue]] = [:]
     private var roles: [String: String] = [:]
     private var sequences: [String: Int64] = [:]
+    private var pendingBindings: [CaptureThreadBinding] = []
+    private var autoBoundCount = 0
+    private var lastActivity: [String: UInt64] = [:]
+    private var nextActivityCounter: UInt64 = 0
     private var speaker: String?
     private var activeSourceID: UUID?
     private var activeEntryID: UUID?
@@ -128,6 +141,7 @@ public final class ApplicationCaptureService {
         profiles: ApplicationTranslationService,
         payloadRoot: URL? = nil,
         requirePayload: Bool = true,
+        presetDirectory: URL? = nil,
         clientFactory: @escaping ClientFactory = { try HookIPCClient.make(session: $0, architecture: $1) },
         launcher: @escaping Launcher
     ) {
@@ -136,6 +150,7 @@ public final class ApplicationCaptureService {
         self.clientFactory = clientFactory
         self.requirePayload = requirePayload
         self.payloadRoot = payloadRoot ?? Self.defaultPayloadRoot()
+        self.presetDirectory = presetDirectory ?? profiles.storageDirectory
     }
 
     public static func defaultPayloadRoot() -> URL {
@@ -155,6 +170,7 @@ public final class ApplicationCaptureService {
         case "translation.capture.start": return try await start(params, workspace: workspace)
         case "translation.capture.processes": return try await listProcesses()
         case "translation.capture.attach": return try await attach(params)
+        case "translation.capture.autoAttach": return try await autoAttach()
         case "translation.capture.detach", "translation.capture.stop":
             await stop()
             return await snapshot()
@@ -162,7 +178,21 @@ public final class ApplicationCaptureService {
             guard target != nil, let client else { throw hookFailure("not_attached") }
             let code = try params.text("hookCode")
             guard !code.isEmpty, code.utf8.count <= 2_048 else { throw hookFailure("invalid_hook_code") }
-            return try await client.request("insertHook", params: ["hookCode": .string(code)])
+            let result = try await client.request("insertHook", params: ["hookCode": .string(code)])
+            if let currentGameID = gameID {
+                _ = try? await updatePreset(for: currentGameID) { current in
+                    if !current.customHookCodes.contains(code) {
+                        current.customHookCodes.append(code)
+                        if current.customHookCodes.count > 16 {
+                            current.customHookCodes.removeFirst(current.customHookCodes.count - 16)
+                        }
+                    }
+                }
+            }
+            return result
+        case "translation.capture.preset/get": return try await getPreset(params, workspace: workspace)
+        case "translation.capture.preset/save": return try await savePreset(params, workspace: workspace)
+        case "translation.capture.preset/clear": return try await clearPreset(params, workspace: workspace)
         case "translation.threads.select": return try await selectThreads(params)
         case "translation.threads.list": return threadPage(params)
         case "translation.snapshot": return await snapshot()
@@ -207,6 +237,7 @@ public final class ApplicationCaptureService {
             try await session.setIncludedInContext(included, entryID: id)
             return .object(["updated": .bool(true)])
         case "translation.history.clear":
+            cancelDebounce()
             selectionEpoch += 1
             activeSourceID = nil
             activeEntryID = nil
@@ -216,8 +247,28 @@ public final class ApplicationCaptureService {
             try await session?.clearHistory()
             return .object(["cleared": .bool(true)])
         case "translation.cache.clear":
-            await session?.clearCache()
-            return .object(["cleared": .bool(true)])
+            let requestedGameID: String?
+            switch params["gameID"] {
+            case nil, .null:
+                requestedGameID = nil
+            case let .string(value):
+                requestedGameID = value.isEmpty ? nil : value
+            default:
+                throw BridgeFailure("invalid_params", "Expected string: gameID")
+            }
+            if let requestedGameID {
+                if gameID == requestedGameID {
+                    await session?.clearCache()
+                }
+            } else {
+                await session?.clearCache()
+            }
+            let remaining = try await profiles.clearSentenceCache(gameID: requestedGameID)
+            return .object([
+                "cleared": .bool(true),
+                "totalCount": .integer(Int64(remaining.totalCount)),
+                "totalBytes": .integer(Int64(remaining.totalBytes))
+            ])
         default: throw BridgeFailure("method_unavailable", "Translation capture method is unavailable")
         }
     }
@@ -227,14 +278,18 @@ public final class ApplicationCaptureService {
         let prefix = try workspace.resolve(params)
         guard let selectedProvider = try UUID(uuidString: params.text("providerID"))
         else { throw hookFailure("invalid_provider") }
-        let arch = params["architecture"]?.string ?? "x64"
+        let resolvedGameID = LibraryStorageLayout.key(prefix.standardizedFileURL.path + "\n" + entry.id)
+        let existingPreset = try? await CapturePresetRepository(directory: presetDirectory, gameID: resolvedGameID).load()
+        let arch = params["architecture"]?.string ?? existingPreset?.architecture ?? "x64"
         guard ["x86", "x64"].contains(arch) else { throw hookFailure("invalid_architecture") }
+        let restoreHistory = params["restoreHistory"]?.bool ?? existingPreset?.restoreHistory ?? false
+        let shouldAutoAttach = params["autoAttach"]?.bool ?? false
         await stop()
         session = nil
         let id = UUID().uuidString
         captureID = id
         container = prefix
-        gameID = LibraryStorageLayout.key(prefix.standardizedFileURL.path + "\n" + entry.id)
+        gameID = resolvedGameID
         providerID = selectedProvider
         captureState = "connecting"
         lastError = nil
@@ -252,9 +307,9 @@ public final class ApplicationCaptureService {
             // A missing payload or failed helper launch must not clear the
             // previous game's persisted history.
             session = try await profiles.makeCaptureSession(
-                gameID: gameID!,
+                gameID: resolvedGameID,
                 providerID: selectedProvider,
-                restoreHistory: params["restoreHistory"]?.bool ?? false
+                restoreHistory: restoreHistory
             )
             guard captureID == id else { throw CancellationError() }
             captureState = "selecting"
@@ -265,6 +320,16 @@ public final class ApplicationCaptureService {
                 }
             }
             emit("state", .string(captureState))
+            let preset = try await updatePreset(for: resolvedGameID) { current in
+                current.providerID = selectedProvider
+                current.architecture = arch
+                current.restoreHistory = restoreHistory
+                current.translationEnabled = true
+            }
+            scheduleStateUpdate(debounced: false)
+            if shouldAutoAttach, let savedPath = preset.targetExePath, !savedPath.isEmpty {
+                _ = try await matchAndAttach(using: preset)
+            }
             return await snapshot()
         } catch {
             if captureID == id { await stop()
@@ -331,6 +396,7 @@ public final class ApplicationCaptureService {
               list.count <= 512
         else { throw hookFailure("invalid_process_list") }
         processes = list.filter { Self.validTarget($0) }
+        scheduleStateUpdate(debounced: false)
         return .object(["processes": .array(processes), "truncated": result.object?["truncated"] ?? .bool(false)])
     }
 
@@ -338,20 +404,72 @@ public final class ApplicationCaptureService {
         guard let selected = params["target"], Self.validTarget(selected), processes.contains(selected) else {
             throw hookFailure("invalid_target")
         }
-        guard target == nil, let id = captureID else { throw hookFailure("already_attached") }
+        try await attachTarget(selected)
+        return await snapshot()
+    }
+
+    private func autoAttach() async throws -> JSONValue {
+        guard captureState == "selecting", let currentGameID = gameID, target == nil else {
+            return .object(["attached": .bool(false), "snapshot": await snapshot()])
+        }
+        guard let preset = try await CapturePresetRepository(directory: presetDirectory, gameID: currentGameID).load(),
+              let savedPath = preset.targetExePath, !savedPath.isEmpty
+        else {
+            return .object(["attached": .bool(false), "snapshot": await snapshot()])
+        }
+        _ = try await listProcesses()
+        let attached = try await matchAndAttach(using: preset)
+        return .object(["attached": .bool(attached), "snapshot": await snapshot()])
+    }
+
+    private func matchAndAttach(using preset: CapturePreset) async throws -> Bool {
+        guard captureState == "selecting", target == nil,
+              let savedPath = preset.targetExePath, !savedPath.isEmpty,
+              let matched = CapturePresetMatcher.matchProcess(
+                  targetExePath: savedPath,
+                  preferredArchitecture: preset.architecture,
+                  in: processes
+              )
+        else { return false }
+        try await attachTarget(matched)
+        return true
+    }
+
+    private func attachTarget(_ selected: JSONValue) async throws {
+        guard target == nil, let id = captureID, let currentGameID = gameID else {
+            throw hookFailure("already_attached")
+        }
         let arch = selected.object!["arch"]!.string!
+        let exePath = selected.object!["exePath"]!.string!
         do {
             if arch != architecture { try await openChannel(architecture: arch) }
             guard let client, captureID == id else { throw CancellationError() }
+            let existingPreset = try? await CapturePresetRepository(
+                directory: presetDirectory,
+                gameID: currentGameID
+            ).load()
+            autoBoundCount = 0
+            pendingBindings = existingPreset?.threadBindings ?? []
             target = selected
             captureState = "attaching"
             _ = try await client.request("attach", params: ["target": selected])
             guard captureID == id else { throw CancellationError() }
+            let preset = try await updatePreset(for: currentGameID) { current in
+                current.targetExePath = exePath
+                current.architecture = arch
+                current.translationEnabled = true
+            }
+            for code in preset.customHookCodes {
+                guard captureID == id else { break }
+                _ = try? await client.request("insertHook", params: ["hookCode": .string(code)])
+            }
+            guard captureID == id else { throw CancellationError() }
             captureState = "attached"
             emit("state", .string(captureState))
-            return await snapshot()
+            scheduleStateUpdate(debounced: false)
         } catch {
-            if captureID == id { await stop()
+            if captureID == id {
+                await stop()
                 setError(error)
             }
             throw error
@@ -373,22 +491,39 @@ public final class ApplicationCaptureService {
               selections.count <= 8
         else { throw hookFailure("invalid_threads") }
         var next: [String: String] = [:]
+        var bindings: [CaptureThreadBinding] = []
         for selection in selections {
-            guard let object = selection.object, let id = object["threadID"]?.string, threads[id] != nil,
+            guard let object = selection.object, let id = object["threadID"]?.string,
+                  let thread = threads[id],
                   let role = object["role"]?.string, ["body", "speaker", "choice"].contains(role), next[id] == nil
             else { throw hookFailure("invalid_threads") }
             next[id] = role
+            bindings.append(CaptureThreadBinding(
+                role: role,
+                hookCode: thread["hookCode"]?.string ?? "",
+                hookName: thread["hookName"]?.string ?? "",
+                contextHex: thread["contextHex"]?.string ?? "",
+                context2Hex: thread["context2Hex"]?.string ?? ""
+            ))
         }
         guard next.values.filter({ $0 == "body" }).count <= 1,
               next.values.filter({ $0 == "speaker" }).count <= 1
         else { throw hookFailure("invalid_threads") }
         roles = next
+        pendingBindings = []
+        cancelDebounce()
         selectionEpoch += 1
         activeSourceID = nil
         activeEntryID = nil
         speaker = nil
         markSubtitleCancelled()
+        if let currentGameID = gameID {
+            _ = try? await updatePreset(for: currentGameID) { current in
+                current.threadBindings = bindings
+            }
+        }
         emit("threadsChanged", .null)
+        scheduleStateUpdate(debounced: false)
         try await session?.cancelActive()
         return .object(["selected": .integer(Int64(roles.count))])
     }
@@ -403,10 +538,12 @@ public final class ApplicationCaptureService {
                 await stop()
                 captureState = "targetExited"
                 emit("state", .string(captureState))
+                scheduleStateUpdate(debounced: false)
             }
         case "error":
             lastError = String((frame["code"]?.string ?? "capture_error").prefix(80))
             emit("error", .string(lastError!))
+            scheduleStateUpdate(debounced: false)
         case "thread", "text":
             guard let thread = frame["thread"]?.object, thread["guestPID"] == pid,
                   let address = thread["addressHex"]?.string, let context = thread["contextHex"]?.string,
@@ -418,7 +555,12 @@ public final class ApplicationCaptureService {
                 threads[key] = nil
                 roles[key] = nil
                 sequences[key] = nil
+                lastActivity[key] = nil
+                if pendingDebounceKey == key {
+                    cancelDebounce()
+                }
                 emit("threadsChanged", .null)
+                scheduleStateUpdate(debounced: true)
                 return
             }
             guard threads[key] != nil || threads.count < 256 else { lastError = "thread_limit"
@@ -427,54 +569,224 @@ public final class ApplicationCaptureService {
             var record = thread
             record["id"] = .string(key)
             record["preview"] = threads[key]?["preview"] ?? .string("")
+            if record["hookCode"] == nil, let existingHookCode = threads[key]?["hookCode"] {
+                record["hookCode"] = existingHookCode
+            }
             threads[key] = record
-            guard frame["type"] == .string("text"), let text = frame["text"]?.string,
+            if frame["type"] == .string("thread") {
+                nextActivityCounter += 1
+                lastActivity[key] = nextActivityCounter
+                if tryAutoBindThread(key: key, thread: record) {
+                    emit("threadsChanged", .null)
+                    scheduleStateUpdate(debounced: true)
+                }
+                return
+            }
+            guard let text = frame["text"]?.string,
                   !text.isEmpty, text.utf8.count <= 64 * 1_024,
                   let sequence = frame["sequence"]?.integer, sequence > (sequences[key] ?? 0)
             else { return }
             sequences[key] = sequence
+            nextActivityCounter += 1
+            lastActivity[key] = nextActivityCounter
             threads[key]?["preview"] = .string(String(text.prefix(256)))
+            _ = tryAutoBindThread(key: key, thread: threads[key]!)
             emit("threadsChanged", .null)
+            scheduleStateUpdate(debounced: true)
             guard let role = roles[key] else { return }
             if role == "speaker" { speaker = String(text.prefix(256))
                 return
             }
             guard let session, let providerID else { return }
+            let hookCode = record["hookCode"]?.string ?? ""
+            let nextText = coalescedText(for: text, key: key, hookCode: hookCode)
+            cancelDebounce()
+            let generation = debounceGeneration
             let sourceID = UUID()
             let selectedAt = selectionEpoch
+            let currentSpeaker = speaker
             activeSourceID = sourceID
             activeEntryID = nil
             subtitle = .object([
-                "source": .string(text), "translation": .string(""), "speaker": speaker.map(JSONValue.string) ?? .null,
+                "source": .string(nextText), "translation": .string(""),
+                "speaker": currentSpeaker.map(JSONValue.string) ?? .null,
                 "kind": .string(role), "status": .string("pending"), "error": .null
             ])
             emit("subtitle", subtitle)
             onSubtitle?(subtitle)
-            do {
-                try await profiles.allowTranslation(providerID: providerID)
-                guard channel == channelID, selectedAt == selectionEpoch else { return }
-                let entryID = try await session.submit(FinalizedTranslationSource(
-                    eventID: sourceID,
-                    revision: 0,
-                    streamID: key,
-                    generation: 1,
-                    text: text,
-                    speaker: speaker
-                ))
-                guard channel == channelID, selectedAt == selectionEpoch, activeSourceID == sourceID else { return }
-                activeEntryID = entryID
-            } catch {
-                guard channel == channelID, selectedAt == selectionEpoch, activeSourceID == sourceID else { return }
-                setError(error)
-                if var display = subtitle.object {
-                    display["status"] = .string("failed")
-                    display["error"] = .string(lastError!)
-                    subtitle = .object(display)
-                    emit("subtitle", subtitle)
-                    onSubtitle?(subtitle)
+            let delayMs = await profiles.currentDebounceMs()
+            guard channel == channelID,
+                  selectedAt == selectionEpoch,
+                  activeSourceID == sourceID,
+                  debounceGeneration == generation
+            else { return }
+            if delayMs <= 0 {
+                await submitCapturedText(
+                    text: nextText,
+                    speaker: currentSpeaker,
+                    key: key,
+                    sourceID: sourceID,
+                    providerID: providerID,
+                    session: session,
+                    channel: channel,
+                    selectedAt: selectedAt,
+                    generation: generation
+                )
+            } else {
+                pendingDebounceKey = key
+                pendingDebounceText = nextText
+                debounceTask = Task { @MainActor [weak self] in
+                    do {
+                        try await Task.sleep(for: .milliseconds(delayMs))
+                    } catch {
+                        return
+                    }
+                    guard let self,
+                          !Task.isCancelled,
+                          self.debounceGeneration == generation,
+                          self.channelID == channel,
+                          self.selectionEpoch == selectedAt,
+                          self.activeSourceID == sourceID
+                    else { return }
+                    self.debounceTask = nil
+                    self.pendingDebounceKey = nil
+                    self.pendingDebounceText = nil
+                    await self.submitCapturedText(
+                        text: nextText,
+                        speaker: currentSpeaker,
+                        key: key,
+                        sourceID: sourceID,
+                        providerID: providerID,
+                        session: session,
+                        channel: channel,
+                        selectedAt: selectedAt,
+                        generation: generation
+                    )
                 }
             }
         default: break
+        }
+    }
+
+    private static let maxCoalescedDebounceChars = 2_000
+
+    private func coalescedText(for text: String, key: String, hookCode: String) -> String {
+        guard Self.isCharByCharHook(hookCode),
+              debounceTask != nil,
+              pendingDebounceKey == key,
+              let pending = pendingDebounceText,
+              !pending.hasSuffix("\n"),
+              !pending.hasSuffix("\r")
+        else {
+            return text
+        }
+        if text.hasPrefix(pending) {
+            return text
+        }
+        guard pending.count + text.count <= Self.maxCoalescedDebounceChars else {
+            return text
+        }
+        return pending + text
+    }
+
+    /// Returns `true` only when `hookCode` matches a LunaHook character-by-character hook
+    /// without the `FULL_STRING` (`F`) flag:
+    /// `[E[X|[D][N|O]]]{H|B}{W|C|I|A|B}[X][F][N]...[@address]`.
+    /// Direct-read (`R...`), string (`M|Q|V|U|S`), `F`-flagged, empty, and unknown hook codes
+    /// return `false` so every incoming text event replaces pending debounce state cleanly.
+    nonisolated static func isCharByCharHook(_ hookCode: String) -> Bool {
+        let header = hookCode.split(separator: "@", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
+        guard !header.isEmpty, header.first != "R" else { return false }
+
+        var index = header.startIndex
+        if header[index] == "E" {
+            header.formIndex(after: &index)
+            if index < header.endIndex, header[index] == "X" {
+                header.formIndex(after: &index)
+            } else {
+                if index < header.endIndex, header[index] == "D" {
+                    header.formIndex(after: &index)
+                }
+                if index < header.endIndex, header[index] == "N" || header[index] == "O" {
+                    header.formIndex(after: &index)
+                }
+            }
+        }
+
+        guard index < header.endIndex, header[index] == "H" || header[index] == "B" else {
+            return false
+        }
+        header.formIndex(after: &index)
+
+        guard index < header.endIndex, ["W", "C", "I", "A", "B"].contains(header[index]) else {
+            return false
+        }
+        header.formIndex(after: &index)
+
+        while index < header.endIndex, ["X", "F", "N"].contains(header[index]) {
+            if header[index] == "F" { return false }
+            header.formIndex(after: &index)
+        }
+        return true
+    }
+
+    private func cancelDebounce() {
+        debounceGeneration &+= 1
+        debounceTask?.cancel()
+        debounceTask = nil
+        pendingDebounceKey = nil
+        pendingDebounceText = nil
+    }
+
+    private func submitCapturedText(
+        text: String,
+        speaker: String?,
+        key: String,
+        sourceID: UUID,
+        providerID: UUID,
+        session: TranslationSession,
+        channel: String,
+        selectedAt: Int,
+        generation: UInt64
+    ) async {
+        do {
+            try await profiles.allowTranslation(providerID: providerID)
+            guard channel == channelID,
+                  selectedAt == selectionEpoch,
+                  activeSourceID == sourceID,
+                  debounceGeneration == generation
+            else { return }
+            let entryID = try await session.submit(FinalizedTranslationSource(
+                eventID: sourceID,
+                revision: 0,
+                streamID: key,
+                generation: 1,
+                text: text,
+                speaker: speaker
+            ))
+            guard channel == channelID,
+                  selectedAt == selectionEpoch,
+                  activeSourceID == sourceID,
+                  debounceGeneration == generation
+            else { return }
+            activeEntryID = entryID
+            await refreshSubtitle()
+        } catch is CancellationError {
+            return
+        } catch {
+            guard channel == channelID,
+                  selectedAt == selectionEpoch,
+                  activeSourceID == sourceID,
+                  debounceGeneration == generation
+            else { return }
+            setError(error)
+            if var display = subtitle.object {
+                display["status"] = .string("failed")
+                display["error"] = .string(lastError!)
+                subtitle = .object(display)
+                emit("subtitle", subtitle)
+                onSubtitle?(subtitle)
+            }
         }
     }
 
@@ -494,16 +806,34 @@ public final class ApplicationCaptureService {
         }
     }
 
+    public func preset(container: URL, entryID: String) async -> CapturePreset? {
+        let id = LibraryStorageLayout.key(container.standardizedFileURL.path + "\n" + entryID)
+        return try? await CapturePresetRepository(directory: presetDirectory, gameID: id).load()
+    }
+
+    public func currentSnapshot() async -> JSONValue {
+        await snapshot()
+    }
+
     public func snapshot() async -> JSONValue {
         await refreshSubtitle()
         let count = await session?.history().count ?? 0
+        let presetValue: JSONValue = if let gameID,
+           let saved = try? await CapturePresetRepository(directory: presetDirectory, gameID: gameID).load(),
+           let encoded = try? JSONValue.encoded(saved) {
+            encoded
+        } else {
+            .null
+        }
         return .object([
             "sessionID": captureID.map(JSONValue.string) ?? .null, "gameID": gameID.map(JSONValue.string) ?? .null,
             "captureState": .string(captureState), "lastError": lastError.map(JSONValue.string) ?? .null,
             "target": target ?? .null, "subtitle": subtitle, "cursor": .integer(cursor),
             "processes": .array(processes), "historyCount": .integer(Int64(count)),
             "threads": threadPage([:]).object?["threads"] ?? .array([]),
-            "threadsTotal": .integer(Int64(threads.count))
+            "threadsTotal": .integer(Int64(threads.count)),
+            "autoBoundCount": .integer(Int64(autoBoundCount)),
+            "preset": presetValue
         ])
     }
 
@@ -533,7 +863,18 @@ public final class ApplicationCaptureService {
     private func threadPage(_ params: [String: JSONValue]) -> JSONValue {
         let offset = min(threads.count, max(0, Int(params["offset"]?.integer ?? 0)))
         let count = min(64, max(1, Int(params["maxCount"]?.integer ?? 64)))
-        let keys = threads.keys.sorted()
+        let keys = threads.keys.sorted { lhs, rhs in
+            let lhsRole = Self.roleSortPriority(roles[lhs])
+            let rhsRole = Self.roleSortPriority(roles[rhs])
+            if lhsRole != rhsRole { return lhsRole < rhsRole }
+            let lhsHasPreview = !(threads[lhs]?["preview"]?.string ?? "").isEmpty
+            let rhsHasPreview = !(threads[rhs]?["preview"]?.string ?? "").isEmpty
+            if lhsHasPreview != rhsHasPreview { return lhsHasPreview && !rhsHasPreview }
+            let lhsActivity = lastActivity[lhs] ?? 0
+            let rhsActivity = lastActivity[rhs] ?? 0
+            if lhsActivity != rhsActivity { return lhsActivity > rhsActivity }
+            return lhs < rhs
+        }
         let records: [JSONValue] = keys.dropFirst(offset).prefix(count).compactMap { key in
             guard var thread = threads[key] else { return nil }
             thread["role"] = roles[key].map(JSONValue.string) ?? .null
@@ -547,16 +888,41 @@ public final class ApplicationCaptureService {
         ])
     }
 
+    private static func roleSortPriority(_ role: String?) -> Int {
+        switch role {
+        case "body": 0
+        case "speaker": 1
+        case "choice": 2
+        default: 3
+        }
+    }
+
     private func emit(_ type: String, _ value: JSONValue) {
         cursor += 1
         eventBuffer.append(.object(["cursor": .integer(cursor), "type": .string(type), "value": value]))
         if eventBuffer.count > 64 { eventBuffer.removeFirst(eventBuffer.count - 64) }
     }
 
+    private func scheduleStateUpdate(debounced: Bool) {
+        guard onStateUpdate != nil else { return }
+        stateUpdateTask?.cancel()
+        stateUpdateTask = Task { @MainActor [weak self] in
+            if debounced {
+                try? await Task.sleep(for: .milliseconds(60))
+                guard !Task.isCancelled else { return }
+            }
+            guard let self, let onStateUpdate = self.onStateUpdate else { return }
+            let value = await self.currentSnapshot()
+            guard !Task.isCancelled else { return }
+            onStateUpdate(value)
+        }
+    }
+
     private func setError(_ error: any Error) {
         lastError = (error as? BridgeFailure)?.code ?? "translation_failed"
         if let error = error as? TranslationError { lastError = error.localizedDescription }
         emit("error", .string(lastError!))
+        scheduleStateUpdate(debounced: false)
     }
 
     private func disconnected(channel: String, error: any Error) async {
@@ -586,6 +952,7 @@ public final class ApplicationCaptureService {
 
     public func stop() async {
         let oldSession = session
+        cancelDebounce()
         captureID = nil
         selectionEpoch += 1
         activeSourceID = nil
@@ -596,11 +963,16 @@ public final class ApplicationCaptureService {
         threads = [:]
         roles = [:]
         sequences = [:]
+        pendingBindings = []
+        autoBoundCount = 0
+        lastActivity = [:]
+        nextActivityCounter = 0
         processes = []
         speaker = nil
         captureState = "stopped"
         markSubtitleCancelled()
         emit("state", .string(captureState))
+        scheduleStateUpdate(debounced: false)
         await closeChannel()
         try? await oldSession?.cancelActive()
     }
@@ -616,6 +988,7 @@ public final class ApplicationCaptureService {
 
     public func settingsChanged() async {
         guard let session, let providerID else { return }
+        cancelDebounce()
         do {
             try await session.cancelActive()
             try await profiles.allowTranslation(providerID: providerID)
@@ -630,5 +1003,112 @@ public final class ApplicationCaptureService {
 
     public func prepareContainerRemoval(_ url: URL) async {
         if container?.standardizedFileURL == url.standardizedFileURL { await stop() }
+    }
+
+    @discardableResult
+    public func stopIfMatching(gameIDs: Set<String>) async -> Bool {
+        guard let gameID, gameIDs.contains(gameID), captureState != "stopped" else {
+            return false
+        }
+        await stop()
+        return true
+    }
+
+    private func tryAutoBindThread(key: String, thread: [String: JSONValue]) -> Bool {
+        guard roles[key] == nil, !pendingBindings.isEmpty else { return false }
+        guard let index = CapturePresetMatcher.matchPendingBinding(
+            for: thread,
+            in: pendingBindings,
+            activeRoles: roles
+        ) else { return false }
+        let binding = pendingBindings.remove(at: index)
+        roles[key] = binding.role
+        autoBoundCount += 1
+        return true
+    }
+
+    private func resolveGameID(
+        _ params: [String: JSONValue],
+        workspace: ApplicationWorkspace
+    ) async throws -> String {
+        let entry = try await workspace.entry(params)
+        let prefix = try workspace.resolve(params)
+        return LibraryStorageLayout.key(prefix.standardizedFileURL.path + "\n" + entry.id)
+    }
+
+    private func getPreset(
+        _ params: [String: JSONValue],
+        workspace: ApplicationWorkspace
+    ) async throws -> JSONValue {
+        let id = try await resolveGameID(params, workspace: workspace)
+        let preset = try await CapturePresetRepository(directory: presetDirectory, gameID: id).load()
+        return try .object(["preset": preset.map(JSONValue.encoded) ?? .null])
+    }
+
+    private func savePreset(
+        _ params: [String: JSONValue],
+        workspace: ApplicationWorkspace
+    ) async throws -> JSONValue {
+        let id = try await resolveGameID(params, workspace: workspace)
+        let repo = CapturePresetRepository(directory: presetDirectory, gameID: id)
+        var preset = try await repo.load() ?? CapturePreset(autoAttach: false)
+        if let value = params["autoAttach"] {
+            guard let flag = value.bool else { throw hookFailure("invalid_params") }
+            preset.autoAttach = flag
+        }
+        if let value = params["restoreHistory"] {
+            guard let flag = value.bool else { throw hookFailure("invalid_params") }
+            preset.restoreHistory = flag
+        }
+        if let value = params["architecture"] {
+            guard let arch = value.string, ["x86", "x64"].contains(arch) else {
+                throw hookFailure("invalid_architecture")
+            }
+            preset.architecture = arch
+        }
+        if let value = params["providerID"] {
+            if value == .null {
+                preset.providerID = nil
+            } else {
+                guard let raw = value.string, let uuid = UUID(uuidString: raw) else {
+                    throw hookFailure("invalid_provider")
+                }
+                preset.providerID = uuid
+            }
+        }
+        if let value = params["translationEnabled"] {
+            guard let flag = value.bool else { throw hookFailure("invalid_params") }
+            preset.translationEnabled = flag
+        }
+        if let value = params["promptAttachOnLaunch"] {
+            guard let flag = value.bool else { throw hookFailure("invalid_params") }
+            preset.promptAttachOnLaunch = flag
+        }
+        try await repo.save(preset)
+        return try .object(["preset": .encoded(preset)])
+    }
+
+    private func clearPreset(
+        _ params: [String: JSONValue],
+        workspace: ApplicationWorkspace
+    ) async throws -> JSONValue {
+        let id = try await resolveGameID(params, workspace: workspace)
+        try await CapturePresetRepository(directory: presetDirectory, gameID: id).clear()
+        if gameID == id {
+            pendingBindings = []
+        }
+        return .object(["cleared": .bool(true)])
+    }
+
+    @discardableResult
+    private func updatePreset(
+        for gameID: String,
+        mutate: (inout CapturePreset) -> Void
+    ) async throws -> CapturePreset {
+        let repo = CapturePresetRepository(directory: presetDirectory, gameID: gameID)
+        var preset = (try? await repo.load()) ?? CapturePreset(autoAttach: true)
+        mutate(&preset)
+        try await repo.save(preset)
+        return preset
     }
 }

@@ -45,7 +45,7 @@ std::wstring payload_directory() {
 }
 
 // Only this writer touches the socket after authentication. Callbacks never
-// wait for it: bounded try-lock enqueue, with observable overflow counters.
+// wait for socket I/O: bounded enqueue under mutex, with observable overflow counters.
 class CaptureOutbox {
 public:
     CaptureOutbox(SOCKET socket, std::string session)
@@ -54,8 +54,8 @@ public:
     void event(Json value) noexcept {
         if (closed_) return;
         try {
-            std::unique_lock lock(mutex_, std::try_to_lock);
-            if (!lock.owns_lock() || events_.size() >= 256) {
+            std::lock_guard lock(mutex_);
+            if (events_.size() >= 2048) {
                 ++dropped_;
             } else {
                 value["session"] = session_;
@@ -189,7 +189,9 @@ private:
             FreeLibrary(library);
             return false;
         }
-        settings(100, 932, 10000, 1000, true);
+        // flushDelay = 0 flushes FULL_STRING hooks immediately instead of concatenating
+        // fast-forwarded dialogue lines across calls; debouncing is handled by the host bridge.
+        settings(0, 932, 10000, 1000, true);
         start(on_connect, on_disconnect, on_created, on_removed, on_text,
               on_info, on_insert, on_embed, on_i18n, on_game_info);
         // Do not unload a DLL whose worker threads may still invoke callbacks.

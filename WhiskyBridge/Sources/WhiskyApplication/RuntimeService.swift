@@ -72,9 +72,12 @@ public final class RuntimeService {
         }
     }
 
+    public var onEntriesEnded: (@MainActor (_ entries: [(id: String, bottleURL: URL)]) -> Void)?
+
     private var sequence: UInt64 = 0
     private var eventBuffer: [(UInt64, JSONValue)] = []
     private var observer: Task<Void, Never>?
+    private var trackedActiveEntryIDs: Set<String> = []
 
     public init(
         driver: any LibraryRuntimeDriver,
@@ -95,6 +98,7 @@ public final class RuntimeService {
     public func stopTracking() {
         observer?.cancel()
         observer = nil
+        trackedActiveEntryIDs.removeAll()
         runtime.stopTracking()
     }
 
@@ -143,11 +147,40 @@ public final class RuntimeService {
                     if self.eventBuffer.count > 128 {
                         self.eventBuffer.removeFirst()
                     }
+                    self.handleRuntimeEvent(event)
                 }
             }
         }
         await runtime.configure(entries: entries, containerURL: container)
         return snapshot()
+    }
+
+    private func handleRuntimeEvent(_ event: LibraryRuntimeEvent) {
+        switch event {
+        case let .state(state):
+            let currentActive = Set(
+                configured.values
+                    .filter { state.launch.state(for: $0) != .idle }
+                    .map(\.id)
+            )
+            let endedIDs = trackedActiveEntryIDs.subtracting(currentActive)
+            trackedActiveEntryIDs = currentActive
+            if !endedIDs.isEmpty {
+                let ended = endedIDs.compactMap { id in
+                    configured[id].map { (id: id, bottleURL: $0.bottleURL) }
+                }
+                if !ended.isEmpty {
+                    onEntriesEnded?(ended)
+                }
+            }
+        case let .launchResult(entryID, .launchFailed):
+            trackedActiveEntryIDs.remove(entryID)
+            if let entry = configured[entryID] {
+                onEntriesEnded?([(id: entryID, bottleURL: entry.bottleURL)])
+            }
+        case .launchResult, .failure:
+            break
+        }
     }
 
     private func runtimeEvents(_ params: [String: JSONValue]) throws -> JSONValue {

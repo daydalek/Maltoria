@@ -99,7 +99,7 @@ def copy_sources(output, target):
     destination = output / 'share/whisky/sources'
     destination.mkdir(parents=True)
     paths = command('git', '-C', ROOT, 'ls-files', '--cached', '--others', '--exclude-standard', '--',
-                    'LICENSE', 'WhiskyCore', 'WhiskyMetadata', 'WhiskyBridge', 'WhiskyTranslation', 'crates', 'apps/whisky-gpui',
+                    'LICENSE', 'THIRD-PARTY-NOTICES.md', 'WhiskyCore', 'WhiskyMetadata', 'WhiskyBridge', 'WhiskyTranslation', 'crates', 'apps/whisky-gpui',
                     'scripts/check-gpui-foundation.py', 'build.sh', 'scripts/distribution',
                     'docs/BUILDING.md', 'docs/DistributionStrategy.md').splitlines()
     with tarfile.open(destination / 'application.tar.gz', 'w:gz') as archive:
@@ -232,6 +232,8 @@ def main():
     notices = output / 'share/licenses/whisky'
     notices.mkdir(parents=True)
     shutil.copyfile(ROOT / 'LICENSE', notices / 'LICENSE')
+    shutil.copyfile(ROOT / 'THIRD-PARTY-NOTICES.md', notices / 'THIRD-PARTY-NOTICES.md')
+    shutil.copytree(ROOT / 'ThirdParty/licenses', notices / 'third-party', dirs_exist_ok=True)
     shutil.copyfile(swift_license, notices / 'Swift-LICENSE.txt')
     shutil.copyfile(icu_license, notices / 'Foundation-ICU-LICENSE.txt')
     shutil.copyfile(TOOLS / 'linux-runtime-packages.txt', output / 'share/whisky-runtime-packages.txt')

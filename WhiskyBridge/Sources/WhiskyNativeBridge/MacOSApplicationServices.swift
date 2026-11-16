@@ -28,6 +28,7 @@ public final class MacOSApplicationServices: NativeApplicationServices {
     var bottles: [URL: (Data, Bottle)] = [:]
     private let wineEnabled: Bool
     private let subtitleOverlay: MacOSSubtitleOverlay
+    private let captureHUD: MacOSCaptureHUD
     let jobs: BridgeJobStore
     /// Registry of external Wine engines; injectable for isolated tests.
     let engineStore: WineEngineStore
@@ -74,6 +75,7 @@ public final class MacOSApplicationServices: NativeApplicationServices {
         WhiskyDataIdentity.configure("com.daydalek.Maltoria")
         self.wineEnabled = wineEnabled
         subtitleOverlay = MacOSSubtitleOverlay(domain: preferencesDomain)
+        captureHUD = MacOSCaptureHUD(subtitleOverlay: subtitleOverlay)
         self.jobs = jobs
         self.engineStore = engineStore
         WhiskyPreferences.configureSharedDomain(preferencesDomain)
@@ -144,7 +146,9 @@ public final class MacOSApplicationServices: NativeApplicationServices {
             "wine.engines.remove",
             "wine.engines.selection",
             "wine.engines.select",
-            "wine.engines.setFeatureOverride"
+            "wine.engines.setFeatureOverride",
+            "translation.capture.hud/show",
+            "translation.capture.hud/hide"
         ] + RuntimeService.methods : [])
     }
 
@@ -168,6 +172,26 @@ public final class MacOSApplicationServices: NativeApplicationServices {
     }
 
     public func updateTranslationSubtitle(_ value: JSONValue) { subtitleOverlay.update(value) }
+
+    public func registerCaptureContext(
+        capture: ApplicationCaptureService,
+        translation: ApplicationTranslationService,
+        workspace: ApplicationWorkspace
+    ) {
+        captureHUD.configure(capture: capture, translation: translation, workspace: workspace)
+        capture.onStateUpdate = { [weak self] snapshot in
+            self?.captureHUD.handleStateUpdate(snapshot)
+        }
+    }
+
+    public func presentCaptureHUDOnLaunch(container: URL, entry: EntryRecord, preset: CapturePreset) {
+        guard wineEnabled else { return }
+        captureHUD.presentOnLaunch(container: container, entry: entry, preset: preset)
+    }
+
+    public func handleRuntimeEntriesEnded(_ entryIDs: Set<String>, stoppedCapture: Bool) {
+        captureHUD.handleRuntimeEntriesEnded(entryIDs, stoppedCapture: stoppedCapture)
+    }
 
     func bottle(_ url: URL) -> Bottle? {
         guard let data = try? ApplicationWorkspace.read(url.appendingPathComponent("Metadata.plist")),
@@ -215,7 +239,15 @@ public final class MacOSApplicationServices: NativeApplicationServices {
         guard methods.contains(method)
         else { throw BridgeFailure("method_unavailable", "Native method is unavailable") }
         switch method.prefix(while: { $0 != "." }) {
-        case "translation": return try subtitleOverlay.call(method, params: params)
+        case "translation":
+            if method == "translation.capture.hud/show" {
+                return try await captureHUD.show(params: params, workspace: workspace)
+            }
+            if method == "translation.capture.hud/hide" {
+                captureHUD.hide()
+                return .object(["visible": .bool(false)])
+            }
+            return try subtitleOverlay.call(method, params: params)
         case "system": return try systemCall(method, params: params, workspace: workspace)
         case "setup": return try await setupCall(method, params: params)
         case "bottle":
@@ -245,7 +277,10 @@ public final class MacOSApplicationServices: NativeApplicationServices {
     }
 
     public func shutdown(applyExitPolicy: Bool) async {
+        captureHUD.hide()
+        captureHUD.invalidate()
         subtitleOverlay.hide()
+        subtitleOverlay.invalidate()
         guard wineEnabled else { return }
         runtimeService.stopTracking()
         await GameActivityTracker.shared.stopPolling()

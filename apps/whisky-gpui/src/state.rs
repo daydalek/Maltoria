@@ -51,6 +51,16 @@ const CONFIG_DEBOUNCE: Duration = Duration::from_millis(400);
 /// Immersive hero auto-advance cadence.
 const CAROUSEL_SECS: u64 = 8;
 
+/// Tabs inside the in-app About Maltoria modal.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum AboutTab {
+    #[default]
+    Overview,
+    Acknowledgments,
+    License,
+    Notices,
+}
+
 /// `configuration.schema` + `configuration.read` for the selected bottle.
 #[derive(Clone)]
 pub(crate) struct ConfigPage {
@@ -782,6 +792,7 @@ pub(crate) struct WhiskyApp {
     pub(crate) settings: bool,
     /// The About panel; independent of the settings page and sheets.
     pub(crate) about: bool,
+    pub(crate) about_tab: AboutTab,
     /// Packaged version metadata from `system.info`, when the helper answered.
     pub(crate) app_info: Option<SystemInfoDto>,
     /// An explicit quit is waiting for the helper to apply the exit policy.
@@ -1043,6 +1054,7 @@ impl WhiskyApp {
             sidebar_collapsed_style: SidebarMode::Icons,
             settings: false,
             about: false,
+            about_tab: AboutTab::default(),
             app_info: None,
             quitting: false,
             quit_generation: 0,
@@ -1261,8 +1273,26 @@ impl WhiskyApp {
                 }
             }
             BridgeEvent::TranslationReply { request, method, result } => {
-                self.translation_page.reply(request, &method, result.clone(), cx);
+                let cache_cleared_ok = method == "translation.cache.clear" && result.is_ok();
+                self.translation_page
+                    .reply(request, &method, result.clone(), &self.bridge, cx);
                 self.capture.reply(request, &method, result, &self.bridge, cx);
+                if cache_cleared_ok
+                    && self.capture.panel_open
+                    && !self.capture.is_pending("translation.history")
+                {
+                    self.capture.refresh_history(&self.bridge, 0);
+                }
+                if matches!(
+                    method.as_str(),
+                    "translation.providers/list"
+                        | "translation.providers/save"
+                        | "translation.providers/delete"
+                        | "translation.capture.preset/get"
+                        | "translation.capture.preset/save"
+                ) {
+                    self.sync_capture_preset_and_provider();
+                }
             }
             BridgeEvent::Services(methods) => {
                 self.service_methods = methods.into_iter().collect();
@@ -3559,9 +3589,23 @@ impl WhiskyApp {
     }
 
     pub(crate) fn show_about(&mut self, cx: &mut Context<Self>) {
-        self.about = true;
+        Self::open_about_state(&mut self.about, &mut self.about_tab);
         self.bridge_dialog = false;
         cx.notify();
+    }
+
+    pub(crate) fn dismiss_about(&mut self) {
+        Self::reset_about_state(&mut self.about, &mut self.about_tab);
+    }
+
+    pub(crate) fn open_about_state(about: &mut bool, about_tab: &mut AboutTab) {
+        *about = true;
+        *about_tab = AboutTab::Overview;
+    }
+
+    pub(crate) fn reset_about_state(about: &mut bool, about_tab: &mut AboutTab) {
+        *about = false;
+        *about_tab = AboutTab::Overview;
     }
 
     /// The settings page replaces the library body, as the gear does.
@@ -3584,21 +3628,68 @@ impl WhiskyApp {
     }
 
     pub(crate) fn open_translation_settings(&mut self, cx: &mut Context<Self>) {
+        let from_capture = self.capture.panel_open;
         self.capture.panel_open = false;
         self.open_settings(cx);
-        self.translation_page.context = None;
+        self.translation_page.context = if from_capture {
+            self.capture.context.clone()
+        } else {
+            None
+        };
+        self.translation_page.return_to_capture = from_capture;
         self.translation_page.open(&self.bridge);
+        cx.notify();
+    }
+
+    pub(crate) fn sync_capture_provider_selection(&mut self) {
+        if let Some(id) = self.capture.provider_id.as_deref() {
+            if !self.translation_page.providers.iter().any(|p| p.id == id) {
+                self.capture.provider_id = None;
+            }
+        }
+        if self.capture.provider_id.is_none() && self.translation_page.providers.len() == 1 {
+            self.capture.provider_id = Some(self.translation_page.providers[0].id.clone());
+        }
+    }
+
+    pub(crate) fn sync_capture_preset_and_provider(&mut self) {
+        let providers_ready = (self.translation_page.providers_loaded
+            || !self.translation_page.providers.is_empty())
+            && !self.translation_page.is_pending("translation.providers/list");
+        if providers_ready {
+            self.capture
+                .apply_pending_preset(&self.translation_page.providers);
+        }
+        self.sync_capture_provider_selection();
+        if providers_ready {
+            self.capture.maybe_auto_attach_on_preset_load(
+                &self.bridge,
+                self.translation_page.provider_probe_pending(),
+            );
+        }
+    }
+
+    pub(crate) fn close_translation_settings(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let return_to_capture = self.translation_page.return_to_capture;
+        self.translation_page.close(window, cx);
+        if return_to_capture {
+            self.settings = false;
+            self.capture.panel_open = true;
+            self.sync_capture_provider_selection();
+        }
         cx.notify();
     }
 
     pub(crate) fn open_translation_for_game(&mut self, index: usize, cx: &mut Context<Self>) {
         if let Some(game) = self.game(index) {
             let context = (game.container.clone(), game.id.clone(), game.title.clone());
-            if self.capture.context.as_ref() != Some(&context) {
-                self.capture.provider_id = None;
-            }
-            self.capture.context = Some(context);
+            self.capture.set_context(Some(context));
         }
+        self.sync_capture_provider_selection();
         self.settings = false;
         self.translation_page.active = false;
         self.capture.panel_open = true;
@@ -3608,6 +3699,34 @@ impl WhiskyApp {
                 "translation.providers/list",
                 serde_json::json!({}),
             );
+        }
+        if self.capture.context.is_some() {
+            self.capture.load_preset_for_context(&self.bridge);
+        }
+        if !self.demo && self.service_available("translation.overlay.read") {
+            let _ = self.capture.request(
+                &self.bridge,
+                "translation.overlay.read",
+                serde_json::json!({}),
+            );
+        }
+        let scope_context = self
+            .capture
+            .context
+            .as_ref()
+            .map(|(container, entry_id, _)| (container.clone(), entry_id.clone()));
+        let active_game_id = self
+            .capture
+            .snapshot
+            .as_ref()
+            .and_then(|s| s.game_id.clone());
+        self.translation_page.cache.scope_context = scope_context.clone();
+        self.translation_page.cache.scope_game_id = active_game_id.clone();
+        self.translation_page.cache.only_current_game =
+            active_game_id.is_some() || scope_context.is_some();
+        if !self.demo && self.service_available("translation.cache/list") {
+            self.translation_page
+                .refresh_cache(&self.bridge, active_game_id);
         }
         if self.capture.history_owner == self.capture.context {
             self.capture.refresh_history(&self.bridge, 0);
@@ -7336,6 +7455,19 @@ impl WhiskyApp {
                 self.show_notice(format!("正在启动 {title}"), cx);
                 self.runtime.set_state(&entry_id, RuntimeState::Preparing);
                 self.bridge.launch(&container, &entry_id, None);
+                if self.capture.panel_open
+                    && self
+                        .capture
+                        .context
+                        .as_ref()
+                        .is_some_and(|c| c.0 == container && c.1 == entry_id)
+                {
+                    self.capture.on_game_launched(
+                        &self.bridge,
+                        self.translation_page.provider_probe_pending(),
+                        cx,
+                    );
+                }
             }
             RuntimeAction::Cancel => {
                 // Cancel is only accepted while preparing/launching; showing the
@@ -7522,6 +7654,24 @@ impl WhiskyApp {
         }
         if let PreviewSheet::RunSettings(index) = sheet {
             self.open_program_settings(index, cx);
+            if !self.demo
+                && let Some(game) = self.game(index).cloned()
+                && !game.container.is_empty()
+            {
+                if self.service_available("translation.capture.preset/get") {
+                    self.capture
+                        .load_preset_for_game(&self.bridge, &game.container, &game.id);
+                }
+                if self.translation_page.providers.is_empty()
+                    && self.service_available("translation.providers/list")
+                {
+                    self.translation_page.request(
+                        &self.bridge,
+                        "translation.providers/list",
+                        serde_json::json!({}),
+                    );
+                }
+            }
         }
         if let PreviewSheet::MoveEntry(index) = sheet {
             self.prepare_move_entry(index, cx);
@@ -7692,5 +7842,26 @@ fn next_duplicate_name(base: &str, bottles: &[BottleVm]) -> String {
             return candidate;
         }
         counter += 1;
+    }
+}
+
+#[cfg(test)]
+mod about_tab_tests {
+    use super::{AboutTab, WhiskyApp};
+
+    #[test]
+    fn opening_and_resetting_about_tab_defaults_to_overview() {
+        assert_eq!(AboutTab::default(), AboutTab::Overview);
+
+        let mut about = false;
+        let mut tab = AboutTab::Notices;
+        WhiskyApp::open_about_state(&mut about, &mut tab);
+        assert!(about);
+        assert_eq!(tab, AboutTab::Overview);
+
+        tab = AboutTab::License;
+        WhiskyApp::reset_about_state(&mut about, &mut tab);
+        assert!(!about);
+        assert_eq!(tab, AboutTab::Overview);
     }
 }

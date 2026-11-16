@@ -18,7 +18,7 @@
 
 import Foundation
 import Testing
-import WhiskyApplication
+@testable import WhiskyApplication
 import WhiskyBridgeProtocol
 import WhiskyTranslation
 
@@ -30,6 +30,43 @@ private actor MemoryCredentialStore: CredentialStore {
     func remove(reference: String) async throws { values[reference] = nil }
 }
 
+private actor SpyKeychainCredentialStore: CredentialStore {
+    private var values: [String: String] = [:]
+    private(set) var storeCount = 0
+    private(set) var secretCount = 0
+    private(set) var hasSecretCount = 0
+    private(set) var removeCount = 0
+
+    func availability() async -> CredentialStoreAvailability { .persistentKeychain }
+
+    func store(_ secret: String, for reference: String) async throws {
+        storeCount += 1
+        values[reference] = secret
+    }
+
+    func secret(for reference: String) async throws -> String? {
+        secretCount += 1
+        return values[reference]
+    }
+
+    func hasSecret(for reference: String) async throws -> Bool {
+        hasSecretCount += 1
+        return values[reference] != nil
+    }
+
+    func remove(reference: String) async throws {
+        removeCount += 1
+        values[reference] = nil
+    }
+
+    func resetCounts() {
+        storeCount = 0
+        secretCount = 0
+        hasSecretCount = 0
+        removeCount = 0
+    }
+}
+
 @Test @MainActor func translationProfilesCredentialsAndSettingsRoundTrip() async throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }
@@ -39,13 +76,15 @@ private actor MemoryCredentialStore: CredentialStore {
         kind: .openAIChat,
         baseURL: URL(string: "http://127.0.0.1:8765/v1")!,
         modelID: "manual-model",
-        openAIChatTokenLimitField: .maxTokens
+        openAIChatTokenLimitField: .maxTokens,
+        thinkingLevel: .xhigh
     )
     let saved = try await translation.call("translation.providers/save", params: [
         "provider": .encoded(profile)
     ])
     #expect(saved.object?["modelID"] == .string("manual-model"))
     #expect(saved.object?["openAIChatTokenLimitField"] == .string("max_tokens"))
+    #expect(saved.object?["thinkingLevel"] == .string("xhigh"))
     #expect(saved.object?["hasCredential"] == .bool(false))
 
     let secret = "write-only-secret"
@@ -67,4 +106,130 @@ private actor MemoryCredentialStore: CredentialStore {
 
     let bytes = try Data(contentsOf: root.appendingPathComponent("bridge-profiles.json"))
     #expect(!String(decoding: bytes, as: UTF8.self).contains(secret))
+}
+
+@Test @MainActor func switchingStorageModeRoutesCredentialsAndStopsKeychainReads() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let spyKeychain = SpyKeychainCredentialStore()
+    let service = ApplicationTranslationService(directory: root, keychainStore: spyKeychain)
+
+    let profile = ProviderConfiguration(
+        kind: .openAIChat,
+        baseURL: URL(string: "http://127.0.0.1:8765/v1")!,
+        modelID: "local-model"
+    )
+    _ = try await service.call("translation.providers/save", params: ["provider": .encoded(profile)])
+    _ = try await service.call("translation.credential.set", params: [
+        "providerID": .string(profile.id.uuidString),
+        "key": .string("keychain-secret")
+    ])
+
+    let listedKeychain = try await service.call("translation.providers/list", params: [:])
+    #expect(listedKeychain.array?.first?.object?["hasCredential"] == .bool(true))
+    #expect(await spyKeychain.hasSecretCount == 1)
+    #expect(await spyKeychain.secretCount == 0)
+
+    let localSettings = TranslationSettings(credentialStorageMode: .localFile)
+    let savedLocal = try await service.call("translation.settings/save", params: [
+        "settings": .encoded(localSettings)
+    ])
+    #expect(savedLocal.object?["credentialStorage"] == .string("localPlaintextFile"))
+
+    await spyKeychain.resetCounts()
+    let listedLocalBeforeSet = try await service.call("translation.providers/list", params: [:])
+    #expect(listedLocalBeforeSet.array?.first?.object?["hasCredential"] == .bool(false))
+    #expect(await spyKeychain.hasSecretCount == 0)
+    #expect(await spyKeychain.secretCount == 0)
+
+    let setLocal = try await service.call("translation.credential.set", params: [
+        "providerID": .string(profile.id.uuidString),
+        "key": .string("file-secret")
+    ])
+    #expect(setLocal.object?["storage"] == .string("localPlaintextFile"))
+    #expect(await spyKeychain.storeCount == 0)
+
+    let credFile = root.appendingPathComponent("bridge-credentials.json")
+    let attrs = try FileManager.default.attributesOfItem(atPath: credFile.path)
+    #expect((attrs[.posixPermissions] as? Int) == 0o600)
+
+    let reloaded = ApplicationTranslationService(directory: root, keychainStore: spyKeychain)
+    let reloadedSettings = try await reloaded.call("translation.settings/get", params: [:])
+    #expect(reloadedSettings.object?["credentialStorage"] == .string("localPlaintextFile"))
+    let reloadedList = try await reloaded.call("translation.providers/list", params: [:])
+    #expect(reloadedList.array?.first?.object?["hasCredential"] == .bool(true))
+    #expect(await spyKeychain.hasSecretCount == 0)
+    #expect(await spyKeychain.secretCount == 0)
+
+    let sessionSettings = TranslationSettings(credentialStorageMode: .sessionOnly)
+    let savedSession = try await reloaded.call("translation.settings/save", params: [
+        "settings": .encoded(sessionSettings)
+    ])
+    #expect(savedSession.object?["credentialStorage"] == .string("sessionOnly"))
+    let listedSession = try await reloaded.call("translation.providers/list", params: [:])
+    #expect(listedSession.array?.first?.object?["hasCredential"] == .bool(false))
+    #expect(await spyKeychain.hasSecretCount == 0)
+}
+
+@Test @MainActor func sentenceCacheListAndDeleteRPCs() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let service = ApplicationTranslationService(directory: root, credentials: MemoryCredentialStore())
+    let cache = PersistentSentenceCache(fileURL: root.appendingPathComponent("bridge-translation-cache.json"))
+    let first = try #require(await cache.store(
+        gameID: "game-one",
+        sourceText: "おはよう",
+        translatedText: "Good morning",
+        speaker: "Alice",
+        sourceLanguage: "ja",
+        targetLanguage: "en",
+        providerName: "Local",
+        providerKind: .openAIChat,
+        modelID: "model-1",
+        customPrompt: ""
+    ))
+    let second = try #require(await cache.store(
+        gameID: "game-two",
+        sourceText: "さようなら",
+        translatedText: "Goodbye",
+        speaker: nil,
+        sourceLanguage: "ja",
+        targetLanguage: "en",
+        providerName: "Remote",
+        providerKind: .deepL,
+        modelID: "",
+        customPrompt: ""
+    ))
+
+    let allListed = try await service.call("translation.cache/list", params: [:])
+    #expect(allListed.object?["totalCount"] == .integer(2))
+    #expect(allListed.object?["gameCount"] == .integer(2))
+    #expect((allListed.object?["totalBytes"]?.integer ?? 0) > 0)
+    #expect(allListed.object?["entries"]?.array?.count == 2)
+
+    let filteredByGame = try await service.call("translation.cache/list", params: [
+        "gameID": .string("game-one"),
+        "query": .string("morning")
+    ])
+    #expect(filteredByGame.object?["totalCount"] == .integer(2))
+    #expect(filteredByGame.object?["gameCount"] == .integer(1))
+    #expect(filteredByGame.object?["entries"]?.array?.count == 1)
+    #expect(filteredByGame.object?["entries"]?.array?.first?.object?["id"] == .string(first.id))
+
+    let deleted = try await service.call("translation.cache/delete", params: [
+        "id": .string(first.id)
+    ])
+    #expect(deleted.object?["removed"] == .bool(true))
+    #expect(deleted.object?["totalCount"] == .integer(1))
+
+    let deletedMissing = try await service.call("translation.cache/delete", params: [
+        "id": .string(first.id)
+    ])
+    #expect(deletedMissing.object?["removed"] == .bool(false))
+    #expect(deletedMissing.object?["totalCount"] == .integer(1))
+
+    let remaining = try await service.call("translation.cache/list", params: [:])
+    #expect(remaining.object?["entries"]?.array?.map { $0.object?["id"]?.string } == [second.id])
 }

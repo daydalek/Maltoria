@@ -114,6 +114,17 @@ public enum OpenAIChatTokenLimitField: String, Codable, CaseIterable, Sendable {
     case maxTokens = "max_tokens"
 }
 
+public enum ThinkingLevel: String, Codable, CaseIterable, Hashable, Sendable {
+    case `default`
+    case off
+    case low
+    case medium
+    case high
+    case xhigh
+    case max
+    case ultra
+}
+
 public struct ProviderCapabilities: Codable, Equatable, Sendable {
     public let modelDiscovery: Bool
     public let contextDiscovery: Bool
@@ -187,6 +198,7 @@ public struct ProviderConfiguration: Codable, Equatable, Identifiable, Sendable 
     public var defaultTargetLanguage: String
     public var modelMetadata: ModelDescriptor?
     public var openAIChatTokenLimitField: OpenAIChatTokenLimitField
+    public var thinkingLevel: ThinkingLevel
 
     public var capabilities: ProviderCapabilities { kind.capabilities }
 
@@ -200,7 +212,8 @@ public struct ProviderConfiguration: Codable, Equatable, Identifiable, Sendable 
         defaultSourceLanguage: String = "auto",
         defaultTargetLanguage: String = "en",
         modelMetadata: ModelDescriptor? = nil,
-        openAIChatTokenLimitField: OpenAIChatTokenLimitField = .maxCompletionTokens
+        openAIChatTokenLimitField: OpenAIChatTokenLimitField = .maxCompletionTokens,
+        thinkingLevel: ThinkingLevel = .default
     ) {
         self.id = id
         self.name = name ?? Self.defaultName(for: kind)
@@ -212,11 +225,12 @@ public struct ProviderConfiguration: Codable, Equatable, Identifiable, Sendable 
         self.defaultTargetLanguage = defaultTargetLanguage
         self.modelMetadata = modelMetadata
         self.openAIChatTokenLimitField = openAIChatTokenLimitField
+        self.thinkingLevel = thinkingLevel
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, name, kind, baseURL, modelID, credentialReference, defaultSourceLanguage, defaultTargetLanguage,
-             modelMetadata, openAIChatTokenLimitField
+             modelMetadata, openAIChatTokenLimitField, thinkingLevel
     }
 
     public init(from decoder: Decoder) throws {
@@ -234,6 +248,10 @@ public struct ProviderConfiguration: Codable, Equatable, Identifiable, Sendable 
             OpenAIChatTokenLimitField.self,
             forKey: .openAIChatTokenLimitField
         ) ?? .maxCompletionTokens
+        thinkingLevel = try values.decodeIfPresent(
+            ThinkingLevel.self,
+            forKey: .thinkingLevel
+        ) ?? .default
     }
 
     public func validate() throws {
@@ -279,8 +297,8 @@ public struct ProviderConfiguration: Codable, Equatable, Identifiable, Sendable 
 
     private static func defaultName(for kind: ProviderKind) -> String {
         switch kind {
-        case .openAIChat: "OpenAI-compatible Chat"
-        case .openAICompletions: "OpenAI-compatible Completions"
+        case .openAIChat: "OpenAI-compatible Chat Completions"
+        case .openAICompletions: "OpenAI-compatible Legacy Completions"
         case .ollama: "Ollama"
         case .deepL: "DeepL"
         case .anthropic: "Anthropic Messages"
@@ -305,6 +323,12 @@ public struct ProviderConfiguration: Codable, Equatable, Identifiable, Sendable 
     }
 }
 
+public enum CredentialStorageMode: String, Codable, CaseIterable, Sendable {
+    case keychain
+    case localFile
+    case sessionOnly
+}
+
 public struct TranslationSettings: Codable, Equatable, Sendable {
     public var contextWindowOverride: Int?
     public var outputTokenLimit: Int
@@ -315,6 +339,9 @@ public struct TranslationSettings: Codable, Equatable, Sendable {
     public var customPrompt: String
     public var sourceLanguage: String
     public var targetLanguage: String
+    public var credentialStorageMode: CredentialStorageMode
+    public var translationDebounceMs: Int
+    public var sentenceCacheEnabled: Bool
 
     public init(
         contextWindowOverride: Int? = nil,
@@ -325,7 +352,10 @@ public struct TranslationSettings: Codable, Equatable, Sendable {
         includeTranslatedHistory: Bool = true,
         customPrompt: String = "",
         sourceLanguage: String = "auto",
-        targetLanguage: String = "en"
+        targetLanguage: String = "en",
+        credentialStorageMode: CredentialStorageMode = .keychain,
+        translationDebounceMs: Int = 150,
+        sentenceCacheEnabled: Bool = true
     ) {
         self.contextWindowOverride = contextWindowOverride
         self.outputTokenLimit = outputTokenLimit
@@ -336,6 +366,34 @@ public struct TranslationSettings: Codable, Equatable, Sendable {
         self.customPrompt = customPrompt
         self.sourceLanguage = sourceLanguage
         self.targetLanguage = targetLanguage
+        self.credentialStorageMode = credentialStorageMode
+        self.translationDebounceMs = translationDebounceMs
+        self.sentenceCacheEnabled = sentenceCacheEnabled
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case contextWindowOverride, outputTokenLimit, historyRetentionTurns, contextTurnLimit,
+             includeSourceHistory, includeTranslatedHistory, customPrompt, sourceLanguage, targetLanguage,
+             credentialStorageMode, translationDebounceMs, sentenceCacheEnabled
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        contextWindowOverride = try values.decodeIfPresent(Int.self, forKey: .contextWindowOverride)
+        outputTokenLimit = try values.decodeIfPresent(Int.self, forKey: .outputTokenLimit) ?? 512
+        historyRetentionTurns = try values.decodeIfPresent(Int.self, forKey: .historyRetentionTurns) ?? 20
+        contextTurnLimit = try values.decodeIfPresent(Int.self, forKey: .contextTurnLimit) ?? 8
+        includeSourceHistory = try values.decodeIfPresent(Bool.self, forKey: .includeSourceHistory) ?? true
+        includeTranslatedHistory = try values.decodeIfPresent(Bool.self, forKey: .includeTranslatedHistory) ?? true
+        customPrompt = try values.decodeIfPresent(String.self, forKey: .customPrompt) ?? ""
+        sourceLanguage = try values.decodeIfPresent(String.self, forKey: .sourceLanguage) ?? "auto"
+        targetLanguage = try values.decodeIfPresent(String.self, forKey: .targetLanguage) ?? "en"
+        credentialStorageMode = try values.decodeIfPresent(
+            CredentialStorageMode.self,
+            forKey: .credentialStorageMode
+        ) ?? .keychain
+        translationDebounceMs = try values.decodeIfPresent(Int.self, forKey: .translationDebounceMs) ?? 150
+        sentenceCacheEnabled = try values.decodeIfPresent(Bool.self, forKey: .sentenceCacheEnabled) ?? true
     }
 
     public static func defaults(for configuration: ProviderConfiguration) -> TranslationSettings {
@@ -354,6 +412,9 @@ public struct TranslationSettings: Codable, Equatable, Sendable {
         }
         guard (0 ... 1_000).contains(historyRetentionTurns), (0 ... 1_000).contains(contextTurnLimit) else {
             throw TranslationError.invalidConfiguration("History limits must be between 0 and 1000 turns")
+        }
+        guard (0 ... 5_000).contains(translationDebounceMs) else {
+            throw TranslationError.invalidConfiguration("Translation debounce delay must be between 0 and 5000 ms")
         }
         guard customPrompt.utf8.count <= 16_384 else {
             throw TranslationError.invalidConfiguration("Custom prompt is too long")

@@ -34,6 +34,24 @@ protobuf-c (`PostHog-protobuf-c.txt`, BSD-2-Clause, copyright Dave Benson and th
 protobuf-c authors). Preserve the complete PLCrashReporter notice, including its
 Apache-2.0 attribution; the Apache text is supplied in `swift-argument-parser.txt`.
 
+`SemanticVersion`, `Sparkle`, `PostHog`, `swift-argument-parser`, and
+`swift-docc-*` are pinned SwiftPM dependencies in `WhiskyKit`/`WhiskyCmd`,
+whereas the desktop GPUI application (`apps/whisky-gpui`) uses Rust +
+`WhiskyBridge`.
+
+## Desktop UI and Rust dependencies
+
+- **`gpui-kit` 0.8.0** — <https://crates.io/crates/gpui-kit>; Apache-2.0, derived
+  from Zed's GPUI (<https://github.com/zed-industries/zed>). Provides the native
+  desktop UI framework for `apps/whisky-gpui`.
+- **Locked Rust crate dependencies** — All direct and transitive Rust crate
+  dependencies are pinned in `apps/whisky-gpui/Cargo.lock` (`chrono`, `image`,
+  `metal` on macOS, `serde`, `serde_json`, `sha2`, `smol`, `uuid`, and their
+  transitive crates). Linux distribution archives also ship individual crate
+  licenses in `share/licenses/whisky/crates/` alongside
+  `share/whisky/dependencies.json` and locked `.crate` archives in
+  `share/whisky/sources/crates/`.
+
 ## Bundled tools and their source
 
 - **Winetricks 20260125** — <https://github.com/Winetricks/winetricks/tree/20260125>.
@@ -89,7 +107,7 @@ Swift Runtime Library Exception, where supplied upstream, are preserved in
   (`convert-realcugan-coreml.py`) and shipped as
   `realcugan-384x384.mlpackage`; `realcugan-helper` tiles a cover into that
   window, blends the overlaps, and writes the enlarged PNG. Weights are MIT and
-  were checked against the digest pinned in `dependencies.json` before
+  were checked against the digest pinned in `apps/whisky-gpui/tools/upscaler-sources.json` before
   conversion.
 
 ## Metadata design reference and data attribution
@@ -102,10 +120,11 @@ has yet to be established.
 
 Game descriptions, titles, and cover artwork come from Bangumi
 (<https://bangumi.github.io/api/>), VNDB (<https://api.vndb.org/kana>),
-Steam (<https://store.steampowered.com/>), and YMGal
-(<https://www.ymgal.games/developer>). Copyright remains with the respective
-platforms and original rightsholders. YMGal's public API is offered for
-noncommercial use. These provider entries describe data fetched at runtime.
+Steam (<https://store.steampowered.com/>), YMGal
+(<https://www.ymgal.games/developer>), and NextMoe (<https://nextmoe.com/>).
+Copyright remains with the respective platforms and original rightsholders.
+YMGal's public API is offered for noncommercial use. These provider entries
+describe data fetched at runtime.
 
 ## Separately installed runtime and Apple components
 
@@ -120,12 +139,16 @@ and the bundled tools listed above.
 
 ## Native Windows text-hook build sources
 
-- **LunaTranslator native LunaHook/LunaHost sources** — pinned to
-  `178b4372c4ed7ac0f67aa2e217007916e937250d`, GPL-3.0; full upstream license
-  and copyright notices are preserved in `licenses/LunaTranslator-GPL-3.0.txt`
-  and the corresponding source archive.
+- **LunaTranslator / LunaHook** (<https://github.com/HIllya51/LunaTranslator>) —
+  pinned to commit `178b4372c4ed7ac0f67aa2e217007916e937250d`, GPL-3.0; provides
+  the core Windows text-hooking and injection engine (`LunaHook32.dll`,
+  `LunaHook64.dll`, `LunaHost32.dll`, `LunaHost64.dll`, `LunaTmpFontLoader.dll`)
+  paired with Maltoria's IPC wrapper `MaltoriaLunaHost32/64.exe`
+  (`GPL-3.0-or-later`). Full upstream license and copyright notices are
+  preserved in `licenses/LunaTranslator-GPL-3.0.txt` and the corresponding
+  source archive.
 - **MinHook** — pinned to commit `c3fcafdc10146beb5919319d0683e44e3c30d537`
-  (v1.3.4), BSD-2-Clause; full upstream notice is
+  (v1.3.4), BSD-2-Clause, copyright Tsuda Kageyu; full upstream notice is
   `licenses/MinHook-BSD-2-Clause.txt`. It also preserves the BSD notices for
   the bundled HDE32/HDE64 disassemblers, including Vyacheslav Patkov's credits.
 - **uchardet** — pinned to commit `06029ec3340cdf6bf9a6a537dafb3f39eda0560e`,
@@ -137,8 +160,8 @@ and the bundled tools listed above.
   `licenses/uchardet-license-options.txt`; the source archive retains every
   original file notice.
 - **nlohmann/json** — pinned to commit
-  `55f93686c01528224f448c19128836e7df245f72` (v3.12.0), MIT; full license is
-  `licenses/nlohmann-json-MIT.txt`.
+  `55f93686c01528224f448c19128836e7df245f72` (v3.12.0), MIT, copyright Niels
+  Lohmann; full license is `licenses/nlohmann-json-MIT.txt`.
 
 The exact source archives, their SHA-256 values, and a separate `native_packages`
 inventory are in `manifest.json`. `LunaHook-BUILD.md` records the local-source

@@ -32,6 +32,7 @@ public struct TranslationCacheKey: Hashable, Sendable {
     public let contextFingerprint: String
     public let outputTokenLimit: Int
     public let openAIChatTokenLimitField: OpenAIChatTokenLimitField
+    public let thinkingLevel: ThinkingLevel
     public let contextWindowTokens: Int
     public let promptVersion: String
     public let normalizerVersion: String
@@ -50,6 +51,7 @@ public struct TranslationCacheKey: Hashable, Sendable {
         contextFingerprint = (try? JSONEncoder.sorted.encode(request.context).base64EncodedString()) ?? ""
         outputTokenLimit = request.outputTokenLimit
         openAIChatTokenLimitField = configuration.openAIChatTokenLimitField
+        thinkingLevel = configuration.thinkingLevel
         contextWindowTokens = request.contextWindowTokens
         promptVersion = TranslationPrompt.version
         normalizerVersion = "raw-utf8-v1"
@@ -101,6 +103,8 @@ public actor TranslationSession {
     private let service: TranslationService
     private let repository: any TranslationRepository
     private let cache: TranslationCache
+    private let sentenceCache: (any SentenceTranslationCaching)?
+    private let providerDisplayName: String
     private var entries: [TranslationHistoryEntry]
     private var activeEntryID: UUID?
     private var activeTask: Task<Void, Never>?
@@ -128,6 +132,8 @@ public actor TranslationSession {
         service: TranslationService,
         repository: any TranslationRepository,
         cache: TranslationCache = TranslationCache(),
+        sentenceCache: (any SentenceTranslationCaching)? = nil,
+        providerDisplayName: String = "",
         initialEntries: [TranslationHistoryEntry] = []
     ) {
         self.gameID = gameID
@@ -138,6 +144,8 @@ public actor TranslationSession {
         self.service = service
         self.repository = repository
         self.cache = cache
+        self.sentenceCache = sentenceCache
+        self.providerDisplayName = providerDisplayName
         let retentionLimit = min(max(resolvedSettings.historyRetentionTurns, 0), 1_000)
         entries = retentionLimit == 0 ? [] : Array(initialEntries.suffix(retentionLimit))
         for entry in initialEntries {
@@ -158,7 +166,9 @@ public actor TranslationSession {
         settings: TranslationSettings,
         service: TranslationService,
         repository: any TranslationRepository,
-        cache: TranslationCache = TranslationCache()
+        cache: TranslationCache = TranslationCache(),
+        sentenceCache: (any SentenceTranslationCaching)? = nil,
+        providerDisplayName: String = ""
     ) async throws -> TranslationSession {
         let snapshot = try await repository.loadHistory(gameID: gameID, sessionID: sessionID)
         let session = TranslationSession(
@@ -169,6 +179,8 @@ public actor TranslationSession {
             service: service,
             repository: repository,
             cache: cache,
+            sentenceCache: sentenceCache,
+            providerDisplayName: providerDisplayName,
             initialEntries: snapshot?.entries ?? []
         )
         let restoredEntries = await session.history()
@@ -232,6 +244,32 @@ public actor TranslationSession {
             updateEntry(entry.id) { $0.translatedText = cached
                 $0.status = .completed
             }
+            requestEpochByEntry.removeValue(forKey: entry.id)
+            try await persistHistory()
+            guard requestEpoch == epoch, activeEntryID == entry.id else { throw CancellationError() }
+            return entry.id
+        }
+        guard isCurrentRequest(epoch, entryID: entry.id) else { throw CancellationError() }
+
+        if settings.sentenceCacheEnabled,
+           let sentenceCache,
+           let persistentHit = try? await sentenceCache.lookup(
+               gameID: gameID,
+               sourceText: source.text,
+               speaker: source.speaker,
+               sourceLanguage: request.sourceLanguage,
+               targetLanguage: request.targetLanguage,
+               providerKind: configuration.kind,
+               modelID: configuration.modelID ?? "",
+               customPrompt: request.customPrompt
+           ) {
+            guard isCurrentRequest(epoch, entryID: entry.id) else { throw CancellationError() }
+            updateEntry(entry.id) {
+                $0.translatedText = persistentHit.translatedText
+                $0.status = .completed
+                $0.failureDescription = nil
+            }
+            await cache.insert(persistentHit.translatedText, for: key)
             requestEpochByEntry.removeValue(forKey: entry.id)
             try await persistHistory()
             guard requestEpoch == epoch, activeEntryID == entry.id else { throw CancellationError() }
@@ -382,6 +420,24 @@ public actor TranslationSession {
                     $0.failureDescription = nil
                 }
                 await cache.insert(text, for: cacheKey)
+                if settings.sentenceCacheEnabled,
+                   !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   let sentenceCache,
+                   let completedEntry = entries.first(where: { $0.id == entryID }) {
+                    let effectiveProviderName = providerDisplayName.isEmpty ? configuration.name : providerDisplayName
+                    _ = try? await sentenceCache.store(
+                        gameID: gameID,
+                        sourceText: completedEntry.source.text,
+                        translatedText: text,
+                        speaker: completedEntry.source.speaker,
+                        sourceLanguage: cacheKey.sourceLanguage,
+                        targetLanguage: cacheKey.targetLanguage,
+                        providerName: effectiveProviderName,
+                        providerKind: cacheKey.providerKind,
+                        modelID: cacheKey.modelID ?? "",
+                        customPrompt: cacheKey.customPrompt
+                    )
+                }
                 guard requestEpochByEntry[entryID] == eventEpoch,
                       entries.contains(where: { $0.id == entryID })
                 else { return }

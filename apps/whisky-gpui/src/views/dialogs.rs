@@ -15,7 +15,7 @@ use crate::controls::*;
 use crate::program_settings::{self, ProgramSettingsDto, RunEntryDto};
 use crate::runtime::ClipboardDecision;
 use crate::scan::{self, JobStatus};
-use crate::state::{BottleDialogKind, PreviewSheet, ScanState, WhiskyApp};
+use crate::state::{AboutTab, BottleDialogKind, PreviewSheet, ScanState, WhiskyApp};
 use crate::theme::RADIUS_LG;
 use crate::winetricks::{category_label, filtered_verbs};
 
@@ -89,6 +89,69 @@ const DLL_MODES: &[(&str, &str)] = &[
     ("n,b", "原生优先"),
     ("b,n", "内建优先"),
     ("", "禁用"),
+];
+
+pub(crate) const GPL_LICENSE_TEXT: &str = include_str!("../../../../LICENSE");
+pub(crate) const THIRD_PARTY_NOTICES_TEXT: &str =
+    include_str!("../../../../THIRD-PARTY-NOTICES.md");
+
+const ABOUT_TABS: &[(AboutTab, &str, &str)] = &[
+    (AboutTab::Overview, "about-tab-overview", "概览"),
+    (AboutTab::Acknowledgments, "about-tab-ack", "致谢与组件"),
+    (AboutTab::License, "about-tab-license", "许可证 (GPLv3)"),
+    (AboutTab::Notices, "about-tab-notices", "第三方声明"),
+];
+
+struct AcknowledgmentItem {
+    name: &'static str,
+    badge: &'static str,
+    description: &'static str,
+    highlighted: bool,
+}
+
+const ACKNOWLEDGMENTS: &[AcknowledgmentItem] = &[
+    AcknowledgmentItem {
+        name: "LunaHook / LunaTranslator",
+        badge: "HIllya51/LunaTranslator · GPL-3.0",
+        description: "核心 Windows 文本钩取与进程注入引擎（LunaHook32/64.dll、LunaHost32/64.dll、LunaTmpFontLoader.dll），配套 MinHook（BSD-2-Clause，Tsuda Kageyu / HDE by Vyacheslav Patkov）、uchardet（GPL-2.0-or-later）与 nlohmann/json（MIT）。",
+        highlighted: true,
+    },
+    AcknowledgmentItem {
+        name: "Whisky & Contributors",
+        badge: "whisky-app/whisky / frankea/Whisky · GPL-3.0",
+        description: "酒瓶容器管理架构、偏好设置模型与原生桥接基础。",
+        highlighted: false,
+    },
+    AcknowledgmentItem {
+        name: "Wine / CrossOver Wine & GE-Proton",
+        badge: "LGPL-2.1+",
+        description: "Windows 兼容运行时，以及 msync、DXVK-macOS、DXMT、MoltenVK、D3DMetal 等图形与同步兼容组件。",
+        highlighted: false,
+    },
+    AcknowledgmentItem {
+        name: "Winetricks & cabextract / libmspack",
+        badge: "LGPL-2.1+ · GPL-2.0+ / LGPL-2.1+",
+        description: "Windows 运行库组件安装脚本与 CAB 压缩包解包支持。",
+        highlighted: false,
+    },
+    AcknowledgmentItem {
+        name: "gpui-kit / Zed GPUI & Rust 生态依赖",
+        badge: "Apache-2.0",
+        description: "硬件加速原生桌面界面框架及 Rust 生态基础依赖。",
+        highlighted: false,
+    },
+    AcknowledgmentItem {
+        name: "Real-CUGAN & Anime4K",
+        badge: "bilibili/ailab & nihui · MIT / bloc97 · MIT",
+        description: "封面超分辨率模型（Real-CUGAN models-se）与实时 Metal 着色器管线。",
+        highlighted: false,
+    },
+    AcknowledgmentItem {
+        name: "PotatoVN & 元数据公开接口",
+        badge: "GoldenPotato137/PotatoVN · Apache-2.0",
+        description: "视觉小说库与元数据设计参考，及 Bangumi、VNDB、Steam、YMGal、NextMoe 公开数据来源。",
+        highlighted: false,
+    },
 ];
 
 impl WhiskyApp {
@@ -217,12 +280,12 @@ impl WhiskyApp {
     /// footer's save sends one `programs.settings.set` patch.
     fn run_settings(
         &mut self,
-        _index: usize,
+        index: usize,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         if self.demo {
-            return self.demo_run_settings(_index, cx);
+            return self.demo_run_settings(index, cx);
         }
         if self.program_settings.loading && self.program_settings.settings.is_none() {
             return self.form(
@@ -277,6 +340,9 @@ impl WhiskyApp {
             ));
         }
         sections.push(self.program_config_section(&settings, window, cx));
+        if let Some(translation_section) = self.program_translation_section(index, cx) {
+            sections.push(translation_section);
+        }
         if cfg!(target_os = "macos") {
             let mode = self.program_settings.region_picker_mode();
             let status = if mode == "off" { "已关闭此游戏的超分屏蔽" }
@@ -307,6 +373,129 @@ impl WhiskyApp {
         sections.push(self.program_history_section(cx));
         sections.push(self.program_shortcut_section(window, cx));
         self.form("run-settings-scroll", sections)
+    }
+
+    fn program_translation_section(
+        &self,
+        index: usize,
+        cx: &Context<Self>,
+    ) -> Option<AnyElement> {
+        let game = self.game(index)?;
+        if game.container.is_empty() {
+            return None;
+        }
+        let container = game.container.clone();
+        let entry_id = game.id.clone();
+        let cached_preset = self.capture.preset_for_game(&container, &entry_id);
+        let preset = cached_preset.cloned().unwrap_or_default();
+        let preset_mutating = self.capture.is_pending("translation.capture.preset/save")
+            || self.capture.is_pending("translation.capture.preset/clear");
+        let preset_loading = self.capture.is_pending("translation.capture.preset/get");
+        let remembered_process = preset
+            .target_exe_path
+            .as_deref()
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+            .map(crate::capture::exe_basename);
+        let status_summary = if preset_loading && cached_preset.is_none() {
+            "正在读取此游戏的翻译预设…".to_owned()
+        } else {
+            let base = if preset.translation_enabled {
+                "已启用实时翻译"
+            } else {
+                "未启用实时翻译"
+            };
+            match remembered_process {
+                Some(exe) => format!("{base} · 记忆目标进程：{exe}"),
+                None => format!("{base} · 尚未记忆目标进程"),
+            }
+        };
+        let enabled = preset.translation_enabled;
+        let prompt_on_launch = preset.prompt_attach_on_launch;
+        let container_for_enable = container.clone();
+        let entry_for_enable = entry_id.clone();
+        let container_for_prompt = container.clone();
+        let entry_for_prompt = entry_id.clone();
+        let hud_available = self.service_available("translation.capture.hud/show");
+        let hud_pending = self.capture.is_pending("translation.capture.hud/show");
+
+        Some(self.section(
+            "program-translation",
+            "实时翻译与捕获",
+            vec![
+                col()
+                    .gap(px(10.))
+                    .py(px(6.))
+                    .child(muted(status_summary).line_height(relative(1.4)))
+                    .child(
+                        row()
+                            .gap(px(8.))
+                            .flex_wrap()
+                            .child(selectable_pill(
+                                "run-settings-translation-enabled",
+                                "为此游戏启用翻译",
+                                enabled,
+                                preset_mutating,
+                                cx.listener(move |this, _, _, cx| {
+                                    this.sync_capture_provider_selection();
+                                    this.capture.toggle_preset_translation_enabled(
+                                        &this.bridge,
+                                        &container_for_enable,
+                                        &entry_for_enable,
+                                        !enabled,
+                                    );
+                                    cx.notify();
+                                }),
+                            ))
+                            .child(selectable_pill(
+                                "run-settings-prompt-on-launch",
+                                "启动游戏时弹出悬浮捕获窗",
+                                prompt_on_launch,
+                                preset_mutating || !enabled,
+                                cx.listener(move |this, _, _, cx| {
+                                    this.capture.toggle_preset_prompt_on_launch(
+                                        &this.bridge,
+                                        &container_for_prompt,
+                                        &entry_for_prompt,
+                                        !prompt_on_launch,
+                                    );
+                                    cx.notify();
+                                }),
+                            )),
+                    )
+                    .child(
+                        row()
+                            .gap(px(8.))
+                            .flex_wrap()
+                            .child(
+                                Button::new("run-settings-open-capture")
+                                    .label("打开捕获面板…")
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.preview.sheet = None;
+                                        this.preview.sheet_history.clear();
+                                        this.open_translation_for_game(index, cx);
+                                    })),
+                            )
+                            .when(hud_available, |r| {
+                                r.child(
+                                    Button::new("run-settings-open-hud")
+                                        .label("弹出悬浮捕获窗")
+                                        .disabled(hud_pending)
+                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                            this.capture.open_capture_hud(
+                                                &this.bridge,
+                                                &container,
+                                                &entry_id,
+                                            );
+                                            cx.notify();
+                                        })),
+                                )
+                            }),
+                    )
+                    .into_any_element(),
+            ],
+            cx,
+        ))
     }
 
     fn program_input(
@@ -4177,61 +4366,38 @@ impl WhiskyApp {
         height: f32,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let name = self
-            .app_info
-            .as_ref()
-            .map(|info| info.app_name.clone())
-            .filter(|name| !name.is_empty())
-            .unwrap_or_else(|| "Maltoria".into());
-        let version = self
-            .app_info
-            .as_ref()
-            .map_or_else(|| "预览版".to_owned(), |info| info.version_label());
-        let os_version = self
-            .app_info
-            .as_ref()
-            .map(|info| info.os_version.clone())
-            .filter(|version| !version.is_empty())
-            .unwrap_or_else(|| "macOS".into());
-        let bundle = self
-            .app_info
-            .as_ref()
-            .map(|info| info.bundle_identifier.clone())
-            .unwrap_or_default();
-        let bridge = match &self.bridge_status {
-            BridgeStatus::Connected { version, .. } => version.clone(),
-            BridgeStatus::Failed { .. } => "不可用".into(),
-            BridgeStatus::Stopped => "已停止".into(),
-            BridgeStatus::Locating | BridgeStatus::Starting => "连接中".into(),
-        };
-        let pw = 420_f32.min(width - 48.);
-        let ph = 360_f32.min(height - 48.);
-        let mut facts = vec![
-            row()
-                .gap(px(18.))
-                .child(div().w(px(78.)).child(muted("版本")))
-                .child(div().flex_1().child(version))
-                .into_any_element(),
-            row()
-                .gap(px(18.))
-                .child(div().w(px(78.)).child(muted("系统")))
-                .child(div().flex_1().child(os_version))
-                .into_any_element(),
-            row()
-                .gap(px(18.))
-                .child(div().w(px(78.)).child(muted("桥接")))
-                .child(div().flex_1().child(bridge))
-                .into_any_element(),
-        ];
-        if !bundle.is_empty() {
-            facts.push(
-                row()
-                    .gap(px(18.))
-                    .child(div().w(px(78.)).child(muted("标识符")))
-                    .child(div().flex_1().min_w_0().child(bundle))
-                    .into_any_element(),
-            );
+        let pw = 600_f32.min(width - 48.);
+        let ph = 520_f32.min(height - 48.);
+        let mut tab_strip = row()
+            .flex_shrink_0()
+            .flex_wrap()
+            .px(px(16.))
+            .py(px(10.))
+            .gap(px(8.))
+            .border_b_1()
+            .border_color(rgba(crate::theme::surface_border()));
+        for &(tab, id, label) in ABOUT_TABS {
+            let active = self.about_tab == tab;
+            tab_strip = tab_strip.child(about_tab_button(id, label, active, tab, cx));
         }
+
+        let body = match self.about_tab {
+            AboutTab::Overview => self.about_overview_tab(cx),
+            AboutTab::Acknowledgments => about_acknowledgments_tab(),
+            AboutTab::License => about_document_tab(
+                "about-license-scroll",
+                "GNU General Public License v3.0 完整许可证文本（LICENSE）：",
+                GPL_LICENSE_TEXT,
+                false,
+            ),
+            AboutTab::Notices => about_document_tab(
+                "about-notices-scroll",
+                "第三方组件版权、许可与源码归属声明（THIRD-PARTY-NOTICES.md）：",
+                THIRD_PARTY_NOTICES_TEXT,
+                true,
+            ),
+        };
+
         div()
             .absolute()
             .inset_0()
@@ -4244,7 +4410,7 @@ impl WhiskyApp {
                     .absolute()
                     .inset_0()
                     .on_click(cx.listener(|this, _, _, cx| {
-                        this.about = false;
+                        this.dismiss_about();
                         cx.notify();
                     })),
             )
@@ -4283,22 +4449,13 @@ impl WhiskyApp {
                                     .label("×")
                                     .ghost()
                                     .on_click(cx.listener(|this, _, _, cx| {
-                                        this.about = false;
+                                        this.dismiss_about();
                                         cx.notify();
                                     })),
                             ),
                     )
-                    .child(
-                        col()
-                            .flex_1()
-                            .min_h_0()
-                            .px(px(20.))
-                            .py(px(18.))
-                            .gap(px(12.))
-                            .child(div().text_size(px(22.)).font_weight(FontWeight::SEMIBOLD).child(name))
-                            .child(muted("在 macOS 上运行 Windows 游戏。"))
-                            .children(facts),
-                    )
+                    .child(tab_strip)
+                    .child(body)
                     .child(
                         row()
                             .flex_shrink_0()
@@ -4315,12 +4472,157 @@ impl WhiskyApp {
                                     .label("关闭")
                                     .primary()
                                     .on_click(cx.listener(|this, _, _, cx| {
-                                        this.about = false;
+                                        this.dismiss_about();
                                         cx.notify();
                                     })),
                             ),
                     ),
             )
+            .into_any_element()
+    }
+
+    fn about_overview_tab(&self, cx: &mut Context<Self>) -> AnyElement {
+        let name = self
+            .app_info
+            .as_ref()
+            .map(|info| info.app_name.clone())
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| "Maltoria".into());
+        let version = self
+            .app_info
+            .as_ref()
+            .map_or_else(|| "预览版".to_owned(), |info| info.version_label());
+        let os_version = self
+            .app_info
+            .as_ref()
+            .map(|info| info.os_version.clone())
+            .filter(|version| !version.is_empty())
+            .unwrap_or_else(|| {
+                if cfg!(target_os = "macos") {
+                    "macOS".into()
+                } else {
+                    "Linux".into()
+                }
+            });
+        let bundle = self
+            .app_info
+            .as_ref()
+            .map(|info| info.bundle_identifier.clone())
+            .unwrap_or_default();
+        let bridge = match &self.bridge_status {
+            BridgeStatus::Connected { version, .. } => version.clone(),
+            BridgeStatus::Failed { .. } => "不可用".into(),
+            BridgeStatus::Stopped => "已停止".into(),
+            BridgeStatus::Locating | BridgeStatus::Starting => "连接中".into(),
+        };
+        let subtitle = if cfg!(target_os = "macos") {
+            "在 macOS 上运行 Windows 游戏与视觉小说。"
+        } else {
+            "在 Linux 上运行 Windows 游戏与视觉小说。"
+        };
+
+        let mut facts = vec![
+            about_fact_row("版本", version),
+            about_fact_row("系统", os_version),
+            about_fact_row("桥接", bridge),
+        ];
+        if !bundle.is_empty() {
+            facts.push(about_fact_row("标识符", bundle));
+        }
+
+        let legal_card = col()
+            .w_full()
+            .rounded(px(10.))
+            .p(px(14.))
+            .gap(px(8.))
+            .bg(rgba(crate::theme::section_bg()))
+            .border_1()
+            .border_color(rgba(crate::theme::section_border()))
+            .child(
+                row()
+                    .justify_between()
+                    .items_center()
+                    .gap(px(8.))
+                    .child(
+                        div()
+                            .text_size(px(12.5))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(rgb(crate::theme::text()))
+                            .child("GPLv3 版权与法律声明"),
+                    )
+                    .child(about_pill_badge("GPL-3.0-or-later", true)),
+            )
+            .child(
+                div()
+                    .text_size(px(12.))
+                    .text_color(rgb(crate::theme::subtext()))
+                    .child("Copyright © 2023–2026 Whisky & Maltoria Contributors"),
+            )
+            .child(
+                div()
+                    .w_full()
+                    .min_w_0()
+                    .text_size(px(11.5))
+                    .line_height(relative(1.5))
+                    .text_color(rgb(crate::theme::muted_color()))
+                    .child("本程序为自由软件，基于 GNU General Public License v3.0 或更高版本分发（GPLv3 §0 / §5(d)）。本程序按“现状”提供，不附带任何明示或默示担保；完整许可证条款、对应源码获取方式及第三方组件版权声明请见对应标签页。"),
+            )
+            .child(
+                row()
+                    .flex_wrap()
+                    .pt(px(2.))
+                    .gap(px(8.))
+                    .child(
+                        Button::new("about-jump-license")
+                            .label("查看许可证 (GPLv3)")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.about_tab = AboutTab::License;
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        Button::new("about-jump-ack")
+                            .label("致谢与组件")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.about_tab = AboutTab::Acknowledgments;
+                                cx.notify();
+                            })),
+                    ),
+            );
+
+        col()
+            .id("about-overview-scroll")
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scroll()
+            .px(px(20.))
+            .py(px(18.))
+            .gap(px(14.))
+            .child(
+                col()
+                    .gap(px(4.))
+                    .child(
+                        div()
+                            .text_size(px(22.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(rgb(crate::theme::text()))
+                            .child(name),
+                    )
+                    .child(muted(subtitle)),
+            )
+            .child(
+                col()
+                    .w_full()
+                    .rounded(px(10.))
+                    .px(px(14.))
+                    .py(px(12.))
+                    .gap(px(8.))
+                    .bg(rgba(crate::theme::section_bg()))
+                    .border_1()
+                    .border_color(rgba(crate::theme::section_border()))
+                    .children(facts),
+            )
+            .child(legal_card)
             .into_any_element()
     }
 
@@ -4818,5 +5120,230 @@ impl WhiskyApp {
                     .child(footer),
             )
             .into_any_element()
+    }
+}
+
+fn about_tab_button(
+    id: &'static str,
+    label: &'static str,
+    active: bool,
+    tab: AboutTab,
+    cx: &mut Context<WhiskyApp>,
+) -> AnyElement {
+    row()
+        .id(id)
+        .px(px(11.))
+        .py(px(5.))
+        .rounded(px(7.))
+        .bg(rgba(if active {
+            crate::theme::accent_subtle_bg()
+        } else {
+            crate::theme::card_bg()
+        }))
+        .border_1()
+        .border_color(rgba(if active {
+            crate::theme::accent_subtle_border()
+        } else {
+            crate::theme::card_border()
+        }))
+        .cursor_pointer()
+        .when(!active, |d| d.hover(|s| s.bg(rgba(crate::theme::hover()))))
+        .on_click(cx.listener(move |this, _, _, cx| {
+            this.about_tab = tab;
+            cx.notify();
+        }))
+        .child(
+            div()
+                .text_size(px(12.))
+                .font_weight(if active {
+                    FontWeight::SEMIBOLD
+                } else {
+                    FontWeight::NORMAL
+                })
+                .text_color(rgb(if active {
+                    crate::theme::accent_fg()
+                } else {
+                    crate::theme::subtext()
+                }))
+                .child(label),
+        )
+        .into_any_element()
+}
+
+fn about_fact_row(label: &'static str, value: String) -> AnyElement {
+    row()
+        .gap(px(18.))
+        .child(div().w(px(72.)).child(muted(label)))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .text_size(px(12.))
+                .text_color(rgb(crate::theme::text()))
+                .child(value),
+        )
+        .into_any_element()
+}
+
+fn about_pill_badge(label: &'static str, accent: bool) -> AnyElement {
+    row()
+        .flex_shrink_0()
+        .px(px(7.))
+        .py(px(2.))
+        .rounded(px(6.))
+        .bg(rgba(if accent {
+            crate::theme::accent_subtle_bg()
+        } else {
+            crate::theme::badge_bg()
+        }))
+        .border_1()
+        .border_color(rgba(if accent {
+            crate::theme::accent_subtle_border()
+        } else {
+            crate::theme::card_border()
+        }))
+        .child(
+            div()
+                .text_size(px(10.5))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(rgb(if accent {
+                    crate::theme::accent_fg()
+                } else {
+                    crate::theme::badge_text()
+                }))
+                .child(label),
+        )
+        .into_any_element()
+}
+
+fn about_ack_card(item: &AcknowledgmentItem) -> AnyElement {
+    col()
+        .w_full()
+        .rounded(px(10.))
+        .p(px(13.))
+        .gap(px(6.))
+        .bg(rgba(if item.highlighted {
+            crate::theme::section_bg()
+        } else {
+            crate::theme::card_bg()
+        }))
+        .border_1()
+        .border_color(rgba(if item.highlighted {
+            crate::theme::accent_subtle_border()
+        } else {
+            crate::theme::card_border()
+        }))
+        .child(
+            row()
+                .flex_wrap()
+                .justify_between()
+                .items_center()
+                .gap(px(8.))
+                .child(
+                    div()
+                        .text_size(px(13.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(rgb(crate::theme::text()))
+                        .child(item.name),
+                )
+                .child(about_pill_badge(item.badge, item.highlighted)),
+        )
+        .child(
+            div()
+                .w_full()
+                .min_w_0()
+                .text_size(px(11.5))
+                .line_height(relative(1.45))
+                .text_color(rgb(crate::theme::subtext()))
+                .child(item.description),
+        )
+        .into_any_element()
+}
+
+fn about_acknowledgments_tab() -> AnyElement {
+    col()
+        .id("about-ack-scroll")
+        .flex_1()
+        .min_h_0()
+        .overflow_y_scroll()
+        .px(px(20.))
+        .py(px(16.))
+        .gap(px(10.))
+        .child(
+            muted("Maltoria 集成了以下自由软件、开源项目及公开数据接口，谨此向各上游作者与维护者致谢。")
+                .text_size(px(11.5)),
+        )
+        .children(ACKNOWLEDGMENTS.iter().map(about_ack_card))
+        .into_any_element()
+}
+
+fn about_document_tab(
+    scroll_id: &'static str,
+    intro: &'static str,
+    body: &'static str,
+    markdown_headings: bool,
+) -> AnyElement {
+    let paragraphs = body
+        .split("\n\n")
+        .map(|block| block.trim_end_matches('\n'))
+        .filter(|block| !block.trim().is_empty())
+        .map(|block| {
+            let is_heading = markdown_headings && block.trim_start().starts_with('#');
+            div()
+                .w_full()
+                .min_w_0()
+                .text_size(px(if is_heading { 12.5 } else { 11.5 }))
+                .font_weight(if is_heading {
+                    FontWeight::SEMIBOLD
+                } else {
+                    FontWeight::NORMAL
+                })
+                .line_height(relative(1.5))
+                .text_color(rgb(if is_heading {
+                    crate::theme::text()
+                } else {
+                    crate::theme::subtext()
+                }))
+                .child(block.to_owned())
+                .into_any_element()
+        })
+        .collect::<Vec<_>>();
+
+    col()
+        .id(scroll_id)
+        .flex_1()
+        .min_h_0()
+        .overflow_y_scroll()
+        .px(px(20.))
+        .py(px(16.))
+        .gap(px(10.))
+        .child(muted(intro).text_size(px(11.5)))
+        .child(
+            col()
+                .w_full()
+                .rounded(px(10.))
+                .p(px(14.))
+                .gap(px(10.))
+                .bg(rgba(crate::theme::code_bg()))
+                .border_1()
+                .border_color(rgba(crate::theme::card_border()))
+                .children(paragraphs),
+        )
+        .into_any_element()
+}
+
+#[cfg(test)]
+mod about_tests {
+    use super::{ACKNOWLEDGMENTS, GPL_LICENSE_TEXT, THIRD_PARTY_NOTICES_TEXT};
+
+    #[test]
+    fn embedded_legal_documents_contain_expected_notices() {
+        assert!(GPL_LICENSE_TEXT.contains("GNU GENERAL PUBLIC LICENSE"));
+        assert!(THIRD_PARTY_NOTICES_TEXT.contains("LunaTranslator"));
+        assert!(
+            ACKNOWLEDGMENTS
+                .iter()
+                .any(|item| item.name.contains("LunaHook / LunaTranslator"))
+        );
     }
 }

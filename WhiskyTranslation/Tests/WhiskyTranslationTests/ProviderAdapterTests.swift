@@ -483,4 +483,157 @@ struct ProviderAdapterTests {
         } catch let error as TranslationError { #expect(error == .sourceExceedsBudget(maximumBytes: 616)) }
         #expect(await transport.capturedRequests().isEmpty)
     }
+
+    @Test func legacyProviderConfigurationDecodesDefaultThinkingLevel() throws {
+        let legacyJSON = """
+        {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "name": "Legacy OpenAI",
+          "kind": "openAIChat",
+          "baseURL": "https://api.openai.com/v1",
+          "modelID": "gpt-4o",
+          "defaultSourceLanguage": "ja",
+          "defaultTargetLanguage": "en",
+          "openAIChatTokenLimitField": "max_completion_tokens"
+        }
+        """
+        let decoded = try JSONDecoder().decode(ProviderConfiguration.self, from: Data(legacyJSON.utf8))
+        #expect(decoded.thinkingLevel == .default)
+    }
+
+    @Test func thinkingLevelMapsAcrossProvidersAndOmitsWhenDefault() async throws {
+        let openAISSE = "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n"
+        let openAICases: [(ThinkingLevel, String?)] = [
+            (.default, nil),
+            (.off, "none"),
+            (.low, "low"),
+            (.medium, "medium"),
+            (.high, "high"),
+            (.xhigh, "xhigh"),
+            (.max, "max"),
+            (.ultra, "ultra")
+        ]
+        for (level, expected) in openAICases {
+            let transport = QueueHTTPTransport([makeHTTPResponse(openAISSE)])
+            let service = TranslationService(transport: transport, credentialStore: SessionOnlyCredentialStore())
+            let config = ProviderConfiguration(
+                kind: .openAIChat,
+                baseURL: URL(string: "http://localhost:8765/v1")!,
+                modelID: "fixture",
+                thinkingLevel: level
+            )
+            _ = try await collectEvents(service.translate(testTranslationRequest(), using: config))
+            let body = try #require(await transport.capturedRequests().first?.body)
+            let json = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            #expect(json["reasoning_effort"] as? String == expected)
+        }
+
+        let anthropicSSE =
+            "event: content_block_delta\ndata: {\"delta\":{\"type\":\"text_delta\",\"text\":\"ok\"}}\n\n"
+                + "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+        let anthropicBudgets: [(ThinkingLevel, Int)] = [
+            (.low, 1_024),
+            (.medium, 4_096),
+            (.high, 8_192),
+            (.xhigh, 16_384),
+            (.max, 32_768),
+            (.ultra, 65_536)
+        ]
+        for (level, expectedBudget) in anthropicBudgets {
+            let transport = QueueHTTPTransport([makeHTTPResponse(anthropicSSE)])
+            let service = try await TranslationService(transport: transport, credentialStore: testCredentialStore())
+            let config = ProviderConfiguration(
+                kind: .anthropic,
+                modelID: "fixture-claude",
+                credentialReference: "credential-ref",
+                thinkingLevel: level
+            )
+            _ = try await collectEvents(service.translate(testTranslationRequest(outputTokenLimit: 512), using: config))
+            let body = try #require(await transport.capturedRequests().first?.body)
+            let json = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            let thinking = try #require(json["thinking"] as? [String: Any])
+            #expect(thinking["type"] as? String == "enabled")
+            #expect(thinking["budget_tokens"] as? Int == expectedBudget)
+            #expect(json["max_tokens"] as? Int == expectedBudget + 1_024)
+        }
+        do {
+            let transport = QueueHTTPTransport([makeHTTPResponse(anthropicSSE), makeHTTPResponse(anthropicSSE)])
+            let service = try await TranslationService(transport: transport, credentialStore: testCredentialStore())
+            for level in [ThinkingLevel.default, ThinkingLevel.off] {
+                let config = ProviderConfiguration(
+                    kind: .anthropic,
+                    modelID: "fixture-claude",
+                    credentialReference: "credential-ref",
+                    thinkingLevel: level
+                )
+                _ = try await collectEvents(
+                    service.translate(testTranslationRequest(outputTokenLimit: 512), using: config)
+                )
+            }
+            let requests = await transport.capturedRequests()
+            let defaultBody = try #require(requests[0].body)
+            let defaultJSON = try #require(JSONSerialization.jsonObject(with: defaultBody) as? [String: Any])
+            #expect(defaultJSON["thinking"] == nil)
+            #expect(defaultJSON["max_tokens"] as? Int == 512)
+            let offBody = try #require(requests[1].body)
+            let offJSON = try #require(JSONSerialization.jsonObject(with: offBody) as? [String: Any])
+            let thinking = try #require(offJSON["thinking"] as? [String: Any])
+            #expect(thinking["type"] as? String == "disabled")
+            #expect(offJSON["max_tokens"] as? Int == 512)
+        }
+
+        let geminiSSE = "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"ok\"}]},\"finishReason\":\"STOP\"}]}\n\n"
+        let geminiBudgets: [(ThinkingLevel, Int?)] = [
+            (.default, nil),
+            (.off, 0),
+            (.low, 1_024),
+            (.medium, 4_096),
+            (.high, 8_192),
+            (.xhigh, 16_384),
+            (.max, 24_576),
+            (.ultra, 32_768)
+        ]
+        for (level, expectedBudget) in geminiBudgets {
+            let transport = QueueHTTPTransport([makeHTTPResponse(geminiSSE)])
+            let service = try await TranslationService(transport: transport, credentialStore: testCredentialStore())
+            let config = ProviderConfiguration(
+                kind: .gemini,
+                modelID: "fixture-gemini",
+                credentialReference: "credential-ref",
+                thinkingLevel: level
+            )
+            _ = try await collectEvents(service.translate(testTranslationRequest(), using: config))
+            let body = try #require(await transport.capturedRequests().first?.body)
+            let json = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            let genConfig = try #require(json["generationConfig"] as? [String: Any])
+            let thinkingConfig = genConfig["thinkingConfig"] as? [String: Any]
+            #expect(thinkingConfig?["thinkingBudget"] as? Int == expectedBudget)
+        }
+
+        let ollamaNDJSON = "{\"message\":{\"content\":\"ok\"},\"done\":true}\n"
+        let ollamaFlags: [(ThinkingLevel, Bool?)] = [
+            (.default, nil),
+            (.off, false),
+            (.low, true),
+            (.medium, true),
+            (.high, true),
+            (.xhigh, true),
+            (.max, true),
+            (.ultra, true)
+        ]
+        for (level, expectedThink) in ollamaFlags {
+            let transport = QueueHTTPTransport([makeHTTPResponse(ollamaNDJSON)])
+            let service = TranslationService(transport: transport, credentialStore: SessionOnlyCredentialStore())
+            let config = ProviderConfiguration(
+                kind: .ollama,
+                baseURL: URL(string: "http://127.0.0.1:11434")!,
+                modelID: "fixture:latest",
+                thinkingLevel: level
+            )
+            _ = try await collectEvents(service.translate(testTranslationRequest(), using: config))
+            let body = try #require(await transport.capturedRequests().first?.body)
+            let json = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            #expect(json["think"] as? Bool == expectedThink)
+        }
+    }
 }

@@ -366,27 +366,22 @@ impl WhiskyApp {
                     "继续游玩",
                     cx,
                 ))
-                .child(
-                    row()
-                        .id(("immersive-detail", index))
-                        .flex_shrink_0()
-                        .justify_center()
-                        .gap(px(6.))
-                        .px(px(14.))
-                        .h(px(30.))
-                        .rounded_full()
-                        .bg(rgba(HERO_CHIP))
-                        .text_size(px(12.))
-                        .font_weight(FontWeight::BOLD)
-                        .text_color(rgb(0xffffff))
-                        .cursor_pointer()
-                        .hover(|s| s.bg(rgba(HERO_CHIP_HOVER)))
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.open_detail(index, cx);
-                        }))
-                        .child(icon("info", 13.))
-                        .child("详情"),
-                ),
+                .child(hero_chip_button(
+                    ("immersive-detail", index),
+                    "info",
+                    "详情",
+                    cx.listener(move |this, _, _, cx| {
+                        this.open_detail(index, cx);
+                    }),
+                ))
+                .child(hero_chip_button(
+                    ("immersive-translation", index),
+                    "languages",
+                    "游戏翻译",
+                    cx.listener(move |this, _, _, cx| {
+                        this.open_translation_for_game(index, cx);
+                    }),
+                )),
         );
         let mut layer = div().absolute().size_full().child(block);
         if !game.landscape
@@ -676,4 +671,29 @@ impl WhiskyApp {
             )
             .into_any_element()
     }
+}
+
+fn hero_chip_button(
+    id: impl Into<ElementId>,
+    icon_name: &str,
+    label: &'static str,
+    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> Stateful<Div> {
+    row()
+        .id(id)
+        .flex_shrink_0()
+        .justify_center()
+        .gap(px(6.))
+        .px(px(14.))
+        .h(px(30.))
+        .rounded_full()
+        .bg(rgba(HERO_CHIP))
+        .text_size(px(12.))
+        .font_weight(FontWeight::BOLD)
+        .text_color(rgb(0xffffff))
+        .cursor_pointer()
+        .hover(|s| s.bg(rgba(HERO_CHIP_HOVER)))
+        .on_click(on_click)
+        .child(icon(icon_name, 13.))
+        .child(label)
 }

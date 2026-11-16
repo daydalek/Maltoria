@@ -69,6 +69,8 @@ if [[ -d "${UPSCALE_SRC}" ]]; then
     chmod +x "${CONTENTS}/Resources/realcugan-helper"
 fi
 
+cp "${REPO_ROOT}/LICENSE" "${CONTENTS}/Resources/LICENSE"
+cp "${REPO_ROOT}/THIRD-PARTY-NOTICES.md" "${CONTENTS}/Resources/THIRD-PARTY-NOTICES.md"
 if [[ -d "${REPO_ROOT}/ThirdParty" ]]; then
     mkdir -p "${CONTENTS}/Resources/ThirdParty"
     cp -R "${REPO_ROOT}/ThirdParty/"* "${CONTENTS}/Resources/ThirdParty/"
@@ -122,7 +124,7 @@ cat > "${CONTENTS}/Info.plist" <<PLIST
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © Maltoria</string>
+	<string>Copyright © 2023–2026 Whisky &amp; Maltoria Contributors (GNU GPL v3.0 or later)</string>
 </dict>
 </plist>
 PLIST

@@ -72,6 +72,7 @@ public enum TranslationError: Error, Equatable, Sendable, LocalizedError {
 
 public enum CredentialStoreAvailability: String, Codable, Sendable {
     case persistentKeychain
+    case localPlaintextFile
     case sessionOnly
 }
 
@@ -79,5 +80,12 @@ public protocol CredentialStore: Sendable {
     func availability() async -> CredentialStoreAvailability
     func store(_ secret: String, for reference: String) async throws
     func secret(for reference: String) async throws -> String?
+    func hasSecret(for reference: String) async throws -> Bool
     func remove(reference: String) async throws
+}
+
+public extension CredentialStore {
+    func hasSecret(for reference: String) async throws -> Bool {
+        try await secret(for: reference) != nil
+    }
 }
