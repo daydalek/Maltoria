@@ -359,6 +359,7 @@ struct Pending {
     method: String,
     generation: u64,
     session_id: Option<String>,
+    snapshot_owner: Option<(String, String, String)>,
     context: Option<(String, String, String)>,
     preset_key: Option<(String, String)>,
     role_edit_generation: u64,
@@ -561,6 +562,7 @@ impl CaptureState {
                     .and_then(|snapshot| snapshot.session_id.clone()),
                 context: self.context.clone(),
                 preset_key: None,
+                snapshot_owner: self.active_game.clone(),
                 role_edit_generation: self.role_edit_generation,
             },
         );
@@ -612,6 +614,7 @@ impl CaptureState {
                     .and_then(|snapshot| snapshot.session_id.clone()),
                 context: self.context.clone(),
                 preset_key: Some(key),
+                snapshot_owner: None,
                 role_edit_generation: self.role_edit_generation,
             },
         );
@@ -1006,7 +1009,7 @@ impl CaptureState {
     pub(crate) fn stop(&mut self, bridge: &BridgeSupervisor, method: &str) {
         #[cfg(target_os = "linux")]
         { self.hud.hide(); }
-        let was_active = self.active_game.is_some();
+        let stopping_game = self.active_game.take();
         self.generation = self.generation.wrapping_add(1);
         self.role_edit_generation = self.role_edit_generation.wrapping_add(1);
         self.pending.clear();
@@ -1016,15 +1019,17 @@ impl CaptureState {
         self.auto_attach_on_preset_load = false;
         self.auto_attach_attempts = 0;
         self.auto_attach_retry_scheduled = false;
-        self.active_game = None;
         self.snapshot = None;
         self.processes.clear();
         self.threads.clear();
         self.history_text.clear();
         self.thread_roles.clear();
         self.history_text_progress = None;
-        if was_active {
-            let _ = self.request(bridge, method, json!({}));
+        if let Some(owner) = stopping_game
+            && let Some(request) = self.request(bridge, method, json!({}))
+            && let Some(pending) = self.pending.get_mut(&request)
+        {
+            pending.snapshot_owner = Some(owner);
         }
     }
     pub(crate) fn refresh_threads(&mut self, bridge: &BridgeSupervisor, offset: usize) {
@@ -1176,6 +1181,7 @@ impl CaptureState {
         &mut self,
         snapshot: Snapshot,
         method: &str,
+        snapshot_owner: Option<&(String, String, String)>,
         role_gen_matches: bool,
         bridge: &BridgeSupervisor,
         cx: &mut Context<WhiskyApp>,
@@ -1202,9 +1208,11 @@ impl CaptureState {
         self.sync_thread_roles_from_server(&snapshot.threads, role_gen_matches);
         self.thread_total = snapshot.threads_total;
         if let (Some(preset), Some((container, entry_id, _))) =
-            (snapshot.preset.as_ref(), self.active_game.as_ref())
+            (snapshot.preset.as_ref(), snapshot_owner.or(self.active_game.as_ref()))
         {
-            if self.context_matches_active_game() {
+            if self.context.as_ref().is_some_and(|context| {
+                context.0 == *container && context.1 == *entry_id
+            }) {
                 self.preset = Some(preset.clone());
             }
             self.presets_by_game
@@ -1295,13 +1303,13 @@ impl CaptureState {
                 | "translation.capture.stop"
                 | "translation.snapshot" => {
                     if let Ok(snapshot) = serde_json::from_value::<Snapshot>(value) {
-                        self.apply_snapshot(snapshot, method, role_gen_matches, bridge, cx);
+                        self.apply_snapshot(snapshot, method, pending.snapshot_owner.as_ref(), role_gen_matches, bridge, cx);
                     }
                 }
                 "translation.capture.autoAttach" => {
                     let snapshot_val = value.get("snapshot").cloned().unwrap_or(value);
                     if let Ok(snapshot) = serde_json::from_value::<Snapshot>(snapshot_val) {
-                        self.apply_snapshot(snapshot, method, role_gen_matches, bridge, cx);
+                        self.apply_snapshot(snapshot, method, pending.snapshot_owner.as_ref(), role_gen_matches, bridge, cx);
                     }
                 }
                 "translation.capture.preset/get" | "translation.capture.preset/save" => {
@@ -1649,6 +1657,7 @@ mod tests {
             method: "translation.snapshot".into(),
             generation: state.generation,
             session_id: None,
+            snapshot_owner: None,
             context: None,
             preset_key: None,
             role_edit_generation: state.role_edit_generation,
@@ -1667,6 +1676,7 @@ mod tests {
             method: "translation.snapshot".into(),
             generation: state.generation,
             session_id: Some("old-session".into()),
+            snapshot_owner: None,
             context: None,
             preset_key: None,
             role_edit_generation: state.role_edit_generation,
@@ -1919,6 +1929,7 @@ mod tests {
                         method: "translation.capture.preset/get".into(),
                         generation: this.capture.generation,
                         session_id: None,
+                        snapshot_owner: None,
                         context: Some(ctx_tuple.clone()),
                         preset_key: None,
                         role_edit_generation: this.capture.role_edit_generation,
@@ -1956,6 +1967,7 @@ mod tests {
                         method: "translation.capture.preset/save".into(),
                         generation: this.capture.generation,
                         session_id: None,
+                        snapshot_owner: None,
                         context: Some(ctx_tuple.clone()),
                         preset_key: None,
                         role_edit_generation: this.capture.role_edit_generation,
@@ -1999,6 +2011,7 @@ mod tests {
                         method: "translation.capture.autoAttach".into(),
                         generation: this.capture.generation,
                         session_id: None,
+                        snapshot_owner: None,
                         context: Some(ctx_tuple.clone()),
                         preset_key: None,
                         role_edit_generation: this.capture.role_edit_generation,
@@ -2034,6 +2047,7 @@ mod tests {
                         method: "translation.capture.autoAttach".into(),
                         generation: this.capture.generation,
                         session_id: Some("s1".into()),
+                        snapshot_owner: None,
                         context: Some(ctx_tuple.clone()),
                         preset_key: None,
                         role_edit_generation: this.capture.role_edit_generation,
@@ -2092,6 +2106,7 @@ mod tests {
                         method: "translation.capture.preset/clear".into(),
                         generation: this.capture.generation,
                         session_id: Some("s1".into()),
+                        snapshot_owner: None,
                         context: Some(ctx_tuple),
                         preset_key: None,
                         role_edit_generation: this.capture.role_edit_generation,
@@ -2108,6 +2123,82 @@ mod tests {
                 assert!(this.capture.preset_notice.is_some());
             })
             .unwrap();
+    }
+
+    #[gpui_kit::test]
+    fn stop_reply_updates_only_its_session_owners_final_preset(
+        cx: &mut gpui_kit::TestAppContext,
+    ) {
+        cx.update(|app| gpui_kit::init(app));
+        let (_tx, rx) = smol::channel::unbounded();
+        let (bridge, _drain) = BridgeSupervisor::recording_for_tests();
+        let window = cx.add_window(|window, cx| {
+            WhiskyApp::new_with_bridge(window, cx, bridge, rx, false)
+        });
+        window.update(cx, |app, _, cx| {
+            let a: (String, String, String) = ("container".into(), "game-a".into(), "Game A".into());
+            let b: (String, String, String) = ("container".into(), "game-b".into(), "Game B".into());
+            let old_a = CapturePreset::default();
+            let final_a = CapturePreset {
+                translation_enabled: true,
+                target_exe_path: Some("C:\\e2e-gdi.exe".into()),
+                ..Default::default()
+            };
+            let preset_b = CapturePreset {
+                architecture: "x86".into(),
+                ..Default::default()
+            };
+            for context in [&a, &b] {
+                for switch_context in [false, true] {
+                    for outcome in ["preset", "empty", "error"] {
+                        app.capture = CaptureState::default();
+                        app.capture.presets_by_game.insert(
+                            (a.0.clone(), a.1.clone()), old_a.clone(),
+                        );
+                        app.capture.presets_by_game.insert(
+                            (b.0.clone(), b.1.clone()), preset_b.clone(),
+                        );
+                        app.capture.set_context(Some(context.clone()));
+                        app.capture.active_game = Some(a.clone());
+                        app.capture.snapshot = Some(Snapshot {
+                            session_id: Some("session-a".into()),
+                            capture_state: "attached".into(),
+                            ..Default::default()
+                        });
+                        app.capture.stop(&app.bridge, "translation.capture.stop");
+                        assert!(app.capture.active_game.is_none());
+                        let stop = *app.capture.pending.keys().next().unwrap();
+                        assert_eq!(app.capture.pending[&stop].snapshot_owner.as_ref(), Some(&a));
+                        if switch_context {
+                            let next = if context == &a { &b } else { &a };
+                            app.capture.set_context(Some(next.clone()));
+                        }
+                        let response = if outcome == "error" {
+                            Err("stop failed".into())
+                        } else {
+                            Ok(serde_json::to_value(Snapshot {
+                                session_id: Some("session-a".into()),
+                                game_id: Some("opaque-game-a-storage-hash".into()),
+                                capture_state: "stopped".into(),
+                                preset: (outcome == "preset").then(|| final_a.clone()),
+                                ..Default::default()
+                            }).unwrap())
+                        };
+                        app.capture.reply(stop, "translation.capture.stop", response, &app.bridge, cx);
+                        let expected_a = if outcome == "preset" { &final_a } else { &old_a };
+                        assert_eq!(app.capture.preset_for_game("container", "game-a"), Some(expected_a));
+                        assert_eq!(app.capture.preset_for_game("container", "game-b"), Some(&preset_b));
+                        let expected_selected = if app.capture.context.as_ref() == Some(&a) {
+                            expected_a
+                        } else {
+                            &preset_b
+                        };
+                        assert_eq!(app.capture.preset.as_ref(), Some(expected_selected));
+                        assert!(!app.capture.pending.contains_key(&stop));
+                    }
+                }
+            }
+        }).unwrap();
     }
 
     #[gpui_kit::test]
