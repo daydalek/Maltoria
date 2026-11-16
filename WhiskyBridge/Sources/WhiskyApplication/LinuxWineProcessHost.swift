@@ -20,7 +20,7 @@ import Foundation
 import WhiskyBridgeProtocol
 
 /// `ProcessSnapshotProviding` for a Linux Wine runtime, using the runtime's
-/// built-in `tasklist.exe /FO CSV /NH` and `taskkill.exe` and guarding the
+/// built-in `tasklist.exe /FO CSV /NH` (or `winedbg info proc`) and `taskkill.exe`, guarding the
 /// query behind `wineserver -k0` so polling an idle bottle never boots a
 /// server or exceeds the frontend's call timeout.
 @MainActor
@@ -61,7 +61,18 @@ public final class LinuxWineProcessHost: ProcessSnapshotProviding {
             timeout: .seconds(4)
         )
         try Self.check(result, operation: "Query Wine processes")
-        return Self.parseTasklist(result.output)
+        if !result.output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return Self.parseTasklist(result.output)
+        }
+        let debug = try await host.run(
+            host.loader,
+            arguments: ["winedbg", "--command", "info proc"],
+            prefix: container,
+            environment: ["WINEDEBUG": "-all"],
+            timeout: .seconds(4)
+        )
+        try Self.check(debug, operation: "Query Wine debugger processes")
+        return try Self.parseWineDebug(debug.output)
     }
 
     public func terminateProcess(in container: URL, pid: Int32, force: Bool) async throws {
@@ -121,6 +132,32 @@ public final class LinuxWineProcessHost: ProcessSnapshotProviding {
             ))
         }
         return records
+    }
+
+    public nonisolated static func parseWineDebug(_ output: String) throws -> [ProcessRecord] {
+        let lines = output.split(omittingEmptySubsequences: true, whereSeparator: \.isNewline)
+        guard let header = lines.first, header.contains("pid"), header.contains("threads"),
+              header.contains("executable"), header.contains("hex") else {
+            throw BridgeFailure("process_query_failed", "Wine did not return a process list")
+        }
+        return try lines.dropFirst().compactMap { line in
+            let fields = line.split(maxSplits: 2, whereSeparator: \.isWhitespace)
+            guard fields.count == 3,
+                  let pid = Int32(fields[0].drop(while: { $0 == "=" }), radix: 16), pid > 0,
+                  Int(fields[1]) != nil,
+                  let start = fields[2].firstIndex(of: "'"),
+                  let end = fields[2].lastIndex(of: "'"), start < end else {
+                throw BridgeFailure("process_query_failed", "Wine returned an invalid process record")
+            }
+            let name = String(fields[2][fields[2].index(after: start)..<end])
+            guard !name.isEmpty else {
+                throw BridgeFailure("process_query_failed", "Wine returned an empty process name")
+            }
+            let lower = name.lowercased()
+            guard lower != "winedbg.exe", lower != "tasklist.exe" else { return nil }
+            let kind = services.contains(lower) ? "service" : system.contains(lower) ? "system" : "app"
+            return ProcessRecord(pid: pid, name: name, memory: "", kind: kind, source: "untracked")
+        }
     }
 
     private nonisolated static func csvFields(_ line: String) -> [String] {

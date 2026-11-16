@@ -50,6 +50,10 @@ private struct ParityFixture {
             cat "$WINEPREFIX/tasklist.csv" 2>/dev/null
             exit "$(cat "$WINEPREFIX/query-status" 2>/dev/null || echo 0)";;
           taskkill.exe) exit 7;;
+          winedbg)
+            if [ -f "$WINEPREFIX/winedbg.txt" ]; then cat "$WINEPREFIX/winedbg.txt";
+            else printf ' pid      threads  executable (all id:s are in hex)\n'; fi
+            exit "$(cat "$WINEPREFIX/debug-status" 2>/dev/null || echo 0)";;
           winecfg) exit 0;;
           *) echo started > "$WINEPREFIX/program-started"; exec sleep 30;;
         esac
@@ -194,6 +198,45 @@ struct LinuxParityTests {
         try fixture.write("kill-status", "8")
         await #expect(throws: BridgeFailure.self) { try await processes.terminateAllProcesses(in: fixture.bottle) }
         try fixture.write("query-status", "7")
+        await #expect(throws: BridgeFailure.self) { try await processes.listProcesses(in: fixture.bottle) }
+    }
+
+    @Test func wineDebuggerParserHandlesNamesAndRejectsInvalidOutput() throws {
+        let header = " pid      threads  executable (all id:s are in hex)\n"
+        let records = try LinuxWineProcessHost.parseWineDebug(header + """
+         00000038 13 'services.exe'
+         0000004c 4 \\_ 'explorer.exe'
+         000000e4 1 \\_ '雪国 Bob's game.exe'
+        =0000011c 1 \\_ 'winedbg.exe'
+        """)
+        #expect(records.map(\.pid) == [56, 76, 228])
+        #expect(records.map(\.kind) == ["service", "system", "app"])
+        #expect(records.last?.name == "雪国 Bob's game.exe")
+        #expect(try LinuxWineProcessHost.parseWineDebug(header).isEmpty)
+        for invalid in ["", "not a process list", header + "invalid row", header + "000000e4 1 'unterminated"] {
+            #expect(throws: BridgeFailure.self) { try LinuxWineProcessHost.parseWineDebug(invalid) }
+        }
+    }
+
+    @Test func stubbedTasklistFallsBackToDebuggerForRuntimeLifecycle() async throws {
+        let fixture = try ParityFixture()
+        defer { fixture.cleanup() }
+        let game = try fixture.entry("game.exe")
+        let header = " pid      threads  executable (all id:s are in hex)\n"
+        try fixture.write("winedbg.txt", header + " 000000e4 1 'game.exe'\n")
+        let driver = LinuxWineRuntimeDriver(host: fixture.host, logDirectory: fixture.root.appendingPathComponent("logs"))
+        await driver.configure(entries: [game], containerURL: fixture.bottle)
+        driver.stopTracking()
+        await driver.poll()
+        #expect(driver.snapshot.observation.runningEntryIDs == [game.id])
+        try fixture.write("winedbg.txt", header)
+        await driver.poll()
+        #expect(driver.snapshot.observation.runningEntryIDs.isEmpty)
+        #expect(driver.snapshot.observation.endedEntryIDs.contains(game.id))
+        let processes = LinuxWineProcessHost(host: fixture.host)
+        try fixture.write("winedbg.txt", "invalid output")
+        await #expect(throws: BridgeFailure.self) { try await processes.listProcesses(in: fixture.bottle) }
+        try fixture.write("debug-status", "7")
         await #expect(throws: BridgeFailure.self) { try await processes.listProcesses(in: fixture.bottle) }
     }
 
