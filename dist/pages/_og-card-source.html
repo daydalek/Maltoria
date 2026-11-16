@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <title>Maltoria — OG Card</title>
@@ -9,85 +9,201 @@
      regenerate images/og-card.png. */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
-    width: 1200px; height: 630px;
-    background: #1d1d1f;
-    color: #f5f5f7;
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    width: 1200px;
+    height: 630px;
+    background: #faf9fc;
+    color: #29374a;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
     -webkit-font-smoothing: antialiased;
     overflow: hidden;
   }
-  .card {
-    width: 1200px; height: 630px;
-    padding: 80px 96px;
-    display: flex; flex-direction: column; justify-content: center;
-    background:
-      radial-gradient(ellipse at top right, rgba(206, 139, 65, 0.18), transparent 55%),
-      radial-gradient(ellipse at bottom left, rgba(206, 139, 65, 0.08), transparent 60%),
-      #1d1d1f;
+  .canvas {
+    width: 1200px;
+    height: 630px;
+    padding: 46px 56px;
     position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+      radial-gradient(ellipse 68% 60% at 88% 12%, rgba(166, 124, 255, 0.22), transparent 65%),
+      radial-gradient(ellipse 56% 52% at 12% 88%, rgba(107, 213, 225, 0.20), transparent 65%),
+      radial-gradient(ellipse 50% 48% at 22% 16%, rgba(246, 184, 90, 0.20), transparent 60%),
+      radial-gradient(ellipse 46% 45% at 78% 84%, rgba(112, 188, 158, 0.16), transparent 62%),
+      #faf9fc;
   }
-  .accent-rule {
-    width: 64px; height: 4px;
-    background: #ce8b41;
-    border-radius: 2px;
-    margin-bottom: 28px;
+  .canvas::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(41, 55, 74, 0.035) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(41, 55, 74, 0.035) 1px, transparent 1px);
+    background-size: 56px 56px;
+    pointer-events: none;
+  }
+  .card {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    padding: 54px 64px;
+    border-radius: 32px;
+    background: rgba(255, 255, 255, 0.84);
+    border: 1px solid rgba(41, 55, 74, 0.08);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.94),
+      0 28px 70px -24px rgba(41, 55, 74, 0.16);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .brand-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .logo {
+    width: 58px;
+    height: 58px;
+    border-radius: 16px;
+    box-shadow: 0 12px 28px rgba(212, 154, 72, 0.22), 0 0 0 1px rgba(41, 55, 74, 0.08);
+  }
+  .eyebrow {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #7c5ca3;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 18px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, rgba(246, 184, 90, 0.16), rgba(166, 124, 255, 0.12));
+    border: 1px solid rgba(41, 55, 74, 0.08);
+    font-size: 17px;
+    font-weight: 600;
+    color: #536575;
+  }
+  .badge .dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #e5a344;
+    box-shadow: 0 0 0 4px rgba(246, 184, 90, 0.24);
+  }
+  .main {
+    margin: 12px 0 8px;
   }
   .wordmark {
-    font-size: 132px;
+    font-size: 112px;
+    font-weight: 850;
+    letter-spacing: -0.045em;
+    line-height: 1.02;
+    background: linear-gradient(112deg, #a77124 0%, #c06a64 34%, #7b54ae 72%, #477e9c 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .subtitle-en {
+    margin-top: 10px;
+    font-size: 32px;
     font-weight: 700;
-    letter-spacing: -0.04em;
-    line-height: 1;
-    margin-bottom: 24px;
+    letter-spacing: 0.04em;
+    color: #29374a;
   }
   .tagline {
-    font-size: 36px;
-    font-weight: 400;
-    color: #a1a1a6;
-    letter-spacing: -0.01em;
-    line-height: 1.2;
-    margin-bottom: 56px;
-    max-width: 900px;
+    margin-top: 14px;
+    font-size: 24px;
+    font-weight: 450;
+    color: #536575;
+    line-height: 1.45;
+  }
+  .bottom-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
   }
   .chips {
     display: flex;
-    gap: 14px;
+    gap: 10px;
+    flex-wrap: nowrap;
   }
   .chip {
-    font-size: 20px;
-    font-weight: 500;
-    padding: 10px 20px;
+    font-size: 16px;
+    font-weight: 600;
+    padding: 8px 14px;
     border-radius: 999px;
-    border: 1px solid #424245;
-    color: #f5f5f7;
-    background: rgba(245, 245, 247, 0.04);
+    border: 1px solid rgba(41, 55, 74, 0.10);
+    color: #29374a;
+    background: rgba(250, 249, 252, 0.9);
     white-space: nowrap;
   }
-  .chip.accent {
-    border-color: rgba(206, 139, 65, 0.5);
-    background: rgba(206, 139, 65, 0.12);
-    color: #ce8b41;
+  .chip.gold {
+    background: #fff4df;
+    border-color: rgba(224, 165, 75, 0.36);
+    color: #87561b;
+  }
+  .chip.violet {
+    background: #f3ecfc;
+    border-color: rgba(138, 102, 198, 0.28);
+    color: #5f428e;
+  }
+  .chip.mint {
+    background: #eaf7f1;
+    border-color: rgba(74, 168, 134, 0.28);
+    color: #2f735b;
+  }
+  .chip.sky {
+    background: #eaf5fb;
+    border-color: rgba(76, 152, 192, 0.28);
+    color: #316888;
   }
   .domain {
-    position: absolute;
-    bottom: 60px;
-    right: 96px;
-    font-size: 22px;
-    color: #6e6e73;
+    font-size: 18px;
+    font-weight: 600;
+    color: #657581;
     letter-spacing: -0.01em;
+    white-space: nowrap;
   }
 </style>
 </head>
 <body>
-  <div class="card">
-    <div class="accent-rule"></div>
-    <div class="wordmark">Maltoria</div>
-    <div class="tagline">Run Windows games and apps on macOS, using Wine.</div>
-    <div class="chips">
-      <span class="chip accent">Apple Silicon</span>
-      <span class="chip">macOS 15+</span>
-      <span class="chip">Open source — GPL v3</span>
+  <div class="canvas">
+    <div class="card">
+      <div class="top-bar">
+        <div class="brand-pill">
+          <img class="logo" src="./assets/logo.png" alt="Maltoria">
+          <span class="eyebrow">Visual Novel Library &amp; Runtime</span>
+        </div>
+        <div class="badge"><span class="dot"></span><span>专为视觉小说与 galgame 打磨</span></div>
+      </div>
+
+      <div class="main">
+        <div class="wordmark">Maltoria</div>
+        <div class="subtitle-en">Visual Novels, Beyond Windows</div>
+        <div class="tagline">跨平台视觉小说游戏库管理、多数据源刮削与调优 Wine 运行时</div>
+      </div>
+
+      <div class="bottom-bar">
+        <div class="chips">
+          <span class="chip gold">macOS Apple Silicon</span>
+          <span class="chip sky">Linux x86_64</span>
+          <span class="chip violet">Real-CUGAN 超分</span>
+          <span class="chip mint">开源 GPL-3.0</span>
+        </div>
+        <div class="domain">github.com/daydalek/Maltoria</div>
+      </div>
     </div>
-    <div class="domain">github.com/daydalek/Maltoria</div>
   </div>
 </body>
 </html>

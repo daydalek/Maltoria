@@ -79,51 +79,48 @@ rm -rf ~/.local/share/whisky
 
 ---
 
-## 版权、许可证与源代码来源声明 
-### 开源许可证与源代码来源 
+## 版权、许可证与源代码来源声明 (License & Source Attribution)
 
-完整第三方来源清单见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)，许可证原文与固定版本记录见 [ThirdParty](ThirdParty/)
+本项目遵循 **[GNU General Public License v3.0 (GPL-3.0-or-later)](./LICENSE)** 开源许可证发布。完整第三方声明与版本固定记录见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)，许可证原文与构建归档说明见 [ThirdParty/](ThirdParty/)。
 
-- **许可证 (License)**：本项目遵循 **[GNU General Public License v3.0 (GPL-3.0-or-later)](./LICENSE)** 开源许可证发布。
-- **应用源代码来源 (Application Source Attribution)**：
-  - 本仓库（[daydalek/Maltoria](https://github.com/daydalek/Maltoria)）fork 自 **[frankea/Whisky](https://github.com/frankea/Whisky)**。
-  - 上游项目最初由 **[Isaac Marovitz](https://github.com/IsaacMarovitz)** 创建并发布于 **[whisky-app/whisky](https://github.com/whisky-app/whisky)**。
-- **Wine 运行库源代码来源 (Wine Runtime Source Attribution)**：
-  - 本项目配套下载的 Wine 运行库由 **[daydalek/ge-proton-macos-wine-poc](https://github.com/daydalek/ge-proton-macos-wine-poc)** 构建并发布，基于 **CodeWeavers CrossOver Wine 26.3 开源核心** 与 **GE-Proton ([GloriousEggroll/proton-ge-custom](https://github.com/GloriousEggroll/proton-ge-custom))** 多媒体补丁移植.
-- **游戏刮削设计致谢与第三方数据声明 (Metadata Design & Data Attribution)**：
-  - 媒体库的多数据源独立解析器与匹配设计思路参考了 **[PotatoVN](https://github.com/GoldenPotato137/PotatoVN)**（原作者 GoldenPotato137，遵循 [Apache License 2.0](https://github.com/GoldenPotato137/PotatoVN/blob/master/LICENSE)）。
-  - 游戏元数据与封面图片来源于以下接口
-    - **[Bangumi 番组计划](https://bgm.tv/)**（[Bangumi Open API](https://bangumi.github.io/api/)）
-    - **[VNDB (The Visual Novel Database)](https://vndb.org/)**（[VNDB Kana API](https://api.vndb.org/kana)）
-    - **[Steam](https://store.steampowered.com/)**（Steam Store Web API）
-    - **[月幕 Galgame](https://www.ymgal.games/)**（[官方开放 API](https://www.ymgal.games/developer))
-    - **[NextMoe · 鲲 Galgame 论坛](https://developer.nextmoe.dev/)**（[NextMoe API v2](https://developer.nextmoe.dev/docs/v2))
+- **应用源码归属 (Application Source)**：本仓库（[daydalek/Maltoria](https://github.com/daydalek/Maltoria)）fork 自 **[frankea/Whisky](https://github.com/frankea/Whisky)**，最初由 **[Isaac Marovitz](https://github.com/IsaacMarovitz)** 创建于 **[whisky-app/whisky](https://github.com/whisky-app/whisky)**。
+- **Wine 运行库归属 (Wine Runtime Source)**：配套 Wine 运行库由 **[daydalek/ge-proton-macos-wine-poc](https://github.com/daydalek/ge-proton-macos-wine-poc)** 构建并发布，基于 **CodeWeavers CrossOver Wine 26.3 开源核心** 与 **GE-Proton** 多媒体补丁移植。
 
-### Credits & Acknowledgments
+### Credits & Acknowledgments（第三方组件与致谢）
 
-Maltoria is possible thanks to the magic of several projects:
+Maltoria 得以实现，离不开以下优秀开源项目、协议标准与社区维护者的贡献：
 
-- [LunaTranslator / LunaHook](https://github.com/HIllya51/LunaTranslator) (`GPL-3.0`) by HIllya51 — Windows text-hooking & injection engine (`LunaHook` / `LunaHost` / `LunaTmpFontLoader`), along with [MinHook](https://github.com/TsudaKageyu/MinHook) (`BSD-2-Clause`), [uchardet](https://gitlab.freedesktop.org/uchardet/uchardet) (`GPL-2.0-or-later`), and [nlohmann/json](https://github.com/nlohmann/json) (`MIT`)
-- [gpui-kit](https://crates.io/crates/gpui-kit) / [Zed GPUI](https://github.com/zed-industries/zed) (`Apache-2.0`) — Native desktop UI framework for `whisky-gpui`
-- [Real-CUGAN](https://github.com/bilibili/ailab) (`MIT`) & [Anime4K](https://github.com/bloc97/Anime4K) (`MIT`) — Cover upscaling models and shaders
-- [PotatoVN](https://github.com/GoldenPotato137/PotatoVN) (`Apache-2.0`), [Bangumi](https://bgm.tv/), [VNDB](https://vndb.org/), [Steam](https://store.steampowered.com/), [YMGal](https://www.ymgal.games/), and [NextMoe](https://nextmoe.com/) — Metadata design reference and data sources
-- [msync](https://github.com/marzent/wine-msync) by marzent
-- [DXVK-macOS](https://github.com/Gcenx/DXVK-macOS) by Gcenx and doitsujin
-- [DXMT](https://github.com/3Shain/dxmt) by 3Shain
-- [MoltenVK](https://github.com/KhronosGroup/MoltenVK) by KhronosGroup
-- [Sparkle](https://github.com/sparkle-project/Sparkle) by sparkle-project
-- [SemanticVersion](https://github.com/SwiftPackageIndex/SemanticVersion) by SwiftPackageIndex
-- [swift-argument-parser](https://github.com/apple/swift-argument-parser) by Apple
-- [PostHog](https://github.com/PostHog/posthog-ios) and its bundled component authors (linked SDK; telemetry disabled in this fork)
-- [Winetricks](https://github.com/Winetricks/winetricks) by Dan Kegel, Austin English, and contributors
-- [cabextract / libmspack](https://www.cabextract.org.uk/) by Stuart Caie
-- [CrossOver](https://www.codeweavers.com/crossover) by CodeWeavers and WineHQ
-- [GE-Proton](https://github.com/GloriousEggroll/proton-ge-custom) by GloriousEggroll
-- D3DMetal by Apple
+#### 上游项目与桌面框架 (Upstream & UI Framework)
 
-Special thanks to Gcenx, ohaiibuzzle, Nat Brown, [Frank](https://github.com/frankea), and [Isaac Marovitz](https://github.com/IsaacMarovitz) (original author) for their support and contributions!
+- **[Whisky](https://github.com/whisky-app/whisky)**（[Isaac Marovitz](https://github.com/IsaacMarovitz)）& **[frankea/Whisky](https://github.com/frankea/Whisky)**（`GPL-3.0-or-later`）— 酒瓶管理、配置模型与原生桥接基础（Bottle management, configuration model, and native bridge foundation）。
+- **[gpui-kit](https://crates.io/crates/gpui-kit)** / **[Zed GPUI](https://github.com/zed-industries/zed)**（`Apache-2.0`）— 驱动 `whisky-gpui` 跨平台 GPU 加速原生界面的桌面 UI 框架（Cross-platform GPU-accelerated desktop UI framework powering `apps/whisky-gpui`）。
 
-For full licensing terms and third-party attributions, see [LICENSE](LICENSE) and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+#### 实时文本捕获与翻译生态 (Text Hooking & Translation Pipeline)
+
+- **[LunaTranslator / LunaHook](https://github.com/HIllya51/LunaTranslator)** by HIllya51（`GPL-3.0`）— Windows 游戏进程文本钩取、内嵌宿主与字体临时加载核心组件，包括 `LunaHook32/64.dll`、`LunaHost32/64.dll`、`LunaTmpFontLoader.dll`（Windows game text-hooking, injection host, and temporary font loader core）。
+- **[MinHook](https://github.com/TsudaKageyu/MinHook)** by Tsuda Kageyu（`BSD-2-Clause`）— 轻量级 x86/x64 API Inline Hook 库，含 Vyacheslav Patkov 的 HDE32 / HDE64 反汇编器（Minimalistic x86/x64 API inline hooking library with HDE32/HDE64 disassemblers）。
+- **[uchardet](https://gitlab.freedesktop.org/uchardet/uchardet)**（`GPL-2.0-or-later` 分发选项）— 多语言文本编码自动检测，支持 Shift-JIS / UTF-8 / GBK 等日文及多语言游戏编码识别（Multi-encoding charset detection）。
+- **[nlohmann/json](https://github.com/nlohmann/json)** by Niels Lohmann（`MIT`）— `MaltoriaLunaHost` 辅助进程的 JSON IPC 通信库（JSON IPC serialization for `MaltoriaLunaHost32/64.exe`）。
+
+#### Wine 运行库、图形转换与辅助工具 (Wine Runtime, Graphics & Utilities)
+
+- **[CodeWeavers CrossOver](https://www.codeweavers.com/crossover)** & **[WineHQ](https://www.winehq.org/)**（`LGPL-2.1-or-later`）、**[GE-Proton](https://github.com/GloriousEggroll/proton-ge-custom)** by GloriousEggroll — 经由 **[daydalek/ge-proton-macos-wine-poc](https://github.com/daydalek/ge-proton-macos-wine-poc)** 移植构建的 Wine 运行库核心与多媒体兼容补丁（Upstream Wine core and GE-Proton patches）。
+- **[DXVK-macOS](https://github.com/Gcenx/DXVK-macOS)**（Gcenx, doitsujin）、**[DXMT](https://github.com/3Shain/dxmt)**（3Shain）、**[MoltenVK](https://github.com/KhronosGroup/MoltenVK)**（KhronosGroup）、**[msync](https://github.com/marzent/wine-msync)**（marzent）& **Apple D3DMetal** — Direct3D 到 Vulkan/Metal 的图形转换层、着色器翻译与内核同步机制（Direct3D translation layers, Vulkan-over-Metal, and synchronization primitives）。
+- **[Winetricks](https://github.com/Winetricks/winetricks)**（Dan Kegel, Austin English et al., `LGPL-2.1+`）& **[cabextract / libmspack](https://www.cabextract.org.uk/)**（Stuart Caie, `GPL-2.0+`）— Windows 运行库组件安装脚本与 Microsoft Cabinet 压缩包解压工具（Runtime dependency installer and CAB archive extractor）。
+
+#### 画质增强与视觉小说资料库生态 (Upscaling, Metadata & Toolchain)
+
+- **[Real-CUGAN](https://github.com/bilibili/ailab)** & **[realcugan-ncnn-vulkan](https://github.com/nihui/realcugan-ncnn-vulkan)**（`MIT`）— 二次元封面超分辨率模型；macOS 使用 Core ML 分块推理，Linux 使用 `ncnn-vulkan`（Anime cover super-resolution via tiled Core ML on macOS and `ncnn-vulkan` on Linux）。
+- **[Anime4K](https://github.com/bloc97/Anime4K)** by bloc97（`MIT`）— 实时 Metal 着色器超分方案 `CNN x2 S`（Real-time Metal shader cover upscaler）。
+- **[PotatoVN](https://github.com/GoldenPotato137/PotatoVN)** by GoldenPotato137（`Apache-2.0`）— 多数据源刮削架构设计参考（Multi-source metadata scraper architecture reference）。
+- **公开数据源 (Public Metadata & Artwork Sources)**：[Bangumi 番组计划](https://bgm.tv/)（[Open API](https://bangumi.github.io/api/)）、[VNDB](https://vndb.org/)（[Kana API](https://api.vndb.org/kana)）、[Steam](https://store.steampowered.com/)（Store Web API）、[月幕 Galgame (YMGal)](https://www.ymgal.games/)（[开放 API](https://www.ymgal.games/developer)）、[NextMoe](https://nextmoe.com/)（[API v2](https://developer.nextmoe.dev/docs/v2)）— 游戏标题、简介、开发商与封面数据版权归原平台及权利人所有。
+- **Swift 工具链引脚（`WhiskyKit` / `WhiskyCmd`）**：[SemanticVersion](https://github.com/SwiftPackageIndex/SemanticVersion)（`Apache-2.0`）、[Sparkle](https://github.com/sparkle-project/Sparkle)（`MIT`）、[swift-argument-parser](https://github.com/apple/swift-argument-parser)（`Apache-2.0`）、[PostHog](https://github.com/PostHog/posthog-ios)（`MIT`，本分支已禁用遥测 / telemetry disabled in this fork）。
+
+#### 特别鸣谢 (Special Thanks)
+
+特别感谢 **HIllya51**、**GoldenPotato137**、**Gcenx**、**ohaiibuzzle**、**Nat Brown**、**[Frank](https://github.com/frankea)**、**[Isaac Marovitz](https://github.com/IsaacMarovitz)** 以及所有上游项目维护者与开源社区贡献者的长期支持与无私贡献！
+
+For full licensing terms, pinned revisions, and third-party notices, see [LICENSE](./LICENSE), [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), and [ThirdParty/](ThirdParty/).
 
 ---
 
