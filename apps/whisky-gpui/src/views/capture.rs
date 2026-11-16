@@ -1045,7 +1045,7 @@ impl WhiskyApp {
                 }),
         );
 
-        // Card 6 — macOS 原生字幕叠层
+        // Card 6 — 原生字幕叠层
         let overlay_pending = self.capture.is_pending("translation.overlay.configure");
         let overlay_disabled = !overlay_configure_available || overlay_pending;
         let overlay_card = if self.service_available("translation.overlay.read") {
@@ -1098,7 +1098,7 @@ impl WhiskyApp {
                                     "可拖动（已解锁）"
                                 },
                                 s.click_through,
-                                overlay_disabled,
+                                overlay_disabled || !self.capture.overlay_supports_click_through,
                                 cx,
                             ))
                             .child(overlay_toggle_pill(
@@ -1181,19 +1181,17 @@ impl WhiskyApp {
                     d.child(muted(self.capture.overlay_platform.clone()).text_size(px(11.)))
                 });
             section_card(
-                "macOS 原生字幕叠层",
-                Some("支持在全屏游戏 Space 上方悬浮显示原生字幕窗口。"),
-                overlay_body,
+                if cfg!(target_os = "linux") { "Linux 原生字幕叠层" } else { "macOS 原生字幕叠层" },
+                Some(if cfg!(target_os = "linux") { "X11 支持全屏置顶与鼠标穿透；解锁后拖动窗口内部移动，拖动边缘或角落调整尺寸。" } else { "支持在全屏游戏 Space 上方悬浮显示原生字幕窗口。" }),
+                overlay_body.when(cfg!(target_os = "linux") && !self.capture.overlay_supports_click_through, |d| {
+                    d.child(muted("Wayland 不支持鼠标穿透或精确定位；使用 LayerShell（如可用），否则为尽力置顶的浮动窗口。"))
+                }),
             )
         } else {
             section_card(
                 "原生字幕叠层",
                 None,
-                muted(if cfg!(target_os = "linux") {
-                    "字幕叠层：Linux 原生窗口待实现；当前不可用。"
-                } else {
-                    "字幕叠层：当前桥接未公布此功能，因此不可用。"
-                }),
+                muted("字幕叠层：当前桥接未公布此功能，因此不可用。"),
             )
         };
 

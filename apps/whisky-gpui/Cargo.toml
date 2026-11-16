@@ -16,6 +16,10 @@ whisky-bridge = { path = "../../crates/whisky-bridge" }
 uuid = { version = "=1.28.0", features = ["v4"] }
 
 # macOS cover upscaling uses Metal; Linux uses the bundled ncnn helper.
+[target.'cfg(target_os = "linux")'.dependencies]
+raw-window-handle = "=0.6.2"
+x11rb = { version = "=0.13.2", features = ["shape"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 metal = "=0.33.0"
 

@@ -398,6 +398,7 @@ pub(crate) struct CaptureState {
     pub(crate) error: Option<String>,
     pub(crate) overlay: Option<OverlaySettings>,
     pub(crate) overlay_platform: String,
+    pub(crate) overlay_supports_click_through: bool,
     pending: BTreeMap<u64, Pending>,
     generation: u64,
     poll_request: Option<u64>,
@@ -445,6 +446,7 @@ impl Default for CaptureState {
             error: None,
             overlay: None,
             overlay_platform: String::new(),
+            overlay_supports_click_through: false,
             pending: BTreeMap::new(),
             generation: 0,
             poll_request: None,
@@ -1074,10 +1076,11 @@ impl CaptureState {
         }
     }
     fn can_poll(&self) -> bool {
-        self.active_game.is_some() && self.poll_request.is_none()
+        (self.active_game.is_some() || self.overlay.as_ref().is_some_and(|s| s.visible))
+            && self.poll_request.is_none()
     }
     pub(crate) fn schedule_poll(&mut self, cx: &mut Context<WhiskyApp>) {
-        if self.active_game.is_none() || self.poll_scheduled {
+        if (self.active_game.is_none() && !self.overlay.as_ref().is_some_and(|s| s.visible)) || self.poll_scheduled {
             return;
         }
         self.poll_scheduled = true;
@@ -1393,11 +1396,13 @@ impl CaptureState {
                         .and_then(Value::as_str)
                         .unwrap_or("")
                         .into();
+                    self.overlay_supports_click_through = value.get("supportsClickThrough").and_then(Value::as_bool).unwrap_or(false);
+                    if self.overlay.as_ref().is_some_and(|s| s.visible) { self.schedule_poll(cx); }
                 }
                 _ => {}
             },
         }
-        if method == "translation.snapshot" && self.active_game.is_some() {
+        if method == "translation.snapshot" && (self.active_game.is_some() || self.overlay.as_ref().is_some_and(|s| s.visible)) {
             self.schedule_poll(cx);
         }
         cx.notify();
@@ -1606,6 +1611,10 @@ mod tests {
     #[test]
     fn polling_is_single_flight_and_stale_generations_are_rejected() {
         let mut state = CaptureState::default();
+        assert!(!state.can_poll());
+        state.overlay = Some(OverlaySettings { visible: true, ..OverlaySettings::default() });
+        assert!(state.can_poll());
+        state.overlay = None;
         state.active_game = Some(("c".into(), "e".into(), "g".into()));
         state.panel_open = false;
         assert!(state.can_poll());
