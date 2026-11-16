@@ -137,7 +137,8 @@ public final class LinuxWineProcessHost: ProcessSnapshotProviding {
     public nonisolated static func parseWineDebug(_ output: String) throws -> [ProcessRecord] {
         let lines = output.split(omittingEmptySubsequences: true, whereSeparator: \.isNewline)
         guard let header = lines.first, header.contains("pid"), header.contains("threads"),
-              header.contains("executable"), header.contains("hex") else {
+              header.contains("executable"), header.contains("hex")
+        else {
             throw BridgeFailure("process_query_failed", "Wine did not return a process list")
         }
         return try lines.dropFirst().compactMap { line in
@@ -146,10 +147,11 @@ public final class LinuxWineProcessHost: ProcessSnapshotProviding {
                   let pid = Int32(fields[0].drop(while: { $0 == "=" }), radix: 16), pid > 0,
                   Int(fields[1]) != nil,
                   let start = fields[2].firstIndex(of: "'"),
-                  let end = fields[2].lastIndex(of: "'"), start < end else {
+                  let end = fields[2].lastIndex(of: "'"), start < end
+            else {
                 throw BridgeFailure("process_query_failed", "Wine returned an invalid process record")
             }
-            let name = String(fields[2][fields[2].index(after: start)..<end])
+            let name = String(fields[2][fields[2].index(after: start) ..< end])
             guard !name.isEmpty else {
                 throw BridgeFailure("process_query_failed", "Wine returned an empty process name")
             }

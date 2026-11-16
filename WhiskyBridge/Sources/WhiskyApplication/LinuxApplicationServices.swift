@@ -99,7 +99,14 @@ public final class LinuxApplicationServices: NativeApplicationServices {
     }
 
     public var capabilities: [String] {
-        var values = ["system.files", "system.picker", "system.terminal", "system.desktop", "programs.shortcut", "translation.overlay"]
+        var values = [
+            "system.files",
+            "system.picker",
+            "system.terminal",
+            "system.desktop",
+            "programs.shortcut",
+            "translation.overlay"
+        ]
         if wineSetup != nil || bottleCreation != nil {
             values.append("setup")
         }

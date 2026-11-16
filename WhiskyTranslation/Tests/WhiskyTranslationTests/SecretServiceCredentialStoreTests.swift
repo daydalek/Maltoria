@@ -1,3 +1,21 @@
+//
+//  SecretServiceCredentialStoreTests.swift
+//  WhiskyTranslation
+//
+//  This file is part of Whisky.
+//
+//  Whisky is free software: you can redistribute it and/or modify it under the terms
+//  of the GNU General Public License as published by the Free Software Foundation,
+//  either version 3 of the License, or (at your option) any later version.
+//
+//  Whisky is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+//  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+//  See the GNU General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License along with Whisky.
+//  If not, see https://www.gnu.org/licenses/.
+//
+
 import Foundation
 import Testing
 @testable import WhiskyTranslation
@@ -7,7 +25,14 @@ import Testing
 struct SecretServiceCredentialStoreTests {
     @Test func storeUsesStableAttributesAndStdinOnly() async throws {
         let store = SecretServiceCredentialStore { arguments, input in
-            #expect(arguments == ["store", "--label=Maltoria translation credential", "service", "com.daydalek.Maltoria.translation", "account", "fixture"])
+            #expect(arguments == [
+                "store",
+                "--label=Maltoria translation credential",
+                "service",
+                "com.daydalek.Maltoria.translation",
+                "account",
+                "fixture"
+            ])
             #expect(input == Data("private-value".utf8))
             return SecretToolResult(status: 0, output: Data(), diagnostic: Data())
         }
@@ -18,7 +43,12 @@ struct SecretServiceCredentialStoreTests {
     @Test func lookupPreservesWhitespaceAndClearUsesSameAttributes() async throws {
         let store = SecretServiceCredentialStore { arguments, input in
             #expect(input == nil)
-            #expect(Array(arguments.suffix(4)) == ["service", "com.daydalek.Maltoria.translation", "account", "fixture"])
+            #expect(Array(arguments.suffix(4)) == [
+                "service",
+                "com.daydalek.Maltoria.translation",
+                "account",
+                "fixture"
+            ])
             return SecretToolResult(status: 0, output: Data(" value\n\n".utf8), diagnostic: Data())
         }
         #expect(try await store.secret(for: "fixture") == " value\n")
@@ -40,8 +70,13 @@ struct SecretServiceCredentialStoreTests {
             SecretToolResult(status: 1, output: Data(), diagnostic: Data("service unavailable".utf8))
         }
         await #expect(throws: TranslationError.credentialOperationFailed(1)) { try await store.secret(for: "fixture") }
-        await #expect(throws: TranslationError.credentialOperationFailed(1)) { try await store.store("value", for: "fixture") }
-        await #expect(throws: TranslationError.credentialOperationFailed(1)) { try await store.remove(reference: "fixture") }
+        await #expect(throws: TranslationError.credentialOperationFailed(1)) { try await store.store(
+            "value",
+            for: "fixture"
+        ) }
+        await #expect(throws: TranslationError.credentialOperationFailed(1)) {
+            try await store.remove(reference: "fixture")
+        }
     }
 
     @Test func missingExecutableAndInvalidInputFailClearly() async {
@@ -61,7 +96,8 @@ struct SecretServiceCredentialStoreTests {
 
     @Test func drainsBothProcessPipesWithoutDeadlock() throws {
         let result = try SecretServiceCredentialStore.execute([
-            "-c", "i=0; while [ $i -lt 8192 ]; do printf 'diagnostic-data-0123456789\\n' >&2; i=$((i+1)); done; printf 'value\\n'"
+            "-c",
+            "i=0; while [ $i -lt 8192 ]; do printf 'diagnostic-data-0123456789\\n' >&2; i=$((i+1)); done; printf 'value\\n'"
         ], nil, executableURL: URL(fileURLWithPath: "/bin/sh"))
         #expect(result.status == 0)
         #expect(result.output == Data("value\n".utf8))

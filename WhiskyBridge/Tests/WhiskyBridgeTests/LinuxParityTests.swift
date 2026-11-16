@@ -224,7 +224,10 @@ struct LinuxParityTests {
         let game = try fixture.entry("game.exe")
         let header = " pid      threads  executable (all id:s are in hex)\n"
         try fixture.write("winedbg.txt", header + " 000000e4 1 'game.exe'\n")
-        let driver = LinuxWineRuntimeDriver(host: fixture.host, logDirectory: fixture.root.appendingPathComponent("logs"))
+        let driver = LinuxWineRuntimeDriver(
+            host: fixture.host,
+            logDirectory: fixture.root.appendingPathComponent("logs")
+        )
         await driver.configure(entries: [game], containerURL: fixture.bottle)
         driver.stopTracking()
         await driver.poll()

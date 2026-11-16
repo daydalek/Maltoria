@@ -1,3 +1,21 @@
+//
+//  SecretServiceCredentialStore.swift
+//  WhiskyTranslation
+//
+//  This file is part of Whisky.
+//
+//  Whisky is free software: you can redistribute it and/or modify it under the terms
+//  of the GNU General Public License as published by the Free Software Foundation,
+//  either version 3 of the License, or (at your option) any later version.
+//
+//  Whisky is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+//  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+//  See the GNU General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License along with Whisky.
+//  If not, see https://www.gnu.org/licenses/.
+//
+
 import Foundation
 
 #if os(Linux)
@@ -15,7 +33,10 @@ public actor SecretServiceCredentialStore: CredentialStore {
     private let service: String
     private let executableAvailable: @Sendable () -> Bool
 
-    public init(service: String = "com.daydalek.Maltoria.translation", executableURL: URL = URL(fileURLWithPath: "/usr/bin/secret-tool")) {
+    public init(
+        service: String = "com.daydalek.Maltoria.translation",
+        executableURL: URL = URL(fileURLWithPath: "/usr/bin/secret-tool")
+    ) {
         self.service = service
         self.run = { try Self.execute($0, $1, executableURL: executableURL) }
         self.executableAvailable = { FileManager.default.isExecutableFile(atPath: executableURL.path) }
@@ -33,16 +54,20 @@ public actor SecretServiceCredentialStore: CredentialStore {
 
     public func store(_ secret: String, for reference: String) async throws {
         guard !reference.isEmpty, reference.utf8.count <= 256,
-              !secret.isEmpty, secret.utf8.count <= 16_384 else {
+              !secret.isEmpty, secret.utf8.count <= 16_384
+        else {
             throw TranslationError.credentialUnavailable
         }
-        let result = try invoke(["store", "--label=Maltoria translation credential"] + attributes(reference), Data(secret.utf8))
+        let result = try invoke(
+            ["store", "--label=Maltoria translation credential"] + attributes(reference),
+            Data(secret.utf8)
+        )
         guard result.status == 0 else { throw TranslationError.credentialOperationFailed(Int(result.status)) }
     }
 
     public func secret(for reference: String) async throws -> String? {
         let result = try invoke(["lookup"] + attributes(reference))
-        if result.status == 1 && result.diagnostic.isEmpty && result.output.isEmpty { return nil }
+        if result.status == 1, result.diagnostic.isEmpty, result.output.isEmpty { return nil }
         guard result.status == 0 else { throw TranslationError.credentialOperationFailed(Int(result.status)) }
         guard var value = String(data: result.output, encoding: .utf8) else {
             throw TranslationError.credentialUnavailable
@@ -63,11 +88,18 @@ public actor SecretServiceCredentialStore: CredentialStore {
     }
 
     private func invoke(_ arguments: [String], _ input: Data? = nil) throws -> SecretToolResult {
-        do { return try run(arguments, input) }
-        catch { throw TranslationError.credentialUnavailable }
+        do {
+            return try run(arguments, input)
+        } catch {
+            throw TranslationError.credentialUnavailable
+        }
     }
 
-    static func execute(_ arguments: [String], _ input: Data?, executableURL: URL = URL(fileURLWithPath: "/usr/bin/secret-tool")) throws -> SecretToolResult {
+    static func execute(
+        _ arguments: [String],
+        _ input: Data?,
+        executableURL: URL = URL(fileURLWithPath: "/usr/bin/secret-tool")
+    ) throws -> SecretToolResult {
         let process = Process()
         process.executableURL = executableURL
         process.arguments = arguments
@@ -91,7 +123,11 @@ public actor SecretServiceCredentialStore: CredentialStore {
         try stdin.fileHandleForWriting.close()
         process.waitUntilExit()
         readers.wait()
-        return SecretToolResult(status: process.terminationStatus, output: output.withLock { $0 }, diagnostic: diagnostic.withLock { $0 })
+        return SecretToolResult(
+            status: process.terminationStatus,
+            output: output.withLock { $0 },
+            diagnostic: diagnostic.withLock { $0 }
+        )
     }
 }
 #endif
