@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Linux translation credentials persist securely through Secret Service instead of silently falling back to session-only storage; the UI now uses Linux system-keyring wording.
+- Linux GPUI subtitle overlay with persistent settings, X11 click-through and geometry controls, and session-specific capability reporting.
+- Linux GPUI capture HUD with shared process/thread controls, provider and architecture presets, subtitle quick controls, and automatic launch prompts.
+
 ### Fixed
+- Linux runtime process tracking falls back to `winedbg info proc` when Wine's `tasklist` returns no output, preserving launch detection and game-exit cleanup.
 - Linux (GPUI): show client-side window controls, including a close button that preserves the existing graceful shutdown and Wine cleanup policy; retain native controls when the desktop supplies server-side decorations.
 - Robustness: replaced release-build `fatalError` crash paths in the bundled GameDB and diagnostics-pattern loaders with `assertionFailure` + logged graceful degradation.
 - Robustness (GPUI): removed panic-prone `.unwrap()`/`unreachable!()` in metadata-update handling, the game-info sheet and bottle preview routing so transient state desyncs degrade instead of crashing.
