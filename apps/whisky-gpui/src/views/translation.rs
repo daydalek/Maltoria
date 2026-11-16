@@ -12,12 +12,15 @@ use crate::controls::{col, icon, muted, row};
 use crate::state::WhiskyApp;
 use crate::theme::*;
 use crate::translation::{
-    ModelDescriptorDto, ProviderDto, TranslationTab, default_endpoint, provider_kind_label,
+    CacheEntryDto, ModelDescriptorDto, ProviderDto, THINKING_LEVELS, TranslationTab,
+    credential_storage_label, default_endpoint, default_sentence_cache_enabled,
+    default_translation_debounce_ms, normalize_credential_storage_mode, normalize_thinking_level,
+    provider_kind_label, supports_thinking_level,
 };
 
 const PROVIDER_KINDS: [(&str, &str); 6] = [
-    ("OpenAI Chat", "openAIChat"),
-    ("OpenAI Completions", "openAICompletions"),
+    ("OpenAI Chat Completions", "openAIChat"),
+    ("OpenAI Legacy Completions", "openAICompletions"),
     ("Ollama（本地）", "ollama"),
     ("DeepL", "deepL"),
     ("Anthropic", "anthropic"),
@@ -31,6 +34,20 @@ const LANGUAGE_PRESETS: [(&str, &str); 6] = [
     ("zh-Hans", "简体中文 (zh-Hans)"),
     ("zh-Hant", "繁體中文 (zh-Hant)"),
     ("ko", "한국어 (ko)"),
+];
+
+const CREDENTIAL_STORAGE_MODES: [(&str, &str); 3] = [
+    ("keychain", "macOS 钥匙串（加密）"),
+    ("localFile", "本地文件（明文，免弹窗）"),
+    ("sessionOnly", "仅本次运行（不落盘）"),
+];
+
+const DEBOUNCE_PRESETS: [(u64, &str); 5] = [
+    (0, "0 ms 即时"),
+    (150, "150 ms 推荐"),
+    (300, "300 ms"),
+    (500, "500 ms"),
+    (1000, "1000 ms"),
 ];
 
 impl WhiskyApp {
@@ -375,6 +392,8 @@ impl WhiskyApp {
             .find(|p| Some(p.id.as_str()) == self.translation_page.selected_id.as_deref())
             .is_some_and(|p| p.has_credential);
         let token_field = self.translation_page.draft.token_limit_field.clone();
+        let thinking_level =
+            normalize_thinking_level(&self.translation_page.draft.thinking_level);
 
         let title = if selected {
             let draft_name = self.translation_page.draft.name.trim();
@@ -770,6 +789,34 @@ impl WhiskyApp {
                             )),
                     ))
                 })
+                .when(supports_thinking_level(&kind), |d| {
+                    let thinking_pills: Vec<AnyElement> = THINKING_LEVELS
+                        .into_iter()
+                        .map(|(level, label)| {
+                            let active = thinking_level == level;
+                            selectable_chip(
+                                format!("translation-thinking:{level}"),
+                                label,
+                                active,
+                                cx.listener(move |this, _, _, cx| {
+                                    this.translation_page.set_thinking_level(level);
+                                    cx.notify();
+                                }),
+                            )
+                        })
+                        .collect();
+                    d.child(divider_line()).child(labeled_field(
+                        "思考程度 (Thinking)",
+                        col()
+                            .gap(px(6.))
+                            .child(row().gap(px(6.)).flex_wrap().children(thinking_pills))
+                            .child(
+                                muted("关闭或调低思考深度可加快实时字幕翻译响应（适用于 cliproxyapi / GPT-5 / Claude / Gemini 等推理模型）。")
+                                    .text_size(px(11.))
+                                    .line_height(relative(1.4)),
+                            ),
+                    ))
+                })
                 .into_any_element()
         };
         let model_card = section_card("模型配置", None, model_card_body);
@@ -782,6 +829,18 @@ impl WhiskyApp {
         } else {
             pill_badge("尚未设置", badge_bg(), warning_fg(), None)
         };
+        let storage_label = credential_storage_label(&self.translation_page.credential_storage);
+        let is_plaintext_storage = self.translation_page.credential_storage == "localPlaintextFile";
+        let storage_badge = pill_badge(
+            format!("存储：{storage_label}"),
+            badge_bg(),
+            if is_plaintext_storage {
+                warning_fg()
+            } else {
+                badge_text()
+            },
+            None,
+        );
 
         let cred_card = section_card(
             "API 凭证与默认语言",
@@ -790,7 +849,7 @@ impl WhiskyApp {
                 .gap(px(12.))
                 .child(labeled_field(
                     "凭证状态",
-                    row().gap(px(8.)).child(cred_status),
+                    row().gap(px(8.)).flex_wrap().child(cred_status).child(storage_badge),
                 ))
                 .child(labeled_field(
                     "API 凭证",
@@ -824,7 +883,16 @@ impl WhiskyApp {
                         .child(
                             muted("输入新密钥后直接点击底部「保存提供商」，即可同时保存配置与凭证。")
                                 .text_size(px(11.)),
-                        ),
+                        )
+                        .when(is_plaintext_storage, |d| {
+                            d.child(
+                                div()
+                                    .text_size(px(11.))
+                                    .line_height(relative(1.4))
+                                    .text_color(rgb(warning_fg()))
+                                    .child("当前为本地明文文件存储（0600 权限，免弹窗）；切换存储模式后需在此重新保存密钥。"),
+                            )
+                        }),
                 ))
                 .child(divider_line())
                 .child(
@@ -943,13 +1011,44 @@ impl WhiskyApp {
         let translated_history = settings
             .as_ref()
             .is_some_and(|s| s.include_translated_history);
+        let debounce_ms = settings
+            .as_ref()
+            .map(|s| s.translation_debounce_ms)
+            .unwrap_or_else(default_translation_debounce_ms);
+        let debounce_value = debounce_ms.to_string();
+        let sentence_cache_enabled = settings
+            .as_ref()
+            .map(|s| s.sentence_cache_enabled)
+            .unwrap_or_else(default_sentence_cache_enabled);
         let remote_enabled = self.translation_page.remote_enabled;
-        let storage = match self.translation_page.credential_storage.as_str() {
-            "persistentKeychain" => "macOS 钥匙串".to_owned(),
-            "sessionOnly" => "仅当前会话内存（重启后清除）".to_owned(),
-            "" => "正在读取".to_owned(),
-            other => other.to_owned(),
-        };
+        let storage = credential_storage_label(&self.translation_page.credential_storage);
+        let active_storage_is_plaintext =
+            self.translation_page.credential_storage == "localPlaintextFile";
+        let selected_storage_mode = normalize_credential_storage_mode(
+            if self.translation_page.credential_storage_mode.is_empty() {
+                settings
+                    .as_ref()
+                    .map(|s| s.credential_storage_mode.as_str())
+                    .unwrap_or("keychain")
+            } else {
+                self.translation_page.credential_storage_mode.as_str()
+            },
+        );
+        let storage_mode_pills: Vec<AnyElement> = CREDENTIAL_STORAGE_MODES
+            .into_iter()
+            .map(|(mode, label)| {
+                let active = selected_storage_mode == mode;
+                selectable_chip(
+                    format!("translation-storage-mode:{mode}"),
+                    label,
+                    active,
+                    cx.listener(move |this, _, _, cx| {
+                        this.translation_page.set_credential_storage_mode(mode);
+                        cx.notify();
+                    }),
+                )
+            })
+            .collect();
 
         let global_source_field = language_preset_field(
             self,
@@ -1000,6 +1099,28 @@ impl WhiskyApp {
             window,
             cx,
         ));
+        let debounce_input = Input::new(&self.translation_page.input(
+            "debounce-ms",
+            &debounce_value,
+            "0 - 5000",
+            window,
+            cx,
+        ));
+        let debounce_presets: Vec<AnyElement> = DEBOUNCE_PRESETS
+            .into_iter()
+            .map(|(ms, label)| {
+                selectable_chip(
+                    format!("translation-debounce-preset:{ms}"),
+                    label,
+                    debounce_ms == ms,
+                    cx.listener(move |this, _, window, cx| {
+                        this.translation_page
+                            .apply_translation_debounce_preset(ms, window, cx);
+                        cx.notify();
+                    }),
+                )
+            })
+            .collect();
         let prompt_entity = self
             .translation_page
             .textarea(&prompt_value, "自定义系统提示词（留空使用默认翻译指令）", window, cx);
@@ -1075,6 +1196,42 @@ impl WhiskyApp {
                 )),
         );
 
+        let debounce_cache_card = section_card(
+            "快进防抖与句子缓存",
+            Some("控制文本稳定后再发送翻译，并跨游戏重启复用相同句子的译文。"),
+            col()
+                .gap(px(12.))
+                .child(switch_row(
+                    "translation-sentence-cache",
+                    "相同句子缓存复用（跨游戏重启生效）",
+                    "命中同游戏、同说话人与语言配置的相同原文时直接复用译文，减少重复请求与 API 费用。",
+                    sentence_cache_enabled,
+                    cx.listener(|this, _, _, cx| {
+                        this.translation_page.toggle_sentence_cache_enabled();
+                        cx.notify();
+                    }),
+                ))
+                .child(divider_line())
+                .child(
+                    row()
+                        .gap(px(6.))
+                        .flex_wrap()
+                        .children(debounce_presets),
+                )
+                .child(labeled_field(
+                    "防抖延迟 (ms)",
+                    row()
+                        .gap(px(8.))
+                        .child(div().w(px(140.)).child(debounce_input))
+                        .child(muted("0 – 5000 ms")),
+                ))
+                .child(
+                    muted("快进/Ctrl 跳过或 Hook 分段输出时等待文本稳定再翻译，减少重复请求与 API 费用。")
+                        .text_size(px(11.5))
+                        .line_height(relative(1.4)),
+                ),
+        );
+
         let prompt_card = section_card(
             "自定义系统提示词",
             Some("用于指导大语言模型翻译风格、术语表或人称语气（DeepL 会自动忽略此提示词）。"),
@@ -1110,16 +1267,44 @@ impl WhiskyApp {
                                         .text_color(rgb(text()))
                                         .child("凭证存储方式"),
                                 )
-                                .child(muted("密钥仅写入安全存储，接口不会回显明文。").text_size(px(11.))),
+                                .child(
+                                    muted("接口不会回显密钥明文；除「本地文件」模式以 0600 权限明文落盘外，其余模式均不落盘或由系统钥匙串加密。")
+                                        .text_size(px(11.))
+                                        .line_height(relative(1.4)),
+                                ),
                         )
-                        .child(pill_badge(storage, badge_bg(), badge_text(), None)),
-                ),
+                        .child(pill_badge(
+                            storage,
+                            badge_bg(),
+                            if active_storage_is_plaintext {
+                                warning_fg()
+                            } else {
+                                badge_text()
+                            },
+                            None,
+                        )),
+                )
+                .child(
+                    row()
+                        .gap(px(6.))
+                        .flex_wrap()
+                        .children(storage_mode_pills),
+                )
+                .child(storage_mode_callout(&selected_storage_mode)),
+        );
+
+        let current_game_id = self.translation_page.cache.scope_game_id.clone();
+        let cache_management_card = section_card(
+            "翻译结果缓存管理",
+            Some("查看、检索、按条删除或清空已持久化保存的句子翻译缓存。"),
+            self.translation_cache_browser(false, current_game_id, window, cx),
         );
 
         col()
             .gap(px(14.))
             .child(languages_card)
             .child(budget_card)
+            .child(debounce_cache_card)
             .child(prompt_card)
             .child(security_card)
             .child(
@@ -1133,6 +1318,183 @@ impl WhiskyApp {
                         })),
                 ),
             )
+            .child(cache_management_card)
+            .into_any_element()
+    }
+
+    pub(crate) fn translation_cache_browser(
+        &mut self,
+        compact: bool,
+        current_game_id: Option<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let scope_game_id = current_game_id
+            .filter(|gid| !gid.trim().is_empty())
+            .or_else(|| self.translation_page.cache.scope_game_id.clone());
+        let has_scope = scope_game_id.is_some() || self.translation_page.cache.has_scope();
+        let only_current = has_scope && self.translation_page.cache.only_current_game;
+        let query_default = self.translation_page.cache.query.clone();
+        let query_input = Input::new(&self.translation_page.input(
+            "cache-query",
+            &query_default,
+            "搜索原文、译文、说话人、模型或游戏 ID…",
+            window,
+            cx,
+        ))
+        .prefix(icon("search", 13.).text_color(rgb(muted_color())))
+        .cleanable(true);
+
+        let cache = &self.translation_page.cache;
+        let total_count = cache.total_count;
+        let game_count = cache.game_count;
+        let total_bytes = cache.total_bytes;
+        let loading = cache.loading || self.translation_page.is_pending("translation.cache/list");
+        let clear_pending = self.translation_page.is_pending("translation.cache.clear");
+        let delete_pending = self.translation_page.is_pending("translation.cache/delete");
+        let cache_error = cache.error.clone();
+        let cache_query_value = cache.query.clone();
+        let entries = cache.entries.clone();
+
+        let refresh_game_id = if only_current {
+            scope_game_id.clone()
+        } else {
+            None
+        };
+
+        let mut stats_row = row()
+            .gap(px(6.))
+            .flex_wrap()
+            .child(pill_badge(
+                format!("已缓存 {total_count} 条"),
+                badge_bg(),
+                badge_text(),
+                None,
+            ))
+            .child(pill_badge(
+                format!("占用 {}", format_cache_bytes(total_bytes)),
+                badge_bg(),
+                badge_text(),
+                None,
+            ));
+        if only_current {
+            stats_row = stats_row.child(pill_badge(
+                format!("当前游戏 {game_count} 条"),
+                accent_subtle_bg(),
+                accent_fg(),
+                Some(accent_subtle_border()),
+            ));
+        }
+        if loading {
+            stats_row = stats_row.child(Spinner::new().with_size(px(12.)));
+        }
+
+        let mut toolbar = row()
+            .gap(px(8.))
+            .flex_wrap()
+            .child(div().flex_1().min_w(px(180.)).child(query_input))
+            .child(
+                Button::new("cache-refresh")
+                    .label("刷新缓存")
+                    .disabled(loading)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.translation_page
+                            .refresh_cache(&this.bridge, refresh_game_id.clone());
+                        cx.notify();
+                    })),
+            );
+        if has_scope {
+            let next_only = !only_current;
+            let clear_gid = scope_game_id.clone();
+            toolbar = toolbar
+                .child(selectable_chip(
+                    "cache-scope-current",
+                    "仅当前游戏",
+                    only_current,
+                    cx.listener(move |this, _, _, cx| {
+                        this.translation_page
+                            .set_cache_only_current_game(&this.bridge, next_only);
+                        cx.notify();
+                    }),
+                ))
+                .child(
+                    Button::new("cache-clear-current")
+                        .label("清空当前游戏缓存")
+                        .disabled(clear_pending)
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.translation_page
+                                .clear_scoped_cache(&this.bridge, clear_gid.clone());
+                            cx.notify();
+                        })),
+                );
+        }
+        toolbar = toolbar.child(
+            Button::new("cache-clear-all")
+                .danger()
+                .label("清空全部缓存")
+                .disabled(clear_pending)
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.translation_page.clear_cache(&this.bridge, None);
+                    cx.notify();
+                })),
+        );
+
+        let entry_rows: Vec<AnyElement> = entries
+            .iter()
+            .map(|entry| cache_entry_row(entry, compact, delete_pending, cx))
+            .collect();
+        let list_max_h = if compact { px(240.) } else { px(340.) };
+        let entries_view = if entry_rows.is_empty() {
+            div()
+                .p(px(12.))
+                .rounded(px(8.))
+                .bg(rgba(card_bg()))
+                .border_1()
+                .border_color(rgba(card_border()))
+                .child(muted(if loading {
+                    "正在读取缓存记录…"
+                } else if !cache_query_value.trim().is_empty() {
+                    "未找到匹配的缓存句子。"
+                } else {
+                    "当前暂无句子翻译缓存。"
+                }))
+                .into_any_element()
+        } else {
+            div()
+                .id("cache-entries-scroll")
+                .w_full()
+                .max_h(list_max_h)
+                .overflow_y_scroll()
+                .child(col().gap(px(6.)).children(entry_rows))
+                .into_any_element()
+        };
+
+        col()
+            .gap(px(10.))
+            .child(stats_row)
+            .child(toolbar)
+            .when_some(cache_error, |d, err| {
+                d.child(
+                    row()
+                        .gap(px(8.))
+                        .px(px(10.))
+                        .py(px(8.))
+                        .rounded(px(8.))
+                        .bg(rgba(0xff5f571a))
+                        .border_1()
+                        .border_color(rgba(0xff5f574d))
+                        .child(icon("triangle-alert", 13.).text_color(rgb(danger_fg())))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .text_size(px(12.))
+                                .text_color(rgb(danger_fg()))
+                                .child(err),
+                        ),
+                )
+            })
+            .child(entries_view)
             .into_any_element()
     }
 }
@@ -1387,6 +1749,74 @@ fn divider_line() -> Div {
     div().w_full().h(px(1.)).bg(rgba(divider()))
 }
 
+fn storage_mode_callout(mode: &str) -> AnyElement {
+    if mode == "localFile" {
+        let (bg_rgba, border_rgba) = if is_dark() {
+            (0xf5a6231c, 0xf5a62355)
+        } else {
+            (0xb86e0014, 0xb86e0044)
+        };
+        return row()
+            .items_start()
+            .gap(px(8.))
+            .p(px(10.))
+            .rounded(px(8.))
+            .bg(rgba(bg_rgba))
+            .border_1()
+            .border_color(rgba(border_rgba))
+            .child(
+                div()
+                    .pt(px(2.))
+                    .flex_shrink_0()
+                    .child(icon("triangle-alert", 14.).text_color(rgb(warning_fg()))),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .text_size(px(12.))
+                    .line_height(relative(1.45))
+                    .text_color(rgb(warning_fg()))
+                    .child("⚠️ 安全提示：本地文件模式会以未加密明文将 API 密钥写入本机受限目录（0600 权限），虽可彻底避免系统钥匙串反复弹窗，但同一账户下其他软件或磁盘备份仍可能读取该密钥，仅建议可信个人设备或测试环境使用。切换模式后请先点击「保存翻译设置」，再到提供商页面重新保存密钥。"),
+            )
+            .into_any_element();
+    }
+
+    let message = match mode {
+        "sessionOnly" => {
+            "仅本次运行模式会将 API 密钥仅保留在当前进程内存中，不写入钥匙串或磁盘文件；退出 Maltoria 后密钥将自动清除，下次启动需重新输入。"
+        }
+        _ => {
+            "macOS 钥匙串模式会加密保存凭证，并在运行期间启用内存缓存以减少重复访问；若使用本地 ad-hoc 签名构建，每次重新编译导致二进制签名变化时，系统钥匙串仍可能弹窗授权一次。"
+        }
+    };
+
+    row()
+        .items_start()
+        .gap(px(8.))
+        .p(px(10.))
+        .rounded(px(8.))
+        .bg(rgba(card_bg()))
+        .border_1()
+        .border_color(rgba(card_border()))
+        .child(
+            div()
+                .pt(px(2.))
+                .flex_shrink_0()
+                .child(icon("info", 14.).text_color(rgb(subtext()))),
+        )
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .text_size(px(11.5))
+                .line_height(relative(1.45))
+                .text_color(rgb(subtext()))
+                .child(message),
+        )
+        .into_any_element()
+}
+
 fn format_context_window(tokens: u64) -> String {
     if tokens >= 1_000_000 && tokens % 1_000_000 == 0 {
         format!("{}M", tokens / 1_000_000)
@@ -1405,4 +1835,118 @@ fn provenance_label(value: &str) -> &'static str {
         "manual" => "手动指定",
         _ => "未知",
     }
+}
+
+fn format_cache_bytes(bytes: u64) -> String {
+    if bytes < 1024 {
+        format!("{bytes} B")
+    } else if bytes < 1024 * 1024 {
+        format!("{:.1} KB", bytes as f64 / 1024.0)
+    } else if bytes < 1024 * 1024 * 1024 {
+        format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
+    } else {
+        format!("{:.2} GB", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+    }
+}
+
+fn cache_entry_row(
+    entry: &CacheEntryDto,
+    compact: bool,
+    delete_pending: bool,
+    cx: &Context<WhiskyApp>,
+) -> AnyElement {
+    let id = entry.id.clone();
+    let model_label = match (
+        entry.provider_name.trim(),
+        entry.model_id.as_deref().map(str::trim).unwrap_or(""),
+    ) {
+        ("", "") => None,
+        (provider, "") => Some(provider.to_owned()),
+        ("", model) => Some(model.to_owned()),
+        (provider, model) => Some(format!("{provider} · {model}")),
+    };
+    let speaker = entry
+        .speaker
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned);
+    let lang_pair =
+        (!entry.source_language.trim().is_empty() || !entry.target_language.trim().is_empty())
+            .then(|| format!("{} → {}", entry.source_language, entry.target_language));
+
+    let mut badges = row()
+        .gap(px(5.))
+        .flex_wrap()
+        .when_some(speaker, |d, s| {
+            d.child(pill_badge(
+                s,
+                accent_subtle_bg(),
+                accent_fg(),
+                Some(accent_subtle_border()),
+            ))
+        })
+        .when_some(model_label, |d, m| {
+            d.child(pill_badge(m, badge_bg(), badge_text(), None))
+        })
+        .when_some(lang_pair, |d, lp| {
+            d.child(pill_badge(lp, badge_bg(), badge_text(), None))
+        })
+        .child(pill_badge(
+            format!("命中 {} 次", entry.hit_count),
+            installed_bg(),
+            installed_fg(),
+            None,
+        ));
+    if !compact && !entry.game_id.trim().is_empty() {
+        badges = badges.child(pill_badge(
+            format!("游戏 {}", entry.game_id),
+            badge_bg(),
+            badge_text(),
+            None,
+        ));
+    }
+
+    col()
+        .gap(px(6.))
+        .p(px(10.))
+        .rounded(px(8.))
+        .bg(rgba(card_bg()))
+        .border_1()
+        .border_color(rgba(card_border()))
+        .child(
+            row()
+                .justify_between()
+                .gap(px(8.))
+                .flex_wrap()
+                .child(badges)
+                .child(
+                    Button::new(format!("cache-delete:{id}"))
+                        .ghost()
+                        .label("删除")
+                        .disabled(delete_pending)
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.translation_page
+                                .delete_cache_entry(&this.bridge, id.clone());
+                            cx.notify();
+                        })),
+                ),
+        )
+        .child(
+            div()
+                .text_size(px(12.))
+                .text_color(rgb(text()))
+                .line_height(relative(1.4))
+                .child(entry.source_text.clone()),
+        )
+        .when(!entry.translated_text.is_empty(), |d| {
+            d.child(
+                div()
+                    .text_size(px(12.))
+                    .text_color(rgb(subtext()))
+                    .line_height(relative(1.4))
+                    .child(entry.translated_text.clone()),
+            )
+        })
+        .into_any_element()
 }

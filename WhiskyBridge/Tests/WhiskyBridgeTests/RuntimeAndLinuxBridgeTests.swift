@@ -152,6 +152,151 @@ struct RuntimeAndLinuxBridgeTests {
         await service.shutdown()
     }
 
+    @Test @MainActor func runtimeServiceOnEntriesEndedFiresOnStopAndLaunchFailure() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("whisky-rt-ended-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let container = root.appendingPathComponent("Bottle")
+        let executable = container.appendingPathComponent("drive_c/Game/play.exe")
+        try FileManager.default.createDirectory(
+            at: executable.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data([0x4D, 0x5A]).write(to: executable)
+        let metadata: [String: Any] = ["info": ["name": "Portable", "pins": [], "blocklist": []]]
+        try PropertyListSerialization.data(fromPropertyList: metadata, format: .xml, options: 0)
+            .write(to: container.appendingPathComponent("Metadata.plist"))
+
+        @MainActor
+        final class EndingDriver: LibraryRuntimeDriver {
+            var snapshot = LibraryRuntimeDriverSnapshot()
+            private var continuation: AsyncStream<LibraryRuntimeDriverEvent>.Continuation?
+            var failNextLaunch = false
+
+            func events() -> AsyncStream<LibraryRuntimeDriverEvent> {
+                AsyncStream { continuation in
+                    self.continuation = continuation
+                    continuation.yield(.changed(self.snapshot))
+                }
+            }
+
+            func capabilities(for entry: LibraryEntry) -> LibraryRuntimeCapabilities {
+                [.launch, .cancelLaunch, .stop]
+            }
+
+            func retainContainers(_ urls: Set<URL>) {}
+            func configure(entries: [LibraryEntry], containerURL: URL) async {}
+
+            func launchProgram(
+                _ request: LibraryLaunchRequest,
+                onStarted: @escaping @MainActor () -> Void
+            ) async -> LaunchResult {
+                if failNextLaunch {
+                    return .launchFailed(programName: request.entry.name, errorDescription: "boom")
+                }
+                onStarted()
+                return .launchedSuccessfully(programName: request.entry.name)
+            }
+
+            func programDidStart(_ request: LibraryLaunchRequest) {
+                snapshot.revision &+= 1
+                snapshot.observation.runningEntryIDs.insert(request.entry.id)
+                continuation?.yield(.changed(snapshot))
+            }
+
+            func launchSteam(_ entry: LibraryEntry) {}
+            func cancelSteamLaunch(_ entry: LibraryEntry) {}
+
+            func stop(_ entry: LibraryEntry) async {
+                snapshot.revision &+= 1
+                snapshot.observation.runningEntryIDs.remove(entry.id)
+                snapshot.observation.endedEntryIDs = [entry.id]
+                continuation?.yield(.changed(snapshot))
+            }
+
+            func stopTracking() {}
+        }
+
+        @MainActor
+        final class RecordingNativeServices: NativeApplicationServices {
+            var methods: [String] { [] }
+            var capabilities: [String] { [] }
+            var endedCalls: [(Set<String>, Bool)] = []
+            func call(
+                _ method: String,
+                params: [String: JSONValue],
+                workspace: ApplicationWorkspace
+            ) async throws -> JSONValue { .null }
+            func configurationChanged(
+                _ field: ConfigurationField,
+                value: ConfigurationValue,
+                values: [String: ConfigurationValue],
+                container: URL
+            ) async throws {}
+            func shutdown(applyExitPolicy: Bool) async {}
+            func handleRuntimeEntriesEnded(_ entryIDs: Set<String>, stoppedCapture: Bool) {
+                endedCalls.append((entryIDs, stoppedCapture))
+            }
+        }
+
+        let workspace = ApplicationWorkspace(containers: [container])
+        let driver = EndingDriver()
+        let runtime = RuntimeService(driver: driver)
+        let native = RecordingNativeServices()
+        let service = ApplicationService(workspace: workspace, native: native, runtime: runtime)
+
+        var endedEvents: [[(id: String, bottleURL: URL)]] = []
+        let previousHandler = runtime.onEntriesEnded
+        runtime.onEntriesEnded = { entries in
+            endedEvents.append(entries)
+            previousHandler?(entries)
+        }
+
+        _ = try await service.call("programs.pin", params: [
+            "container": .string(container.path),
+            "executable": .string(executable.path),
+            "name": .string("Play"),
+            "pinned": .bool(true)
+        ])
+        let configured = try await service.call("runtime.configure", params: ["container": .string(container.path)])
+        let entryID = try #require(configured.object?["entries"]?.arrayValues?.first?.object?["id"]?.string)
+
+        // Running -> idle notifies onEntriesEnded and native.handleRuntimeEntriesEnded
+        _ = try await service.call("runtime.launch", params: [
+            "container": .string(container.path),
+            "entryID": .string(entryID)
+        ])
+        for _ in 0 ..< 50 where driver.snapshot.observation.runningEntryIDs.isEmpty {
+            await Task.yield()
+        }
+        #expect(driver.snapshot.observation.runningEntryIDs.contains(entryID))
+
+        _ = try await service.call("runtime.stop", params: [
+            "container": .string(container.path),
+            "entryID": .string(entryID)
+        ])
+        for _ in 0 ..< 50 where endedEvents.isEmpty {
+            await Task.yield()
+        }
+        #expect(endedEvents.last?.map(\.id) == [entryID])
+        #expect(endedEvents.last?.map(\.bottleURL.standardizedFileURL) == [container.standardizedFileURL])
+        #expect(native.endedCalls.contains { $0.0 == [entryID] && !$0.1 })
+
+        // Launch failure also notifies onEntriesEnded
+        let countBeforeFailure = endedEvents.count
+        driver.failNextLaunch = true
+        _ = try await service.call("runtime.launch", params: [
+            "container": .string(container.path),
+            "entryID": .string(entryID)
+        ])
+        for _ in 0 ..< 50 where endedEvents.count == countBeforeFailure {
+            await Task.yield()
+        }
+        #expect(endedEvents.count > countBeforeFailure)
+        #expect(endedEvents.last?.map(\.id) == [entryID])
+
+        await service.shutdown()
+    }
+
     @Test @MainActor func helperCompositionAdvertisesRuntimeAndSnapshotsWithoutAGame() async throws {
         let runtime = RuntimeService(driver: UnavailableLibraryRuntimeDriver())
         let service = ApplicationService(workspace: ApplicationWorkspace(containers: []), runtime: runtime)

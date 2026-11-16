@@ -245,6 +245,9 @@ public struct HTTPTranslationProvider: TranslationProvider, Sendable {
                 "stream": true
             ]
             chatBody[configuration.openAIChatTokenLimitField.rawValue] = request.outputTokenLimit
+            if let reasoningEffort = openAIReasoningEffort(for: configuration.thinkingLevel) {
+                chatBody["reasoning_effort"] = reasoningEffort
+            }
             body = chatBody
         }
         let response = try await post(
@@ -290,7 +293,7 @@ public struct HTTPTranslationProvider: TranslationProvider, Sendable {
         guard let model = configuration.modelID, !model.isEmpty else { throw TranslationError.missingModel }
         var options: [String: Any] = ["num_predict": request.outputTokenLimit]
         if request.contextWindowProvenance != .unknown { options["num_ctx"] = request.contextWindowTokens }
-        let body: [String: Any] = try [
+        var body: [String: Any] = try [
             "model": model,
             "messages": [
                 ["role": "system", "content": TranslationPrompt.systemInstructions(for: request)],
@@ -299,6 +302,9 @@ public struct HTTPTranslationProvider: TranslationProvider, Sendable {
             "stream": true,
             "options": options
         ]
+        if let think = ollamaThinkFlag(for: configuration.thinkingLevel) {
+            body["think"] = think
+        }
         let response = try await post(
             configuration,
             path: "api/chat",
@@ -389,13 +395,26 @@ public struct HTTPTranslationProvider: TranslationProvider, Sendable {
         continuation: AsyncThrowingStream<TranslationEvent, any Error>.Continuation
     ) async throws {
         guard let model = configuration.modelID, !model.isEmpty else { throw TranslationError.missingModel }
-        let body: [String: Any] = try [
+        var maxTokens = request.outputTokenLimit
+        var body: [String: Any] = try [
             "model": model,
-            "max_tokens": request.outputTokenLimit,
+            "max_tokens": maxTokens,
             "system": TranslationPrompt.systemInstructions(for: request),
             "messages": [["role": "user", "content": TranslationPrompt.userMessage(for: request)]],
             "stream": true
         ]
+        switch configuration.thinkingLevel {
+        case .default:
+            break
+        case .off:
+            body["thinking"] = ["type": "disabled"]
+        case .low, .medium, .high, .xhigh, .max, .ultra:
+            if let budget = anthropicThinkingBudget(for: configuration.thinkingLevel) {
+                maxTokens = max(maxTokens, budget + 1_024)
+                body["max_tokens"] = maxTokens
+                body["thinking"] = ["type": "enabled", "budget_tokens": budget]
+            }
+        }
         let response = try await post(
             configuration,
             path: "messages",
@@ -445,10 +464,14 @@ public struct HTTPTranslationProvider: TranslationProvider, Sendable {
         continuation: AsyncThrowingStream<TranslationEvent, any Error>.Continuation
     ) async throws {
         guard let model = configuration.modelID, !model.isEmpty else { throw TranslationError.missingModel }
+        var generationConfig: [String: Any] = ["maxOutputTokens": request.outputTokenLimit]
+        if let budget = geminiThinkingBudget(for: configuration.thinkingLevel) {
+            generationConfig["thinkingConfig"] = ["thinkingBudget": budget]
+        }
         let body: [String: Any] = try [
             "systemInstruction": ["parts": [["text": TranslationPrompt.systemInstructions(for: request)]]],
             "contents": [["role": "user", "parts": [["text": TranslationPrompt.userMessage(for: request)]]]],
-            "generationConfig": ["maxOutputTokens": request.outputTokenLimit]
+            "generationConfig": generationConfig
         ]
         let response = try await post(
             configuration,
@@ -769,5 +792,51 @@ private func yield(
     case .dropped: throw TranslationError.streamConsumerTooSlow
     case .terminated: throw CancellationError()
     @unknown default: throw TranslationError.streamConsumerTooSlow
+    }
+}
+
+private func openAIReasoningEffort(for level: ThinkingLevel) -> String? {
+    switch level {
+    case .default: nil
+    case .off: "none"
+    case .low: "low"
+    case .medium: "medium"
+    case .high: "high"
+    case .xhigh: "xhigh"
+    case .max: "max"
+    case .ultra: "ultra"
+    }
+}
+
+private func anthropicThinkingBudget(for level: ThinkingLevel) -> Int? {
+    switch level {
+    case .default, .off: nil
+    case .low: 1_024
+    case .medium: 4_096
+    case .high: 8_192
+    case .xhigh: 16_384
+    case .max: 32_768
+    case .ultra: 65_536
+    }
+}
+
+private func geminiThinkingBudget(for level: ThinkingLevel) -> Int? {
+    switch level {
+    case .default: nil
+    case .off: 0
+    case .low: 1_024
+    case .medium: 4_096
+    case .high: 8_192
+    case .xhigh: 16_384
+    case .max: 24_576
+    case .ultra: 32_768
+    }
+}
+
+private func ollamaThinkFlag(for level: ThinkingLevel) -> Bool? {
+    switch level {
+    case .default: nil
+    case .off: false
+    case .low, .medium, .high, .xhigh, .max, .ultra: true
     }
 }

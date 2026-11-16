@@ -63,7 +63,9 @@ pub(crate) const BACKOFF_MAX_MS: u64 = 8_000;
 fn translation_call_timeout(method: &str) -> Duration {
     match method {
         "translation.models" | "translation.modelInfo" | "translation.testConnection" => PROVIDER_PROBE_TIMEOUT,
-        "translation.capture.start" | "translation.capture.attach" => CAPTURE_OPERATION_TIMEOUT,
+        "translation.capture.start"
+        | "translation.capture.attach"
+        | "translation.capture.autoAttach" => CAPTURE_OPERATION_TIMEOUT,
         _ => CALL_TIMEOUT,
     }
 }
@@ -1128,6 +1130,25 @@ impl BridgeSupervisor {
             commands,
             _thread: None,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn recording_for_tests() -> (Self, impl Fn() -> Vec<(String, serde_json::Value)>) {
+        let (commands, worker) = mpsc::channel();
+        let supervisor = Self {
+            commands,
+            _thread: None,
+        };
+        let drain = move || {
+            let mut out = Vec::new();
+            while let Ok(cmd) = worker.try_recv() {
+                if let Command::TranslationCall { method, params, .. } = cmd {
+                    out.push((method, params));
+                }
+            }
+            out
+        };
+        (supervisor, drain)
     }
 
     /// Queue a read-only library request. The worker coalesces nothing: callers
@@ -8592,7 +8613,11 @@ mod tests {
         for method in ["translation.models", "translation.modelInfo", "translation.testConnection"] {
             assert_eq!(translation_call_timeout(method), Duration::from_secs(240));
         }
-        for method in ["translation.capture.start", "translation.capture.attach"] {
+        for method in [
+            "translation.capture.start",
+            "translation.capture.attach",
+            "translation.capture.autoAttach",
+        ] {
             assert_eq!(translation_call_timeout(method), Duration::from_secs(60));
         }
         assert_eq!(translation_call_timeout("translation.snapshot"), CALL_TIMEOUT);

@@ -45,6 +45,13 @@ public protocol NativeApplicationServices: AnyObject {
     func launchTranslationHelper(executable: URL, container: URL, environment: [String: String]) throws
         -> TranslationHelperHandle
     func updateTranslationSubtitle(_ value: JSONValue)
+    func registerCaptureContext(
+        capture: ApplicationCaptureService,
+        translation: ApplicationTranslationService,
+        workspace: ApplicationWorkspace
+    )
+    func presentCaptureHUDOnLaunch(container: URL, entry: EntryRecord, preset: CapturePreset)
+    func handleRuntimeEntriesEnded(_ entryIDs: Set<String>, stoppedCapture: Bool)
 }
 
 public extension NativeApplicationServices {
@@ -59,6 +66,13 @@ public extension NativeApplicationServices {
     }
 
     func updateTranslationSubtitle(_ value: JSONValue) {}
+    func registerCaptureContext(
+        capture: ApplicationCaptureService,
+        translation: ApplicationTranslationService,
+        workspace: ApplicationWorkspace
+    ) {}
+    func presentCaptureHUDOnLaunch(container: URL, entry: EntryRecord, preset: CapturePreset) {}
+    func handleRuntimeEntriesEnded(_ entryIDs: Set<String>, stoppedCapture: Bool) {}
 }
 
 @MainActor
@@ -160,6 +174,24 @@ public final class ApplicationService {
             }
         )
         if !portableLifecycleMethods.isEmpty { jobStore.workspace = workspace }
+        if let native {
+            native.registerCaptureContext(capture: capture, translation: translation, workspace: workspace)
+        }
+        runtime?.onEntriesEnded = { [weak self] entries in
+            guard let self else { return }
+            let endedIDs = Set(entries.map(\.id))
+            let endedGameIDs = Set(entries.map {
+                LibraryStorageLayout.key($0.bottleURL.standardizedFileURL.path + "\n" + $0.id)
+            })
+            self.native?.handleRuntimeEntriesEnded(endedIDs, stoppedCapture: false)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let stopped = await self.capture.stopIfMatching(gameIDs: endedGameIDs)
+                if stopped {
+                    self.native?.handleRuntimeEntriesEnded(endedIDs, stoppedCapture: true)
+                }
+            }
+        }
     }
 
     public func respond(_ request: BridgeRequest) async -> BridgeResponse {
@@ -234,11 +266,20 @@ extension ApplicationService {
         case "environment": return try await environmentCall(method, params: params)
         case "processes": return try await processesCall(method, params: params)
         case "translation":
+            if method == "translation.capture.hud/show" || method == "translation.capture.hud/hide" {
+                return try await nativeCall(method, params: params)
+            }
             if ApplicationCaptureService.methods.contains(method) {
-                return try await capture.call(method, params: params, workspace: workspace)
+                let scopedParams = method == "translation.cache.clear"
+                    ? resolveCacheScope(in: params)
+                    : params
+                return try await capture.call(method, params: scopedParams, workspace: workspace)
             }
             if ApplicationTranslationService.methods.contains(method) {
-                let result = try await translation.call(method, params: params)
+                let scopedParams = method == "translation.cache/list"
+                    ? resolveCacheScope(in: params)
+                    : params
+                let result = try await translation.call(method, params: scopedParams)
                 if [
                     "translation.providers/save",
                     "translation.providers/delete",
@@ -256,9 +297,44 @@ extension ApplicationService {
         }
     }
 
+    private func resolveCacheScope(in params: [String: JSONValue]) -> [String: JSONValue] {
+        var resolved = params
+        if resolved["gameID"]?.string?.isEmpty != false,
+           resolved["container"] != nil,
+           let entryID = resolved["entryID"]?.string, !entryID.isEmpty,
+           let prefix = try? workspace.resolve(params) {
+            resolved["gameID"] = .string(
+                LibraryStorageLayout.key(prefix.standardizedFileURL.path + "\n" + entryID)
+            )
+        }
+        return resolved
+    }
+
     private func runtimeCall(_ method: String, params: [String: JSONValue]) async throws -> JSONValue {
-        if let runtime { return try await runtime.call(method, params: params, workspace: workspace) }
+        if let runtime {
+            let result = try await runtime.call(method, params: params, workspace: workspace)
+            if method == "runtime.launch",
+               result.object?["accepted"]?.bool == true,
+               result.object?["interactionRequired"]?.bool != true {
+                await triggerCaptureHUDOnLaunchIfEnabled(params: params)
+            }
+            return result
+        }
         return try await nativeCall(method, params: params)
+    }
+
+    private func triggerCaptureHUDOnLaunchIfEnabled(params: [String: JSONValue]) async {
+        guard let native,
+              let containerURL = try? workspace.resolve(params),
+              let entry = try? await workspace.entry(params),
+              let preset = await capture.preset(container: containerURL, entryID: entry.id),
+              preset.translationEnabled,
+              preset.promptAttachOnLaunch
+        else { return }
+        let visibility = (try? LibraryVisibility.load(bottleURL: containerURL)) ?? LibraryVisibility()
+        if let record = try? EntryRecord(entry, visibility: visibility) {
+            native.presentCaptureHUDOnLaunch(container: containerURL, entry: record, preset: preset)
+        }
     }
 
     private func processesCall(_ method: String, params: [String: JSONValue]) async throws -> JSONValue {

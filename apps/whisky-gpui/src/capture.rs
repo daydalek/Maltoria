@@ -6,7 +6,14 @@ use gpui_kit::{Context, Entity};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::{bridge::BridgeSupervisor, state::WhiskyApp, translation::next_request_id};
+use crate::{
+    bridge::BridgeSupervisor,
+    state::WhiskyApp,
+    translation::{ProviderDto, next_request_id},
+};
+
+const MAX_AUTO_ATTACH_ATTEMPTS: u8 = 8;
+const AUTO_ATTACH_RETRY_INTERVAL: Duration = Duration::from_millis(1200);
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -48,6 +55,153 @@ pub(crate) struct Subtitle {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct CaptureThreadBinding {
+    pub(crate) role: String,
+    #[serde(default)]
+    pub(crate) hook_code: String,
+    #[serde(default)]
+    pub(crate) hook_name: String,
+    #[serde(default)]
+    pub(crate) context_hex: String,
+    #[serde(default)]
+    pub(crate) context2_hex: String,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CapturePreset {
+    #[serde(rename = "providerID", default)]
+    pub(crate) provider_id: Option<String>,
+    #[serde(default)]
+    pub(crate) architecture: String,
+    #[serde(default)]
+    pub(crate) restore_history: bool,
+    #[serde(default)]
+    pub(crate) auto_attach: bool,
+    #[serde(default)]
+    pub(crate) translation_enabled: bool,
+    #[serde(default = "default_true")]
+    pub(crate) prompt_attach_on_launch: bool,
+    #[serde(default)]
+    pub(crate) target_exe_path: Option<String>,
+    #[serde(default)]
+    pub(crate) custom_hook_codes: Vec<String>,
+    #[serde(default)]
+    pub(crate) thread_bindings: Vec<CaptureThreadBinding>,
+}
+
+impl Default for CapturePreset {
+    fn default() -> Self {
+        Self {
+            provider_id: None,
+            architecture: String::new(),
+            restore_history: false,
+            auto_attach: false,
+            translation_enabled: false,
+            prompt_attach_on_launch: true,
+            target_exe_path: None,
+            custom_hook_codes: Vec::new(),
+            thread_bindings: Vec::new(),
+        }
+    }
+}
+
+impl CapturePreset {
+    pub(crate) fn has_saved_state(&self) -> bool {
+        self.target_exe_path
+            .as_deref()
+            .is_some_and(|s| !s.trim().is_empty())
+            || !self.thread_bindings.is_empty()
+            || !self.custom_hook_codes.is_empty()
+            || self.auto_attach
+    }
+
+    pub(crate) fn has_auto_attach_target(&self) -> bool {
+        self.auto_attach
+            && self
+                .target_exe_path
+                .as_deref()
+                .is_some_and(|s| !s.trim().is_empty())
+    }
+
+    pub(crate) fn binding_counts(&self) -> (usize, usize, usize) {
+        let mut body = 0;
+        let mut speaker = 0;
+        let mut choice = 0;
+        for binding in &self.thread_bindings {
+            match binding.role.as_str() {
+                "body" => body += 1,
+                "speaker" => speaker += 1,
+                "choice" => choice += 1,
+                _ => {}
+            }
+        }
+        (body, speaker, choice)
+    }
+}
+
+pub(crate) fn exe_basename(path: &str) -> &str {
+    let trimmed = path.trim();
+    trimmed
+        .rsplit(['\\', '/'])
+        .find(|segment| !segment.is_empty())
+        .unwrap_or(trimmed)
+}
+
+pub(crate) struct FilteredThreads<'a> {
+    pub(crate) threads: Vec<&'a CaptureThread>,
+    pub(crate) hidden_empty_count: usize,
+}
+
+fn thread_has_assigned_role(t: &CaptureThread, thread_roles: &BTreeMap<String, String>) -> bool {
+    let effective_role = thread_roles
+        .get(&t.id)
+        .map(String::as_str)
+        .or(t.role.as_deref());
+    matches!(effective_role, Some("body" | "speaker" | "choice"))
+}
+
+pub(crate) fn filter_threads<'a>(
+    threads: &'a [CaptureThread],
+    thread_roles: &BTreeMap<String, String>,
+    non_empty_only: bool,
+    query: &str,
+) -> FilteredThreads<'a> {
+    let q = query.trim().to_lowercase();
+    let mut visible = Vec::with_capacity(threads.len());
+    let mut hidden_empty_count = 0usize;
+
+    for thread in threads {
+        let matches_query = q.is_empty()
+            || thread.hook_name.to_lowercase().contains(&q)
+            || thread.hook_code.to_lowercase().contains(&q)
+            || thread.preview.to_lowercase().contains(&q)
+            || thread.id.to_lowercase().contains(&q);
+        if !matches_query {
+            continue;
+        }
+        if non_empty_only
+            && thread.preview.trim().is_empty()
+            && !thread_has_assigned_role(thread, thread_roles)
+        {
+            hidden_empty_count += 1;
+            continue;
+        }
+        visible.push(thread);
+    }
+
+    FilteredThreads {
+        threads: visible,
+        hidden_empty_count,
+    }
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct Snapshot {
     #[serde(rename = "sessionID")]
     pub(crate) session_id: Option<String>,
@@ -62,6 +216,10 @@ pub(crate) struct Snapshot {
     pub(crate) history_count: u64,
     pub(crate) threads: Vec<CaptureThread>,
     pub(crate) threads_total: usize,
+    #[serde(default)]
+    pub(crate) auto_bound_count: u64,
+    #[serde(default)]
+    pub(crate) preset: Option<CapturePreset>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -91,7 +249,20 @@ pub(crate) struct HistoryEntry {
     pub(crate) created_at: f64,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+fn default_overlay_text_color() -> String {
+    "#FFFFFF".into()
+}
+
+fn default_overlay_source_text_color() -> String {
+    "#D4D4D8".into()
+}
+
+pub(crate) fn is_valid_hex_color(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() == 7 && bytes[0] == b'#' && bytes[1..].iter().all(u8::is_ascii_hexdigit)
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct OverlaySettings {
     pub(crate) visible: bool,
@@ -104,17 +275,82 @@ pub(crate) struct OverlaySettings {
     pub(crate) height: f64,
     pub(crate) x: Option<f64>,
     pub(crate) y: Option<f64>,
+    #[serde(default = "default_overlay_text_color")]
+    pub(crate) text_color: String,
+    #[serde(default = "default_overlay_source_text_color")]
+    pub(crate) source_text_color: String,
+}
+
+impl Default for OverlaySettings {
+    fn default() -> Self {
+        Self {
+            visible: false,
+            click_through: true,
+            show_source: true,
+            show_translation: true,
+            font_size: 28.0,
+            opacity: 0.85,
+            width: 900.0,
+            height: 180.0,
+            x: None,
+            y: None,
+            text_color: default_overlay_text_color(),
+            source_text_color: default_overlay_source_text_color(),
+        }
+    }
 }
 
 impl OverlaySettings {
     pub(crate) fn validate(&self) -> bool {
-        (12.0..=72.0).contains(&self.font_size)
-            && (0.1..=1.0).contains(&self.opacity)
+        self.font_size.is_finite()
+            && (12.0..=72.0).contains(&self.font_size)
+            && self.opacity.is_finite()
+            && (0.0..=1.0).contains(&self.opacity)
+            && self.width.is_finite()
             && (320.0..=3840.0).contains(&self.width)
+            && self.height.is_finite()
             && (100.0..=1200.0).contains(&self.height)
             && self.x.is_none_or(f64::is_finite)
             && self.y.is_none_or(f64::is_finite)
             && (self.show_source || self.show_translation)
+            && is_valid_hex_color(&self.text_color)
+            && is_valid_hex_color(&self.source_text_color)
+    }
+}
+
+fn step_overlay_opacity(current: f64, delta: f64) -> f64 {
+    (((current + delta).clamp(0.0, 1.0)) * 1000.0).round() / 1000.0
+}
+
+pub(crate) fn apply_overlay_action(s: &mut OverlaySettings, action: &str) {
+    match action {
+        "visible" => s.visible = !s.visible,
+        "clickThrough" => s.click_through = !s.click_through,
+        "showSource" => s.show_source = !s.show_source,
+        "showTranslation" => s.show_translation = !s.show_translation,
+        "font-" => s.font_size -= 1.0,
+        "font+" => s.font_size += 1.0,
+        "opacity-" => s.opacity = step_overlay_opacity(s.opacity, -0.05),
+        "opacity+" => s.opacity = step_overlay_opacity(s.opacity, 0.05),
+        "width-" => s.width -= 20.0,
+        "width+" => s.width += 20.0,
+        "height-" => s.height -= 20.0,
+        "height+" => s.height += 20.0,
+        "x-" => s.x = Some(s.x.unwrap_or(100.0) - 20.0),
+        "x+" => s.x = Some(s.x.unwrap_or(100.0) + 20.0),
+        "y-" => s.y = Some(s.y.unwrap_or(100.0) - 20.0),
+        "y+" => s.y = Some(s.y.unwrap_or(100.0) + 20.0),
+        "reset" => {
+            s.x = None;
+            s.y = None;
+        }
+        _ => {
+            if let Some(hex) = action.strip_prefix("textColor:") {
+                s.text_color = hex.to_owned();
+            } else if let Some(hex) = action.strip_prefix("sourceColor:") {
+                s.source_text_color = hex.to_owned();
+            }
+        }
     }
 }
 
@@ -123,9 +359,12 @@ struct Pending {
     method: String,
     generation: u64,
     session_id: Option<String>,
+    context: Option<(String, String, String)>,
+    preset_key: Option<(String, String)>,
+    role_edit_generation: u64,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub(crate) struct CaptureState {
     pub(crate) panel_open: bool,
     pub(crate) context: Option<(String, String, String)>,
@@ -134,6 +373,13 @@ pub(crate) struct CaptureState {
     pub(crate) provider_id: Option<String>,
     pub(crate) architecture: String,
     pub(crate) restore_history: bool,
+    pub(crate) preset: Option<CapturePreset>,
+    pub(crate) presets_by_game: BTreeMap<(String, String), CapturePreset>,
+    pub(crate) preset_notice: Option<String>,
+    pub(crate) auto_attach_pending: bool,
+    pub(crate) thread_filter_non_empty: bool,
+    pub(crate) thread_filter_query: String,
+    pub(crate) thread_filter_input: Option<Entity<InputState>>,
     pub(crate) snapshot: Option<Snapshot>,
     pub(crate) processes: Vec<ProcessRecord>,
     pub(crate) truncated: bool,
@@ -157,9 +403,128 @@ pub(crate) struct CaptureState {
     poll_request: Option<u64>,
     poll_scheduled: bool,
     last_terminal: String,
+    auto_attach_on_preset_load: bool,
+    preset_needs_apply: bool,
+    auto_attach_attempts: u8,
+    auto_attach_retry_scheduled: bool,
+    role_edit_generation: u64,
+}
+
+impl Default for CaptureState {
+    fn default() -> Self {
+        Self {
+            panel_open: false,
+            context: None,
+            active_game: None,
+            history_owner: None,
+            provider_id: None,
+            architecture: String::new(),
+            restore_history: false,
+            preset: None,
+            presets_by_game: BTreeMap::new(),
+            preset_notice: None,
+            auto_attach_pending: false,
+            thread_filter_non_empty: true,
+            thread_filter_query: String::new(),
+            thread_filter_input: None,
+            snapshot: None,
+            processes: Vec::new(),
+            truncated: false,
+            selected_process: None,
+            thread_offset: 0,
+            thread_total: 0,
+            threads: Vec::new(),
+            thread_roles: BTreeMap::new(),
+            history_offset: 0,
+            history_total: 0,
+            history: Vec::new(),
+            history_text: BTreeMap::new(),
+            history_text_progress: None,
+            hook_code: String::new(),
+            hook_input: None,
+            error: None,
+            overlay: None,
+            overlay_platform: String::new(),
+            pending: BTreeMap::new(),
+            generation: 0,
+            poll_request: None,
+            poll_scheduled: false,
+            last_terminal: String::new(),
+            auto_attach_on_preset_load: false,
+            preset_needs_apply: false,
+            auto_attach_attempts: 0,
+            auto_attach_retry_scheduled: false,
+            role_edit_generation: 0,
+        }
+    }
 }
 
 impl CaptureState {
+    pub(crate) fn set_context(&mut self, context: Option<(String, String, String)>) {
+        if self.context != context {
+            self.context = context;
+            self.provider_id = None;
+            self.preset = self
+                .context
+                .as_ref()
+                .and_then(|(c, e, _)| self.presets_by_game.get(&(c.clone(), e.clone())).cloned());
+            self.preset_notice = None;
+            self.preset_needs_apply = false;
+            self.auto_attach_on_preset_load = false;
+            self.auto_attach_pending = false;
+            self.auto_attach_attempts = 0;
+            self.auto_attach_retry_scheduled = false;
+            self.pending.retain(|_, p| {
+                !(p.method.starts_with("translation.capture.preset/") && p.preset_key.is_none())
+            });
+        }
+    }
+
+    pub(crate) fn preset_for_game(
+        &self,
+        container: &str,
+        entry_id: &str,
+    ) -> Option<&CapturePreset> {
+        self.presets_by_game
+            .get(&(container.to_owned(), entry_id.to_owned()))
+            .or_else(|| {
+                self.context
+                    .as_ref()
+                    .filter(|(c, e, _)| c == container && e == entry_id)
+                    .and(self.preset.as_ref())
+            })
+    }
+
+    pub(crate) fn effective_architecture(&self) -> &str {
+        if self.architecture.is_empty() {
+            "x64"
+        } else {
+            &self.architecture
+        }
+    }
+
+    pub(crate) fn is_actively_attached(&self) -> bool {
+        self.snapshot
+            .as_ref()
+            .is_some_and(|s| s.target.is_some() || s.capture_state == "attached")
+    }
+
+    pub(crate) fn is_selecting(&self) -> bool {
+        self.active_game.is_some()
+            && self
+                .snapshot
+                .as_ref()
+                .is_some_and(|s| s.capture_state == "selecting" && s.target.is_none())
+    }
+
+    pub(crate) fn is_idle(&self) -> bool {
+        self.active_game.is_none()
+            && !self.is_actively_attached()
+            && !self.is_pending("translation.capture.start")
+            && !self.is_pending("translation.capture.attach")
+            && !self.is_pending("translation.capture.autoAttach")
+    }
+
     pub(crate) fn request(
         &mut self,
         bridge: &BridgeSupervisor,
@@ -183,6 +548,9 @@ impl CaptureState {
                     .snapshot
                     .as_ref()
                     .and_then(|snapshot| snapshot.session_id.clone()),
+                context: self.context.clone(),
+                preset_key: None,
+                role_edit_generation: self.role_edit_generation,
             },
         );
         if method == "translation.snapshot" {
@@ -199,7 +567,217 @@ impl CaptureState {
         self.history_owner.is_some() && self.history_owner == self.context
     }
 
+    fn request_for_preset(
+        &mut self,
+        bridge: &BridgeSupervisor,
+        method: &str,
+        container: &str,
+        entry_id: &str,
+        params: Value,
+    ) -> Option<u64> {
+        let key = (container.to_owned(), entry_id.to_owned());
+        if self
+            .pending
+            .values()
+            .any(|p| p.method == method && p.preset_key.as_ref() == Some(&key))
+        {
+            return None;
+        }
+        self.pending
+            .retain(|_, p| !(p.method == method && p.preset_key.is_some()));
+        let id = next_request_id();
+        if let Err(error) = bridge.translation_request(id, method, params) {
+            self.error = Some(error);
+            return None;
+        }
+        self.pending.insert(
+            id,
+            Pending {
+                method: method.into(),
+                generation: self.generation,
+                session_id: self
+                    .snapshot
+                    .as_ref()
+                    .and_then(|snapshot| snapshot.session_id.clone()),
+                context: self.context.clone(),
+                preset_key: Some(key),
+                role_edit_generation: self.role_edit_generation,
+            },
+        );
+        Some(id)
+    }
+
+    pub(crate) fn load_preset_for_game(
+        &mut self,
+        bridge: &BridgeSupervisor,
+        container: &str,
+        entry_id: &str,
+    ) {
+        let _ = self.request_for_preset(
+            bridge,
+            "translation.capture.preset/get",
+            container,
+            entry_id,
+            json!({"container": container, "entryID": entry_id}),
+        );
+    }
+
+    pub(crate) fn load_preset_for_context(&mut self, bridge: &BridgeSupervisor) {
+        let Some((container, entry_id, _)) = &self.context else {
+            return;
+        };
+        let container = container.clone();
+        let entry_id = entry_id.clone();
+        self.auto_attach_on_preset_load = true;
+        if self
+            .request_for_preset(
+                bridge,
+                "translation.capture.preset/get",
+                &container,
+                &entry_id,
+                json!({"container": container, "entryID": entry_id}),
+            )
+            .is_none()
+        {
+            self.auto_attach_on_preset_load = false;
+        }
+    }
+
+    pub(crate) fn toggle_preset_translation_enabled(
+        &mut self,
+        bridge: &BridgeSupervisor,
+        container: &str,
+        entry_id: &str,
+        enabled: bool,
+    ) {
+        let existing = self.preset_for_game(container, entry_id).cloned();
+        let mut payload = serde_json::Map::new();
+        payload.insert("container".into(), json!(container));
+        payload.insert("entryID".into(), json!(entry_id));
+        payload.insert("translationEnabled".into(), json!(enabled));
+        if enabled {
+            if existing.as_ref().is_none_or(|p| p.provider_id.is_none())
+                && let Some(pid) = self.provider_id.as_deref()
+            {
+                payload.insert("providerID".into(), json!(pid));
+            }
+            if existing
+                .as_ref()
+                .is_none_or(|p| p.architecture.trim().is_empty())
+            {
+                payload.insert("architecture".into(), json!(self.effective_architecture()));
+            }
+        }
+        self.preset_notice = None;
+        let _ = self.request_for_preset(
+            bridge,
+            "translation.capture.preset/save",
+            container,
+            entry_id,
+            Value::Object(payload),
+        );
+    }
+
+    pub(crate) fn toggle_preset_prompt_on_launch(
+        &mut self,
+        bridge: &BridgeSupervisor,
+        container: &str,
+        entry_id: &str,
+        prompt: bool,
+    ) {
+        self.preset_notice = None;
+        let _ = self.request_for_preset(
+            bridge,
+            "translation.capture.preset/save",
+            container,
+            entry_id,
+            json!({
+                "container": container,
+                "entryID": entry_id,
+                "promptAttachOnLaunch": prompt,
+            }),
+        );
+    }
+
+    pub(crate) fn open_capture_hud(
+        &mut self,
+        bridge: &BridgeSupervisor,
+        container: &str,
+        entry_id: &str,
+    ) {
+        let _ = self.request(
+            bridge,
+            "translation.capture.hud/show",
+            json!({
+                "container": container,
+                "entryID": entry_id,
+            }),
+        );
+    }
+
+    pub(crate) fn toggle_preset_auto_attach(&mut self, bridge: &BridgeSupervisor) {
+        let Some((container, entry_id, _)) = &self.context else {
+            return;
+        };
+        let container = container.clone();
+        let entry_id = entry_id.clone();
+        let mut next = self.preset.clone().unwrap_or_default();
+        next.auto_attach = !next.auto_attach;
+        if !self.is_actively_attached() {
+            if self.provider_id.is_some() {
+                next.provider_id = self.provider_id.clone();
+            }
+            next.architecture = self.effective_architecture().to_owned();
+            next.restore_history = self.restore_history;
+        } else {
+            if next.provider_id.is_none() {
+                next.provider_id = self.provider_id.clone();
+            }
+            if next.architecture.is_empty() {
+                next.architecture = self.effective_architecture().to_owned();
+            }
+        }
+        let mut payload = serde_json::Map::new();
+        payload.insert("container".into(), json!(container));
+        payload.insert("entryID".into(), json!(entry_id));
+        payload.insert("autoAttach".into(), json!(next.auto_attach));
+        payload.insert("restoreHistory".into(), json!(next.restore_history));
+        payload.insert("architecture".into(), json!(next.architecture));
+        if let Some(pid) = next.provider_id.as_deref() {
+            payload.insert("providerID".into(), json!(pid));
+        }
+        self.preset_notice = None;
+        let _ = self.request_for_preset(
+            bridge,
+            "translation.capture.preset/save",
+            &container,
+            &entry_id,
+            Value::Object(payload),
+        );
+    }
+
+    pub(crate) fn clear_preset(&mut self, bridge: &BridgeSupervisor) {
+        let Some((container, entry_id, _)) = &self.context else {
+            return;
+        };
+        let container = container.clone();
+        let entry_id = entry_id.clone();
+        self.auto_attach_on_preset_load = false;
+        self.preset_needs_apply = false;
+        let _ = self.request_for_preset(
+            bridge,
+            "translation.capture.preset/clear",
+            &container,
+            &entry_id,
+            json!({"container": container, "entryID": entry_id}),
+        );
+    }
+
     pub(crate) fn start(&mut self, bridge: &BridgeSupervisor) {
+        self.start_with_auto_attach(bridge, false);
+    }
+
+    pub(crate) fn start_with_auto_attach(&mut self, bridge: &BridgeSupervisor, auto_attach: bool) {
         let Some((container, entry_id, _)) = &self.context else {
             self.error = Some("请从游戏菜单选择游戏后开始捕获。".into());
             return;
@@ -212,10 +790,16 @@ impl CaptureState {
             return;
         }
         self.generation = self.generation.wrapping_add(1);
+        self.role_edit_generation = self.role_edit_generation.wrapping_add(1);
         self.pending.clear();
         self.poll_request = None;
+        self.poll_scheduled = false;
         self.snapshot = None;
         self.error = None;
+        self.preset_notice = None;
+        self.auto_attach_pending = auto_attach;
+        self.auto_attach_attempts = 0;
+        self.auto_attach_retry_scheduled = false;
         self.processes.clear();
         self.selected_process = None;
         self.thread_roles.clear();
@@ -233,11 +817,150 @@ impl CaptureState {
             self.context.as_ref().unwrap().2.clone(),
         ));
         self.history_owner = self.active_game.clone();
-        if self.request(bridge, "translation.capture.start", json!({
-            "container":container,"entryID":entry_id,"providerID":provider_id,
-            "architecture": if self.architecture.is_empty() { "x64" } else { &self.architecture },
-            "restoreHistory":self.restore_history
-        })).is_none() { self.active_game = None; }
+        let arch = self.effective_architecture().to_owned();
+        if self
+            .request(
+                bridge,
+                "translation.capture.start",
+                json!({
+                    "container": container,
+                    "entryID": entry_id,
+                    "providerID": provider_id,
+                    "architecture": arch,
+                    "restoreHistory": self.restore_history,
+                    "autoAttach": auto_attach
+                }),
+            )
+            .is_none()
+        {
+            self.active_game = None;
+            self.auto_attach_pending = false;
+        }
+    }
+
+    pub(crate) fn request_auto_attach(&mut self, bridge: &BridgeSupervisor) {
+        let params = if let Some((container, entry_id, _)) = &self.context {
+            json!({"container": container, "entryID": entry_id})
+        } else {
+            json!({})
+        };
+        let _ = self.request(bridge, "translation.capture.autoAttach", params);
+    }
+
+    pub(crate) fn trigger_manual_auto_attach(&mut self, bridge: &BridgeSupervisor) {
+        self.auto_attach_pending = true;
+        self.auto_attach_attempts = 0;
+        self.auto_attach_retry_scheduled = false;
+        self.preset_notice = None;
+        self.request_auto_attach(bridge);
+    }
+
+    pub(crate) fn schedule_auto_attach_retry(&mut self, cx: &mut Context<WhiskyApp>) {
+        if !self.auto_attach_pending
+            || self.active_game.is_none()
+            || self.auto_attach_retry_scheduled
+            || self.auto_attach_attempts >= MAX_AUTO_ATTACH_ATTEMPTS
+        {
+            return;
+        }
+        self.auto_attach_retry_scheduled = true;
+        let generation = self.generation;
+        cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(AUTO_ATTACH_RETRY_INTERVAL)
+                .await;
+            let _ = this.update(cx, |app, cx| {
+                if app.capture.generation != generation {
+                    return;
+                }
+                app.capture.auto_attach_retry_scheduled = false;
+                if app.capture.auto_attach_pending
+                    && app.capture.is_selecting()
+                    && !app.capture.is_pending("translation.capture.autoAttach")
+                {
+                    app.capture.request_auto_attach(&app.bridge);
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    pub(crate) fn apply_pending_preset(&mut self, providers: &[ProviderDto]) {
+        if !self.preset_needs_apply {
+            return;
+        }
+        self.preset_needs_apply = false;
+        let Some(preset) = &self.preset else {
+            return;
+        };
+        if self.is_actively_attached() {
+            return;
+        }
+        if let Some(pid) = &preset.provider_id {
+            if providers.iter().any(|p| &p.id == pid) {
+                self.provider_id = Some(pid.clone());
+            }
+        }
+        if !preset.architecture.trim().is_empty() {
+            self.architecture = preset.architecture.clone();
+        }
+        self.restore_history = preset.restore_history;
+    }
+
+    pub(crate) fn maybe_auto_attach_on_preset_load(
+        &mut self,
+        bridge: &BridgeSupervisor,
+        probe_pending: bool,
+    ) {
+        if !self.auto_attach_on_preset_load || self.is_pending("translation.capture.preset/get") {
+            return;
+        }
+        self.auto_attach_on_preset_load = false;
+        let Some(preset) = &self.preset else {
+            return;
+        };
+        if preset.has_auto_attach_target()
+            && self.is_idle()
+            && self.provider_id.is_some()
+            && !probe_pending
+        {
+            self.start_with_auto_attach(bridge, true);
+        }
+    }
+
+    pub(crate) fn on_game_launched(
+        &mut self,
+        bridge: &BridgeSupervisor,
+        probe_pending: bool,
+        cx: &mut Context<WhiskyApp>,
+    ) {
+        let Some(preset) = self.preset.clone() else {
+            return;
+        };
+        if preset.has_auto_attach_target() {
+            if self.is_idle() {
+                if self.provider_id.is_some() && !probe_pending {
+                    self.start_with_auto_attach(bridge, true);
+                    if self.active_game.is_some() {
+                        self.preset_notice =
+                            Some("检测到游戏启动，正在扫描并自动附加到目标进程…".into());
+                    }
+                } else {
+                    self.preset_notice =
+                        Some("检测到游戏启动；选择提供商后可点击「自动附加并恢复」。".into());
+                }
+            } else if self.is_selecting() {
+                self.auto_attach_pending = true;
+                self.auto_attach_attempts = 0;
+                self.schedule_auto_attach_retry(cx);
+                self.preset_notice =
+                    Some("检测到游戏启动，正在检测目标进程并自动附加…".into());
+            }
+        } else if preset.has_saved_state() && (self.is_idle() || self.is_selecting()) {
+            self.preset_notice =
+                Some("检测到游戏启动；已记忆附加预设，可点击「自动附加并恢复」。".into());
+        }
     }
 
     pub(crate) fn request_processes(&mut self, bridge: &BridgeSupervisor) {
@@ -245,6 +968,9 @@ impl CaptureState {
     }
     pub(crate) fn attach(&mut self, bridge: &BridgeSupervisor) {
         if let Some(target) = &self.selected_process {
+            self.auto_attach_pending = false;
+            self.auto_attach_attempts = 0;
+            self.auto_attach_retry_scheduled = false;
             let _ = self.request(
                 bridge,
                 "translation.capture.attach",
@@ -255,9 +981,14 @@ impl CaptureState {
     pub(crate) fn stop(&mut self, bridge: &BridgeSupervisor, method: &str) {
         let was_active = self.active_game.is_some();
         self.generation = self.generation.wrapping_add(1);
+        self.role_edit_generation = self.role_edit_generation.wrapping_add(1);
         self.pending.clear();
         self.poll_request = None;
         self.poll_scheduled = false;
+        self.auto_attach_pending = false;
+        self.auto_attach_on_preset_load = false;
+        self.auto_attach_attempts = 0;
+        self.auto_attach_retry_scheduled = false;
         self.active_game = None;
         self.snapshot = None;
         self.processes.clear();
@@ -316,29 +1047,7 @@ impl CaptureState {
         if self.is_pending("translation.overlay.configure") {
             return;
         }
-        self.configure_overlay(bridge, |s| match action {
-            "visible" => s.visible = !s.visible,
-            "clickThrough" => s.click_through = !s.click_through,
-            "showSource" => s.show_source = !s.show_source,
-            "showTranslation" => s.show_translation = !s.show_translation,
-            "font-" => s.font_size -= 1.0,
-            "font+" => s.font_size += 1.0,
-            "opacity-" => s.opacity -= 0.05,
-            "opacity+" => s.opacity += 0.05,
-            "width-" => s.width -= 20.0,
-            "width+" => s.width += 20.0,
-            "height-" => s.height -= 20.0,
-            "height+" => s.height += 20.0,
-            "x-" => s.x = Some(s.x.unwrap_or(100.0) - 20.0),
-            "x+" => s.x = Some(s.x.unwrap_or(100.0) + 20.0),
-            "y-" => s.y = Some(s.y.unwrap_or(100.0) - 20.0),
-            "y+" => s.y = Some(s.y.unwrap_or(100.0) + 20.0),
-            "reset" => {
-                s.x = None;
-                s.y = None;
-            }
-            _ => {}
-        });
+        self.configure_overlay(bridge, |s| apply_overlay_action(s, action));
     }
     fn configure_overlay(
         &mut self,
@@ -389,9 +1098,15 @@ impl CaptureState {
     }
     pub(crate) fn disconnected(&mut self, reason: Option<&str>) {
         self.generation = self.generation.wrapping_add(1);
+        self.role_edit_generation = self.role_edit_generation.wrapping_add(1);
         self.pending.clear();
         self.poll_request = None;
         self.poll_scheduled = false;
+        self.auto_attach_pending = false;
+        self.auto_attach_on_preset_load = false;
+        self.preset_needs_apply = false;
+        self.auto_attach_attempts = 0;
+        self.auto_attach_retry_scheduled = false;
         self.active_game = None;
         self.snapshot = None;
         self.processes.clear();
@@ -408,6 +1123,123 @@ impl CaptureState {
                 .to_owned(),
         );
     }
+
+    fn sync_thread_roles_from_server(
+        &mut self,
+        threads: &[CaptureThread],
+        role_gen_matches: bool,
+    ) {
+        if !role_gen_matches || self.is_pending("translation.threads.select") {
+            return;
+        }
+        for thread in threads {
+            match thread.role.as_deref() {
+                Some(role @ ("body" | "speaker" | "choice")) => {
+                    self.thread_roles.insert(thread.id.clone(), role.to_owned());
+                }
+                _ => {
+                    self.thread_roles.remove(&thread.id);
+                }
+            }
+        }
+    }
+
+    fn apply_snapshot(
+        &mut self,
+        snapshot: Snapshot,
+        method: &str,
+        role_gen_matches: bool,
+        bridge: &BridgeSupervisor,
+        cx: &mut Context<WhiskyApp>,
+    ) {
+        let history_changed = self
+            .snapshot
+            .as_ref()
+            .is_none_or(|old| old.history_count != snapshot.history_count);
+        let terminal = snapshot.subtitle.status.clone();
+        let terminal_changed = terminal != self.last_terminal
+            && matches!(terminal.as_str(), "completed" | "failed" | "cancelled");
+        self.last_terminal = terminal;
+        self.processes = snapshot.processes.clone();
+        if self
+            .selected_process
+            .as_ref()
+            .is_some_and(|selected| !self.processes.contains(selected))
+        {
+            self.selected_process = None;
+        }
+        if self.thread_offset == 0 {
+            self.threads = snapshot.threads.clone();
+        }
+        self.sync_thread_roles_from_server(&snapshot.threads, role_gen_matches);
+        self.thread_total = snapshot.threads_total;
+        if let Some(preset) = snapshot.preset.clone() {
+            self.preset = Some(preset.clone());
+            if let Some((c, e, _)) = self.active_game.as_ref().or(self.context.as_ref())
+                && snapshot
+                    .game_id
+                    .as_deref()
+                    .is_none_or(|gid| gid == e.as_str())
+            {
+                self.presets_by_game.insert((c.clone(), e.clone()), preset);
+            }
+        }
+        let stopped = matches!(
+            snapshot.capture_state.as_str(),
+            "stopped" | "targetExited" | "error"
+        );
+        let attached = snapshot.capture_state == "attached" || snapshot.target.is_some();
+        let selecting = snapshot.capture_state == "selecting" && snapshot.target.is_none();
+        self.snapshot = Some(snapshot);
+
+        if stopped || attached {
+            self.auto_attach_pending = false;
+            self.auto_attach_attempts = 0;
+            self.auto_attach_retry_scheduled = false;
+            if attached {
+                self.preset_notice = None;
+            }
+        } else if selecting
+            && self.auto_attach_pending
+            && matches!(
+                method,
+                "translation.capture.start" | "translation.capture.autoAttach"
+            )
+        {
+            if method == "translation.capture.autoAttach" {
+                self.auto_attach_attempts = self.auto_attach_attempts.saturating_add(1);
+            }
+            if self.auto_attach_attempts < MAX_AUTO_ATTACH_ATTEMPTS {
+                self.schedule_auto_attach_retry(cx);
+            } else {
+                self.auto_attach_pending = false;
+                self.auto_attach_retry_scheduled = false;
+                self.preset_notice = Some(
+                    "未检测到目标进程；可在游戏启动后点击「自动附加并恢复」或手动选择进程。".into(),
+                );
+            }
+        }
+
+        if stopped {
+            self.active_game = None;
+        } else if matches!(
+            method,
+            "translation.capture.start"
+                | "translation.capture.attach"
+                | "translation.capture.autoAttach"
+                | "translation.snapshot"
+        ) {
+            self.schedule_poll(cx);
+        }
+        if self.panel_open && (history_changed || terminal_changed) {
+            self.refresh_history(bridge, self.history_offset);
+        }
+        if method == "translation.capture.start" && !stopped {
+            self.request_processes(bridge);
+            self.refresh_history(bridge, 0);
+        }
+    }
+
     pub(crate) fn reply(
         &mut self,
         request: u64,
@@ -425,6 +1257,7 @@ impl CaptureState {
         if self.poll_request == Some(request) {
             self.poll_request = None;
         }
+        let role_gen_matches = pending.role_edit_generation == self.role_edit_generation;
         match result {
             Err(error) => self.apply_error(method, error),
             Ok(value) => match method {
@@ -434,46 +1267,56 @@ impl CaptureState {
                 | "translation.capture.stop"
                 | "translation.snapshot" => {
                     if let Ok(snapshot) = serde_json::from_value::<Snapshot>(value) {
-                        let history_changed = self
-                            .snapshot
-                            .as_ref()
-                            .is_none_or(|old| old.history_count != snapshot.history_count);
-                        let terminal = snapshot.subtitle.status.clone();
-                        let terminal_changed = terminal != self.last_terminal
-                            && matches!(terminal.as_str(), "completed" | "failed" | "cancelled");
-                        self.last_terminal = terminal;
-                        self.processes = snapshot.processes.clone();
-                        if self
-                            .selected_process
-                            .as_ref()
-                            .is_some_and(|selected| !self.processes.contains(selected))
-                        {
-                            self.selected_process = None;
+                        self.apply_snapshot(snapshot, method, role_gen_matches, bridge, cx);
+                    }
+                }
+                "translation.capture.autoAttach" => {
+                    let snapshot_val = value.get("snapshot").cloned().unwrap_or(value);
+                    if let Ok(snapshot) = serde_json::from_value::<Snapshot>(snapshot_val) {
+                        self.apply_snapshot(snapshot, method, role_gen_matches, bridge, cx);
+                    }
+                }
+                "translation.capture.preset/get" | "translation.capture.preset/save" => {
+                    let (key, matches_context) = self.preset_reply_target(&pending);
+                    match decode_preset_response(&value) {
+                        Ok(preset) => {
+                            if let Some(key) = key {
+                                if let Some(p) = &preset {
+                                    self.presets_by_game.insert(key, p.clone());
+                                } else {
+                                    self.presets_by_game.remove(&key);
+                                }
+                            }
+                            if matches_context {
+                                self.preset = preset;
+                                self.preset_needs_apply = self.preset.is_some();
+                            }
                         }
-                        if self.thread_offset == 0 {
-                            self.threads = snapshot.threads.clone();
+                        Err(error) => {
+                            if matches_context {
+                                self.auto_attach_on_preset_load = false;
+                                self.preset_needs_apply = false;
+                            }
+                            self.error = Some(format!("无效的捕获预设数据：{error}"));
                         }
-                        self.thread_total = snapshot.threads_total;
-                        let stopped = matches!(
-                            snapshot.capture_state.as_str(),
-                            "stopped" | "targetExited" | "error"
-                        );
-                        self.snapshot = Some(snapshot);
-                        if stopped {
-                            self.active_game = None;
-                        } else if method == "translation.capture.start"
-                            || method == "translation.capture.attach"
-                            || method == "translation.snapshot"
-                        {
-                            self.schedule_poll(cx);
+                    }
+                }
+                "translation.capture.preset/clear" => {
+                    let (key, matches_context) = self.preset_reply_target(&pending);
+                    if let Some(key) = key {
+                        self.presets_by_game.remove(&key);
+                    }
+                    if matches_context {
+                        self.preset = None;
+                        self.preset_needs_apply = false;
+                        self.auto_attach_on_preset_load = false;
+                        self.auto_attach_pending = false;
+                        self.auto_attach_attempts = 0;
+                        self.auto_attach_retry_scheduled = false;
+                        if let Some(snapshot) = &mut self.snapshot {
+                            snapshot.preset = None;
                         }
-                        if self.panel_open && (history_changed || terminal_changed) {
-                            self.refresh_history(bridge, self.history_offset);
-                        }
-                        if method == "translation.capture.start" && !stopped {
-                            self.request_processes(bridge);
-                            self.refresh_history(bridge, 0);
-                        }
+                        self.preset_notice = Some("已清除当前游戏的捕获记忆预设。".into());
                     }
                 }
                 "translation.capture.processes" => {
@@ -492,6 +1335,7 @@ impl CaptureState {
                 "translation.threads.list" => {
                     if let Ok(page) = serde_json::from_value::<ThreadPage>(value) {
                         self.threads = page.threads;
+                        self.sync_thread_roles_from_server(&self.threads.clone(), role_gen_matches);
                         self.thread_total = page.total;
                         self.thread_offset = page.next_offset.saturating_sub(self.threads.len());
                     }
@@ -558,7 +1402,28 @@ impl CaptureState {
         }
         cx.notify();
     }
+    fn preset_reply_target(&self, pending: &Pending) -> (Option<(String, String)>, bool) {
+        let key = pending.preset_key.clone().or_else(|| {
+            pending
+                .context
+                .as_ref()
+                .map(|(c, e, _)| (c.clone(), e.clone()))
+        });
+        let matches_context = key.as_ref().is_some_and(|(c, e)| {
+            self.context
+                .as_ref()
+                .is_some_and(|(cc, ce, _)| cc == c && ce == e)
+        }) || (key.is_none() && pending.context == self.context);
+        (key, matches_context)
+    }
+
     fn reply_is_current(&self, pending: &Pending, method: &str) -> bool {
+        if method.starts_with("translation.capture.preset/")
+            && pending.preset_key.is_none()
+            && pending.context != self.context
+        {
+            return false;
+        }
         pending.generation == self.generation
             && pending.method == method
             && pending.session_id.as_ref().is_none_or(|session| {
@@ -576,6 +1441,14 @@ impl CaptureState {
         if method == "translation.capture.start" || method == "translation.capture.attach" {
             self.active_game = None;
         }
+        if method == "translation.capture.start" || method == "translation.capture.autoAttach" {
+            self.auto_attach_pending = false;
+            self.auto_attach_retry_scheduled = false;
+        }
+        if method == "translation.capture.preset/get" {
+            self.auto_attach_on_preset_load = false;
+            self.preset_needs_apply = false;
+        }
     }
     pub(crate) fn select_role(&mut self, bridge: &BridgeSupervisor, thread_id: &str, role: &str) {
         if self.is_pending("translation.threads.select") {
@@ -585,6 +1458,7 @@ impl CaptureState {
             self.error = Some("最多选择 8 个文本线程，且正文/说话者各只能选择一个。".into());
             return;
         };
+        self.role_edit_generation = self.role_edit_generation.wrapping_add(1);
         self.thread_roles = next;
         let selections: Vec<Value> = self
             .thread_roles
@@ -597,6 +1471,19 @@ impl CaptureState {
             json!({"selections":selections}),
         );
     }
+}
+
+fn decode_preset_response(value: &Value) -> Result<Option<CapturePreset>, serde_json::Error> {
+    if value.is_null() || value.as_object().is_some_and(|map| map.is_empty()) {
+        return Ok(None);
+    }
+    if let Some(preset_val) = value.get("preset") {
+        if preset_val.is_null() {
+            return Ok(None);
+        }
+        return serde_json::from_value(preset_val.clone()).map(Some);
+    }
+    serde_json::from_value(value.clone()).map(Some)
 }
 
 fn role_selection(
@@ -689,6 +1576,7 @@ mod tests {
             height: 180.0,
             x: None,
             y: None,
+            ..OverlaySettings::default()
         };
         assert!(!settings.validate());
     }
@@ -700,11 +1588,12 @@ mod tests {
             show_source: true,
             show_translation: false,
             font_size: 12.0,
-            opacity: 0.1,
+            opacity: 0.0,
             width: 320.0,
             height: 100.0,
             x: None,
             y: None,
+            ..OverlaySettings::default()
         };
         assert!(settings.validate());
         let invalid = OverlaySettings {
@@ -726,6 +1615,9 @@ mod tests {
             method: "translation.snapshot".into(),
             generation: state.generation,
             session_id: None,
+            context: None,
+            preset_key: None,
+            role_edit_generation: state.role_edit_generation,
         };
         state.generation += 1;
         assert!(!state.reply_is_current(&pending, "translation.snapshot"));
@@ -741,6 +1633,9 @@ mod tests {
             method: "translation.snapshot".into(),
             generation: state.generation,
             session_id: Some("old-session".into()),
+            context: None,
+            preset_key: None,
+            role_edit_generation: state.role_edit_generation,
         };
         assert!(!state.reply_is_current(&pending, "translation.snapshot"));
     }
@@ -804,5 +1699,695 @@ mod tests {
         assert_eq!(value["source"]["text"], "source");
         assert!(value["source"].get("eventID").is_some());
         assert!(value["source"].get("streamID").is_some());
+    }
+
+    #[test]
+    fn capture_preset_and_snapshot_decode_camel_case_contract() {
+        let payload = serde_json::json!({
+            "sessionID": "sess-1",
+            "gameID": "game-1",
+            "captureState": "attached",
+            "lastError": null,
+            "target": {
+                "guestPID": 42,
+                "exePath": "C:\\Games\\SiglusEngine.exe",
+                "arch": "x86",
+                "creationTime": "12345"
+            },
+            "subtitle": {
+                "source": "",
+                "translation": "",
+                "speaker": null,
+                "kind": null,
+                "status": "idle",
+                "error": null
+            },
+            "cursor": 1,
+            "processes": [],
+            "historyCount": 0,
+            "threads": [],
+            "threadsTotal": 0,
+            "autoBoundCount": 2,
+            "preset": {
+                "providerID": "prov-1",
+                "architecture": "x86",
+                "restoreHistory": true,
+                "autoAttach": true,
+                "targetExePath": "C:\\Games\\SiglusEngine.exe",
+                "customHookCodes": ["HS12@-4:gdi32.dll"],
+                "threadBindings": [
+                    {
+                        "role": "body",
+                        "hookCode": "HS12@-4:gdi32.dll",
+                        "hookName": "TextOutA",
+                        "contextHex": "0x10",
+                        "context2Hex": "0x20"
+                    },
+                    {
+                        "role": "speaker",
+                        "hookCode": "HS13@-4:gdi32.dll",
+                        "hookName": "Speaker",
+                        "contextHex": "0x30",
+                        "context2Hex": "0x40"
+                    }
+                ]
+            }
+        });
+        let snapshot: Snapshot = serde_json::from_value(payload).unwrap();
+        assert_eq!(snapshot.auto_bound_count, 2);
+        let preset = snapshot.preset.expect("preset should decode");
+        assert_eq!(preset.provider_id.as_deref(), Some("prov-1"));
+        assert_eq!(preset.architecture, "x86");
+        assert!(preset.restore_history);
+        assert!(preset.auto_attach);
+        assert_eq!(
+            preset.target_exe_path.as_deref(),
+            Some("C:\\Games\\SiglusEngine.exe")
+        );
+        assert_eq!(preset.custom_hook_codes, vec!["HS12@-4:gdi32.dll"]);
+        assert_eq!(preset.binding_counts(), (1, 1, 0));
+        assert!(preset.has_saved_state());
+        assert!(preset.has_auto_attach_target());
+        assert_eq!(
+            exe_basename("C:\\Games\\Key\\SiglusEngine.exe"),
+            "SiglusEngine.exe"
+        );
+        assert_eq!(exe_basename("/tmp/game/app.exe"), "app.exe");
+        assert_eq!(exe_basename("game.exe"), "game.exe");
+    }
+
+    #[test]
+    fn thread_filtering_hides_empty_previews_unless_role_assigned_and_matches_query() {
+        let state = CaptureState::default();
+        assert!(state.thread_filter_non_empty);
+
+        let threads = vec![
+            CaptureThread {
+                id: "t1".into(),
+                hook_name: "SystemNoise".into(),
+                hook_code: "HS01".into(),
+                preview: "   ".into(),
+                role: None,
+                ..CaptureThread::default()
+            },
+            CaptureThread {
+                id: "t2".into(),
+                hook_name: "BoundEmptyBody".into(),
+                hook_code: "HS02".into(),
+                preview: "".into(),
+                role: Some("body".into()),
+                ..CaptureThread::default()
+            },
+            CaptureThread {
+                id: "t3".into(),
+                hook_name: "LocalAssignedChoice".into(),
+                hook_code: "HS03".into(),
+                preview: "".into(),
+                role: None,
+                ..CaptureThread::default()
+            },
+            CaptureThread {
+                id: "t4".into(),
+                hook_name: "TextOutW".into(),
+                hook_code: "HS04".into(),
+                preview: "おはようございます".into(),
+                role: None,
+                ..CaptureThread::default()
+            },
+        ];
+        let mut roles = BTreeMap::new();
+        roles.insert("t3".into(), "choice".into());
+
+        // Non-empty filter on, empty query: t1 hidden, t2/t3 shown (assigned role), t4 shown (text)
+        let filtered = filter_threads(&threads, &roles, true, "");
+        assert_eq!(filtered.hidden_empty_count, 1);
+        let ids: Vec<&str> = filtered.threads.iter().map(|t| t.id.as_str()).collect();
+        assert_eq!(ids, vec!["t2", "t3", "t4"]);
+
+        // Non-empty filter off, empty query: all 4 shown
+        let all = filter_threads(&threads, &roles, false, "");
+        assert_eq!(all.hidden_empty_count, 0);
+        assert_eq!(all.threads.len(), 4);
+
+        // Search query matches hook_name / hook_code / preview case-insensitively
+        let by_name = filter_threads(&threads, &roles, true, "textout");
+        assert_eq!(by_name.threads.len(), 1);
+        assert_eq!(by_name.threads[0].id, "t4");
+
+        let by_code = filter_threads(&threads, &roles, true, "hs03");
+        assert_eq!(by_code.threads.len(), 1);
+        assert_eq!(by_code.threads[0].id, "t3");
+    }
+
+    #[gpui_kit::test]
+    fn preset_replies_and_auto_attach_state_transitions_work(
+        cx: &mut gpui_kit::TestAppContext,
+    ) {
+        cx.update(|app| gpui_kit::init(app));
+        let (_events_tx, events_rx) = smol::channel::unbounded();
+        let bridge = BridgeSupervisor::disconnected_for_tests();
+        let window = cx.add_window(|window, cx| {
+            WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, false)
+        });
+
+        window
+            .update(cx, |this, _, cx| {
+                use crate::translation::{ProviderCapabilities, ProviderDto, default_thinking_level};
+
+                let ctx_tuple = ("c1".to_owned(), "g1".to_owned(), "Game One".to_owned());
+                this.capture.set_context(Some(ctx_tuple.clone()));
+                this.translation_page.providers_loaded = true;
+                this.translation_page.providers = vec![ProviderDto {
+                    id: "prov-saved".into(),
+                    name: "Saved".into(),
+                    kind: "openAIChat".into(),
+                    base_url: "https://api.openai.com/v1".into(),
+                    model_id: Some("gpt-5".into()),
+                    default_source_language: "ja".into(),
+                    default_target_language: "zh-Hans".into(),
+                    model_metadata: None,
+                    open_ai_chat_token_limit_field: "max_completion_tokens".into(),
+                    thinking_level: default_thinking_level(),
+                    capabilities: ProviderCapabilities {
+                        model_discovery: true,
+                        context_discovery: false,
+                        streaming: true,
+                        custom_prompt: true,
+                        context: true,
+                    },
+                    has_credential: true,
+                }];
+
+                // 1. preset/get decodes preset and applies provider_id, arch, restore_history when idle
+                this.capture.pending.insert(
+                    201,
+                    Pending {
+                        method: "translation.capture.preset/get".into(),
+                        generation: this.capture.generation,
+                        session_id: None,
+                        context: Some(ctx_tuple.clone()),
+                        preset_key: None,
+                        role_edit_generation: this.capture.role_edit_generation,
+                    },
+                );
+                let disconnected = BridgeSupervisor::disconnected_for_tests();
+                this.capture.reply(
+                    201,
+                    "translation.capture.preset/get",
+                    Ok(serde_json::json!({
+                        "preset": {
+                            "providerID": "prov-saved",
+                            "architecture": "x86",
+                            "restoreHistory": true,
+                            "autoAttach": false,
+                            "targetExePath": "C:\\Game\\Main.exe",
+                            "customHookCodes": [],
+                            "threadBindings": []
+                        }
+                    })),
+                    &disconnected,
+                    cx,
+                );
+                this.capture.apply_pending_preset(&this.translation_page.providers);
+                this.capture
+                    .maybe_auto_attach_on_preset_load(&disconnected, false);
+                assert_eq!(this.capture.provider_id.as_deref(), Some("prov-saved"));
+                assert_eq!(this.capture.architecture, "x86");
+                assert!(this.capture.restore_history);
+
+                // 1b. preset/save updates preset; when autoAttach=true on preset/get load, triggers start(..., autoAttach: true)
+                this.capture.pending.insert(
+                    205,
+                    Pending {
+                        method: "translation.capture.preset/save".into(),
+                        generation: this.capture.generation,
+                        session_id: None,
+                        context: Some(ctx_tuple.clone()),
+                        preset_key: None,
+                        role_edit_generation: this.capture.role_edit_generation,
+                    },
+                );
+                this.capture.reply(
+                    205,
+                    "translation.capture.preset/save",
+                    Ok(serde_json::json!({
+                        "preset": {
+                            "providerID": "prov-saved",
+                            "architecture": "x86",
+                            "restoreHistory": true,
+                            "autoAttach": true,
+                            "targetExePath": "C:\\Game\\Main.exe",
+                            "customHookCodes": ["HS1"],
+                            "threadBindings": []
+                        }
+                    })),
+                    &disconnected,
+                    cx,
+                );
+                assert!(this.capture.preset.as_ref().is_some_and(|p| p.auto_attach));
+                this.capture.auto_attach_on_preset_load = true;
+                this.capture.maybe_auto_attach_on_preset_load(&disconnected, false);
+                // Disconnected test supervisor proves `translation.capture.start` was attempted.
+                assert!(
+                    this.capture
+                        .error
+                        .as_deref()
+                        .is_some_and(|e| e.contains("disconnected"))
+                );
+                this.capture.error = None;
+
+                // 2. autoAttach reply with selecting increments bounded retry attempts, then attached clears pending
+                this.capture.active_game = Some(ctx_tuple.clone());
+                this.capture.auto_attach_pending = true;
+                this.capture.pending.insert(
+                    202,
+                    Pending {
+                        method: "translation.capture.autoAttach".into(),
+                        generation: this.capture.generation,
+                        session_id: None,
+                        context: Some(ctx_tuple.clone()),
+                        preset_key: None,
+                        role_edit_generation: this.capture.role_edit_generation,
+                    },
+                );
+                this.capture.reply(
+                    202,
+                    "translation.capture.autoAttach",
+                    Ok(serde_json::json!({
+                        "snapshot": {
+                            "sessionID": "s1",
+                            "gameID": "g1",
+                            "captureState": "selecting",
+                            "lastError": null,
+                            "target": null,
+                            "subtitle": { "source": "", "translation": "", "speaker": null, "kind": null, "status": "idle", "error": null },
+                            "cursor": 0,
+                            "processes": [],
+                            "historyCount": 0,
+                            "threads": [],
+                            "threadsTotal": 0
+                        }
+                    })),
+                    &disconnected,
+                    cx,
+                );
+                assert!(this.capture.auto_attach_pending);
+                assert_eq!(this.capture.auto_attach_attempts, 1);
+
+                this.capture.pending.insert(
+                    203,
+                    Pending {
+                        method: "translation.capture.autoAttach".into(),
+                        generation: this.capture.generation,
+                        session_id: Some("s1".into()),
+                        context: Some(ctx_tuple.clone()),
+                        preset_key: None,
+                        role_edit_generation: this.capture.role_edit_generation,
+                    },
+                );
+                this.capture.reply(
+                    203,
+                    "translation.capture.autoAttach",
+                    Ok(serde_json::json!({
+                        "snapshot": {
+                            "sessionID": "s1",
+                            "gameID": "g1",
+                            "captureState": "attached",
+                            "lastError": null,
+                            "target": {
+                                "guestPID": 100,
+                                "exePath": "C:\\Game\\Main.exe",
+                                "arch": "x86",
+                                "creationTime": "01"
+                            },
+                            "subtitle": { "source": "", "translation": "", "speaker": null, "kind": null, "status": "idle", "error": null },
+                            "cursor": 0,
+                            "processes": [],
+                            "historyCount": 0,
+                            "threads": [
+                                {
+                                    "id": "t-auto",
+                                    "guestPID": 100,
+                                    "addressHex": "0x1",
+                                    "contextHex": "0x2",
+                                    "context2Hex": "0x3",
+                                    "hookCode": "HS1",
+                                    "hookName": "MainText",
+                                    "preview": "",
+                                    "role": "body"
+                                }
+                            ],
+                            "threadsTotal": 1,
+                            "autoBoundCount": 1
+                        }
+                    })),
+                    &disconnected,
+                    cx,
+                );
+                assert!(!this.capture.auto_attach_pending);
+                assert_eq!(this.capture.auto_attach_attempts, 0);
+                assert_eq!(
+                    this.capture.thread_roles.get("t-auto").map(String::as_str),
+                    Some("body")
+                );
+
+                // 3. preset/clear clears preset and sets preset_notice
+                this.capture.pending.insert(
+                    204,
+                    Pending {
+                        method: "translation.capture.preset/clear".into(),
+                        generation: this.capture.generation,
+                        session_id: Some("s1".into()),
+                        context: Some(ctx_tuple),
+                        preset_key: None,
+                        role_edit_generation: this.capture.role_edit_generation,
+                    },
+                );
+                this.capture.reply(
+                    204,
+                    "translation.capture.preset/clear",
+                    Ok(serde_json::json!({"cleared": true})),
+                    &disconnected,
+                    cx,
+                );
+                assert!(this.capture.preset.is_none());
+                assert!(this.capture.preset_notice.is_some());
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn capture_preset_decodes_translation_enabled_and_prompt_defaults() {
+        let omitted: CapturePreset = serde_json::from_value(serde_json::json!({
+            "architecture": "x64"
+        }))
+        .unwrap();
+        assert!(!omitted.translation_enabled);
+        assert!(omitted.prompt_attach_on_launch);
+        assert!(CapturePreset::default().prompt_attach_on_launch);
+        assert!(!CapturePreset::default().translation_enabled);
+
+        let explicit: CapturePreset = serde_json::from_value(serde_json::json!({
+            "translationEnabled": true,
+            "promptAttachOnLaunch": false
+        }))
+        .unwrap();
+        assert!(explicit.translation_enabled);
+        assert!(!explicit.prompt_attach_on_launch);
+    }
+
+    #[gpui_kit::test]
+    fn preset_save_toggles_translation_and_prompt_and_caches_by_game(
+        cx: &mut gpui_kit::TestAppContext,
+    ) {
+        cx.update(|app| gpui_kit::init(app));
+        let (_events_tx, events_rx) = smol::channel::unbounded();
+        let (bridge, drain) = BridgeSupervisor::recording_for_tests();
+        let window = cx.add_window(|window, cx| {
+            WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, false)
+        });
+
+        window
+            .update(cx, |this, _, cx| {
+                this.capture.set_context(Some((
+                    "c-active".into(),
+                    "g-active".into(),
+                    "Active Game".into(),
+                )));
+                this.capture.provider_id = Some("prov-1".into());
+                this.capture.architecture = "x86".into();
+
+                // Toggle translationEnabled=true for another game (e.g. from Run Settings).
+                this.capture.toggle_preset_translation_enabled(
+                    &this.bridge,
+                    "c-other",
+                    "g-other",
+                    true,
+                );
+                let calls = drain();
+                assert_eq!(calls.len(), 1);
+                assert_eq!(calls[0].0, "translation.capture.preset/save");
+                assert_eq!(calls[0].1["container"], "c-other");
+                assert_eq!(calls[0].1["entryID"], "g-other");
+                assert_eq!(calls[0].1["translationEnabled"], true);
+                assert_eq!(calls[0].1["providerID"], "prov-1");
+                assert_eq!(calls[0].1["architecture"], "x86");
+
+                let req_id = *this.capture.pending.keys().next().unwrap();
+                this.capture.reply(
+                    req_id,
+                    "translation.capture.preset/save",
+                    Ok(serde_json::json!({
+                        "preset": {
+                            "providerID": "prov-1",
+                            "architecture": "x86",
+                            "translationEnabled": true,
+                            "promptAttachOnLaunch": true
+                        }
+                    })),
+                    &this.bridge,
+                    cx,
+                );
+
+                // Cached under (c-other, g-other) without clobbering active context's self.preset.
+                assert!(this.capture.preset.is_none());
+                let cached = this
+                    .capture
+                    .preset_for_game("c-other", "g-other")
+                    .expect("preset should be cached by game");
+                assert!(cached.translation_enabled);
+                assert!(cached.prompt_attach_on_launch);
+
+                // Toggle promptAttachOnLaunch=false.
+                this.capture.toggle_preset_prompt_on_launch(
+                    &this.bridge,
+                    "c-other",
+                    "g-other",
+                    false,
+                );
+                let calls = drain();
+                assert_eq!(calls.len(), 1);
+                assert_eq!(calls[0].0, "translation.capture.preset/save");
+                assert_eq!(calls[0].1["container"], "c-other");
+                assert_eq!(calls[0].1["entryID"], "g-other");
+                assert_eq!(calls[0].1["promptAttachOnLaunch"], false);
+
+                let req_id = *this.capture.pending.keys().next().unwrap();
+                this.capture.reply(
+                    req_id,
+                    "translation.capture.preset/save",
+                    Ok(serde_json::json!({
+                        "preset": {
+                            "providerID": "prov-1",
+                            "architecture": "x86",
+                            "translationEnabled": true,
+                            "promptAttachOnLaunch": false
+                        }
+                    })),
+                    &this.bridge,
+                    cx,
+                );
+                let updated = this
+                    .capture
+                    .preset_for_game("c-other", "g-other")
+                    .expect("cached preset should update");
+                assert!(updated.translation_enabled);
+                assert!(!updated.prompt_attach_on_launch);
+
+                // Switching context to (c-other, g-other) immediately populates self.preset from cache.
+                this.capture.set_context(Some((
+                    "c-other".into(),
+                    "g-other".into(),
+                    "Other Game".into(),
+                )));
+                assert!(
+                    this.capture
+                        .preset
+                        .as_ref()
+                        .is_some_and(|p| p.translation_enabled && !p.prompt_attach_on_launch)
+                );
+
+                // open_capture_hud sends translation.capture.hud/show with container + entryID.
+                this.capture
+                    .open_capture_hud(&this.bridge, "c-other", "g-other");
+                let calls = drain();
+                assert_eq!(calls.len(), 1);
+                assert_eq!(calls[0].0, "translation.capture.hud/show");
+                assert_eq!(calls[0].1["container"], "c-other");
+                assert_eq!(calls[0].1["entryID"], "g-other");
+
+                // open_translation_for_game auto-reads overlay settings when service is available.
+                this.bridge_status = crate::bridge::BridgeStatus::Connected {
+                    helper: "test".into(),
+                    version: "test".into(),
+                    methods: 3,
+                };
+                this.service_methods
+                    .insert("translation.overlay.read".into());
+                this.service_methods
+                    .insert("translation.capture.preset/get".into());
+                this.service_methods
+                    .insert("translation.providers/list".into());
+                this.entries.push(crate::model::Game {
+                    metadata: None,
+                    character_images: BTreeMap::new(),
+                    id: "g-entry".into(),
+                    art: None,
+                    title: "Entry Game".into(),
+                    studio: None,
+                    description: None,
+                    characters: Vec::new(),
+                    metadata_sources: BTreeMap::new(),
+                    release: None,
+                    landscape: false,
+                    bottle: 1,
+                    hidden: false,
+                    rating: None,
+                    play_time: None,
+                    daily_play_time: BTreeMap::new(),
+                    last_played: None,
+                    executable: Some(std::path::PathBuf::from("game.exe")),
+                    folder_path: None,
+                    game_directory: None,
+                    is_folder: false,
+                    needs_executable: false,
+                    container: "c-entry".into(),
+                    last_session_ended_at: None,
+                    is_launcher: false,
+                    identity: "g-entry".into(),
+                });
+                this.open_translation_for_game(0, cx);
+                let calls = drain();
+                assert!(calls.iter().any(|(m, _)| m == "translation.overlay.read"));
+                assert!(
+                    calls
+                        .iter()
+                        .any(|(m, p)| m == "translation.capture.preset/get"
+                            && p["container"] == "c-entry"
+                            && p["entryID"] == "g-entry")
+                );
+
+                // open_preview_sheet(RunSettings) fetches preset and providers for that game.
+                this.capture.pending.clear();
+                this.open_preview_sheet(crate::state::PreviewSheet::RunSettings(0), cx);
+                let calls = drain();
+                assert!(
+                    calls
+                        .iter()
+                        .any(|(m, p)| m == "translation.capture.preset/get"
+                            && p["container"] == "c-entry"
+                            && p["entryID"] == "g-entry")
+                );
+                assert!(calls.iter().any(|(m, _)| m == "translation.providers/list"));
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn overlay_settings_allow_zero_opacity_and_validate_hex_colors() {
+        let mut settings = OverlaySettings::default();
+        assert_eq!(settings.text_color, "#FFFFFF");
+        assert_eq!(settings.source_text_color, "#D4D4D8");
+        assert!(settings.validate());
+
+        // Missing hex fields deserialize to defaults; explicit fields round-trip.
+        let legacy: OverlaySettings = serde_json::from_value(serde_json::json!({
+            "visible": true,
+            "clickThrough": false,
+            "showSource": true,
+            "showTranslation": true,
+            "fontSize": 28.0,
+            "opacity": 0.0,
+            "width": 900.0,
+            "height": 180.0,
+            "x": null,
+            "y": null
+        }))
+        .unwrap();
+        assert_eq!(legacy.opacity, 0.0);
+        assert_eq!(legacy.text_color, "#FFFFFF");
+        assert_eq!(legacy.source_text_color, "#D4D4D8");
+        assert!(legacy.validate());
+
+        settings.text_color = "#FDE047".into();
+        settings.source_text_color = "#BAE6FD".into();
+        let encoded = serde_json::to_value(&settings).unwrap();
+        assert_eq!(encoded["textColor"], "#FDE047");
+        assert_eq!(encoded["sourceTextColor"], "#BAE6FD");
+        let decoded: OverlaySettings = serde_json::from_value(encoded).unwrap();
+        assert_eq!(decoded, settings);
+
+        // Opacity bounds
+        settings.opacity = -0.01;
+        assert!(!settings.validate());
+        settings.opacity = 1.01;
+        assert!(!settings.validate());
+        settings.opacity = 0.0;
+        assert!(settings.validate());
+
+        // Strict 7-char #RRGGBB hex validation
+        assert!(is_valid_hex_color("#ffffff"));
+        assert!(is_valid_hex_color("#7DD3FC"));
+        for bad in ["FFFFFF", "#FFF", "#GGGGGG", "#1234567", ""] {
+            assert!(!is_valid_hex_color(bad), "expected {bad:?} to be rejected");
+            let mut invalid = settings.clone();
+            invalid.text_color = bad.into();
+            assert!(!invalid.validate());
+
+            let mut invalid_source = settings.clone();
+            invalid_source.source_text_color = bad.into();
+            assert!(!invalid_source.validate());
+        }
+    }
+
+    #[gpui_kit::test]
+    fn adjust_overlay_clamps_opacity_to_zero_and_updates_hex_colors(
+        cx: &mut gpui_kit::TestAppContext,
+    ) {
+        cx.update(|app| gpui_kit::init(app));
+        let (_events_tx, events_rx) = smol::channel::unbounded();
+        let (bridge, drain) = BridgeSupervisor::recording_for_tests();
+        let window = cx.add_window(|window, cx| {
+            WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, false)
+        });
+
+        window
+            .update(cx, |this, _, _| {
+                this.capture.overlay = Some(OverlaySettings {
+                    opacity: 0.02,
+                    ..OverlaySettings::default()
+                });
+
+                // opacity- clamps to 0.0 instead of going negative or failing validation.
+                this.capture.adjust_overlay(&this.bridge, "opacity-");
+                let calls = drain();
+                assert_eq!(calls.len(), 1);
+                assert_eq!(calls[0].0, "translation.overlay.configure");
+                assert_eq!(calls[0].1["settings"]["opacity"], 0.0);
+                assert!(this.capture.error.is_none());
+
+                // Clear pending before dispatching next configure calls.
+                this.capture.pending.clear();
+                this.capture
+                    .adjust_overlay(&this.bridge, "textColor:#FDE047");
+                let calls = drain();
+                assert_eq!(calls.len(), 1);
+                assert_eq!(calls[0].1["settings"]["textColor"], "#FDE047");
+
+                this.capture.pending.clear();
+                this.capture
+                    .adjust_overlay(&this.bridge, "sourceColor:#BAE6FD");
+                let calls = drain();
+                assert_eq!(calls.len(), 1);
+                assert_eq!(calls[0].1["settings"]["sourceTextColor"], "#BAE6FD");
+
+                // Invalid hex color is rejected locally without sending bridge request.
+                this.capture.pending.clear();
+                this.capture.adjust_overlay(&this.bridge, "textColor:#XYZ");
+                let calls = drain();
+                assert!(calls.is_empty());
+                assert!(this.capture.error.is_some());
+            })
+            .unwrap();
     }
 }

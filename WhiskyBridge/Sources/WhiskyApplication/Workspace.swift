@@ -190,6 +190,13 @@ public struct EntryRecord: Codable, Sendable {
     public let activity: GameActivity
     public let cover: String?
     public let coverAspectRatio: Double?
+    public var displayName: String {
+        if let title = metadata?.title, !title.isEmpty {
+            return title
+        }
+        return name
+    }
+
     public init(_ entry: LibraryEntry, visibility: LibraryVisibility) throws {
         let presentation = try LibraryPresentation.load(for: entry)
         id = entry.id

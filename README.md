@@ -103,6 +103,10 @@ rm -rf ~/.local/share/whisky
 
 Maltoria is possible thanks to the magic of several projects:
 
+- [LunaTranslator / LunaHook](https://github.com/HIllya51/LunaTranslator) (`GPL-3.0`) by HIllya51 — Windows text-hooking & injection engine (`LunaHook` / `LunaHost` / `LunaTmpFontLoader`), along with [MinHook](https://github.com/TsudaKageyu/MinHook) (`BSD-2-Clause`), [uchardet](https://gitlab.freedesktop.org/uchardet/uchardet) (`GPL-2.0-or-later`), and [nlohmann/json](https://github.com/nlohmann/json) (`MIT`)
+- [gpui-kit](https://crates.io/crates/gpui-kit) / [Zed GPUI](https://github.com/zed-industries/zed) (`Apache-2.0`) — Native desktop UI framework for `whisky-gpui`
+- [Real-CUGAN](https://github.com/bilibili/ailab) (`MIT`) & [Anime4K](https://github.com/bloc97/Anime4K) (`MIT`) — Cover upscaling models and shaders
+- [PotatoVN](https://github.com/GoldenPotato137/PotatoVN) (`Apache-2.0`), [Bangumi](https://bgm.tv/), [VNDB](https://vndb.org/), [Steam](https://store.steampowered.com/), [YMGal](https://www.ymgal.games/), and [NextMoe](https://nextmoe.com/) — Metadata design reference and data sources
 - [msync](https://github.com/marzent/wine-msync) by marzent
 - [DXVK-macOS](https://github.com/Gcenx/DXVK-macOS) by Gcenx and doitsujin
 - [DXMT](https://github.com/3Shain/dxmt) by 3Shain
@@ -118,6 +122,8 @@ Maltoria is possible thanks to the magic of several projects:
 - D3DMetal by Apple
 
 Special thanks to Gcenx, ohaiibuzzle, Nat Brown, [Frank](https://github.com/frankea), and [Isaac Marovitz](https://github.com/IsaacMarovitz) (original author) for their support and contributions!
+
+For full licensing terms and third-party attributions, see [LICENSE](LICENSE) and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 ---
 

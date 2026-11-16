@@ -2206,6 +2206,15 @@ impl WhiskyApp {
                                                                                 this.open_game_info(index, cx);
                                                                             },
                                                                         )),
+                                                                )
+                                                                .child(
+                                                                    Button::new("detail-translation")
+                                                                        .label("游戏翻译与捕获…")
+                                                                        .on_click(cx.listener(
+                                                                            move |this, _, _, cx| {
+                                                                                this.open_translation_for_game(index, cx);
+                                                                            },
+                                                                        )),
                                                                 ),
                                                         )
                                                     }),

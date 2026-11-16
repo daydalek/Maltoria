@@ -481,30 +481,22 @@ impl WhiskyApp {
                     .w_full()
                     .h(px(44.)),
             )
-            .child(
-                row()
-                    .id(("gallery-settings", index))
-                    .w_full()
-                    .h(px(44.))
-                    .flex_shrink_0()
-                    .justify_center()
-                    .gap(px(6.))
-                    .rounded_full()
-                    .border_1()
-                    .border_color(rgba(surface_border()))
-                    .cursor_pointer()
-                    .hover(|s| s.bg(rgba(hover())))
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.open_preview_sheet(PreviewSheet::RunSettings(index), cx);
-                    }))
-                    .child(icon("sliders-horizontal", 15.))
-                    .child(
-                        div()
-                            .text_size(px(12.))
-                            .font_weight(FontWeight::BOLD)
-                            .child("游戏设置"),
-                    ),
-            )
+            .child(gallery_action_pill(
+                ("gallery-settings", index),
+                "sliders-horizontal",
+                "游戏设置",
+                cx.listener(move |this, _, _, cx| {
+                    this.open_preview_sheet(PreviewSheet::RunSettings(index), cx);
+                }),
+            ))
+            .child(gallery_action_pill(
+                ("gallery-translation", index),
+                "languages",
+                "游戏翻译与捕获",
+                cx.listener(move |this, _, _, cx| {
+                    this.open_translation_for_game(index, cx);
+                }),
+            ))
             .child(
                 row()
                     .id(("gallery-details-link", index))
@@ -522,4 +514,32 @@ impl WhiskyApp {
             )
             .into_any_element()
     }
+}
+
+fn gallery_action_pill(
+    id: impl Into<ElementId>,
+    icon_name: &str,
+    label: &'static str,
+    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> Stateful<Div> {
+    row()
+        .id(id)
+        .w_full()
+        .h(px(44.))
+        .flex_shrink_0()
+        .justify_center()
+        .gap(px(6.))
+        .rounded_full()
+        .border_1()
+        .border_color(rgba(surface_border()))
+        .cursor_pointer()
+        .hover(|s| s.bg(rgba(hover())))
+        .on_click(on_click)
+        .child(icon(icon_name, 15.))
+        .child(
+            div()
+                .text_size(px(12.))
+                .font_weight(FontWeight::BOLD)
+                .child(label),
+        )
 }

@@ -26,14 +26,18 @@ public final class ApplicationTranslationService {
         "translation.providers/list", "translation.providers/save", "translation.providers/delete",
         "translation.credential.set", "translation.credential.delete",
         "translation.models", "translation.modelInfo", "translation.testConnection",
-        "translation.settings/get", "translation.settings/save"
+        "translation.settings/get", "translation.settings/save",
+        "translation.cache/list", "translation.cache/delete"
     ]
     public static let capabilities = ["translation.providers", "translation.models", "translation.settings"]
 
     private let catalog: TranslationApplicationCatalog
     private let credentials: any CredentialStore
+    private let switchableCredentials: SwitchableCredentialStore?
     private let translator: TranslationService
+    private let sentenceCache: PersistentSentenceCache
     private let directory: URL
+    var storageDirectory: URL { directory }
     public var networkAccess: () async throws -> Void = {}
 
     public init(
@@ -41,11 +45,58 @@ public final class ApplicationTranslationService {
         transport: any HTTPTransport = URLSessionStreamTransport(),
         credentials: (any CredentialStore)? = nil
     ) {
-        let credentialStore = credentials ?? TranslationService.platformCredentialStore()
-        catalog = TranslationApplicationCatalog(directory: directory)
+        let catalog = TranslationApplicationCatalog(directory: directory)
+        let switchable: SwitchableCredentialStore?
+        let resolvedCredentials: any CredentialStore
+        if let credentials {
+            switchable = nil
+            resolvedCredentials = credentials
+        } else {
+            let initialMode = TranslationApplicationCatalog.storedCredentialStorageMode(in: directory)
+            let store = SwitchableCredentialStore(
+                mode: initialMode,
+                keychain: TranslationService.platformCredentialStore(),
+                localFile: LocalFileCredentialStore(
+                    fileURL: directory.appendingPathComponent("bridge-credentials.json")
+                ),
+                sessionOnly: SessionOnlyCredentialStore()
+            )
+            switchable = store
+            resolvedCredentials = store
+        }
+        self.catalog = catalog
         self.directory = directory
-        self.credentials = credentialStore
-        translator = TranslationService(transport: transport, credentialStore: credentialStore)
+        self.switchableCredentials = switchable
+        self.credentials = resolvedCredentials
+        self.sentenceCache = PersistentSentenceCache(
+            fileURL: directory.appendingPathComponent("bridge-translation-cache.json")
+        )
+        translator = TranslationService(transport: transport, credentialStore: resolvedCredentials)
+    }
+
+    init(
+        directory: URL,
+        transport: any HTTPTransport = URLSessionStreamTransport(),
+        keychainStore: any CredentialStore
+    ) {
+        let catalog = TranslationApplicationCatalog(directory: directory)
+        let initialMode = TranslationApplicationCatalog.storedCredentialStorageMode(in: directory)
+        let store = SwitchableCredentialStore(
+            mode: initialMode,
+            keychain: keychainStore,
+            localFile: LocalFileCredentialStore(
+                fileURL: directory.appendingPathComponent("bridge-credentials.json")
+            ),
+            sessionOnly: SessionOnlyCredentialStore()
+        )
+        self.catalog = catalog
+        self.directory = directory
+        self.switchableCredentials = store
+        self.credentials = store
+        self.sentenceCache = PersistentSentenceCache(
+            fileURL: directory.appendingPathComponent("bridge-translation-cache.json")
+        )
+        translator = TranslationService(transport: transport, credentialStore: store)
     }
 
     public func call(_ method: String, params: [String: JSONValue]) async throws -> JSONValue {
@@ -71,6 +122,10 @@ public final class ApplicationTranslationService {
                 return try await getSettings()
             case "translation.settings/save":
                 return try await saveSettings(params)
+            case "translation.cache/list":
+                return try await listSentenceCache(params)
+            case "translation.cache/delete":
+                return try await deleteSentenceCache(params)
             default:
                 throw BridgeFailure("method_unavailable", "Translation method is unavailable")
             }
@@ -210,7 +265,78 @@ public final class ApplicationTranslationService {
             return flag
         }
         try await catalog.saveSettings(settings, remoteProvidersEnabled: remoteEnabled)
+        if let switchableCredentials {
+            await switchableCredentials.setMode(settings.credentialStorageMode)
+        }
         return try await getSettings()
+    }
+
+    private func listSentenceCache(_ params: [String: JSONValue]) async throws -> JSONValue {
+        let gameID: String? = switch params["gameID"] {
+        case nil, .null:
+            nil
+        case let .string(value):
+            value.isEmpty ? nil : value
+        default:
+            throw BridgeFailure("invalid_params", "Expected string: gameID")
+        }
+        let query: String? = switch params["query"] {
+        case nil, .null:
+            nil
+        case let .string(value):
+            value
+        default:
+            throw BridgeFailure("invalid_params", "Expected string: query")
+        }
+        let limit: Int? = switch params["limit"] {
+        case nil, .null:
+            nil
+        case let .integer(value):
+            if let resolved = Int(exactly: value), (1 ... 5_000).contains(resolved) {
+                resolved
+            } else {
+                throw BridgeFailure("invalid_params", "Expected positive integer: limit")
+            }
+        default:
+            throw BridgeFailure("invalid_params", "Expected integer: limit")
+        }
+        let stats = try await sentenceCache.stats(gameID: gameID)
+        let records = try await sentenceCache.list(gameID: gameID, query: query, limit: limit)
+        let entries: [JSONValue] = records.map { record in
+            .object([
+                "id": .string(record.id),
+                "gameID": .string(record.gameID),
+                "speaker": record.speaker.map(JSONValue.string) ?? .null,
+                "sourceText": .string(record.sourceText),
+                "translatedText": .string(record.translatedText),
+                "providerName": .string(record.providerName),
+                "providerKind": .string(record.providerKind.rawValue),
+                "modelID": .string(record.modelID),
+                "sourceLanguage": .string(record.sourceLanguage),
+                "targetLanguage": .string(record.targetLanguage),
+                "hitCount": .integer(Int64(record.hitCount)),
+                "updatedAt": .number(record.updatedAt.timeIntervalSince1970)
+            ])
+        }
+        return .object([
+            "totalCount": .integer(Int64(stats.totalCount)),
+            "gameCount": .integer(Int64(stats.gameCount)),
+            "totalBytes": .integer(Int64(stats.totalBytes)),
+            "resolvedGameID": gameID.map(JSONValue.string) ?? .null,
+            "entries": .array(entries)
+        ])
+    }
+
+    private func deleteSentenceCache(_ params: [String: JSONValue]) async throws -> JSONValue {
+        let id = try params.text("id")
+        guard !id.isEmpty else { throw BridgeFailure("invalid_params", "Expected non-empty string: id") }
+        let removed = try await sentenceCache.delete(id: id)
+        let stats = try await sentenceCache.stats(gameID: nil)
+        return .object([
+            "removed": .bool(removed),
+            "totalCount": .integer(Int64(stats.totalCount)),
+            "totalBytes": .integer(Int64(stats.totalBytes))
+        ])
     }
 
     private func provider(_ id: UUID) async throws -> ProviderConfiguration {
@@ -222,7 +348,7 @@ public final class ApplicationTranslationService {
 
     private func providerDTO(_ profile: ProviderConfiguration) async throws -> JSONValue {
         let hasCredential: Bool = if let reference = profile.credentialReference {
-            try await credentials.secret(for: reference) != nil
+            try await credentials.hasSecret(for: reference)
         } else {
             false
         }
@@ -236,6 +362,7 @@ public final class ApplicationTranslationService {
             "defaultTargetLanguage": .string(profile.defaultTargetLanguage),
             "modelMetadata": profile.modelMetadata.map(JSONValue.encoded) ?? .null,
             "openAIChatTokenLimitField": .string(profile.openAIChatTokenLimitField.rawValue),
+            "thinkingLevel": .string(profile.thinkingLevel.rawValue),
             "capabilities": .encoded(profile.capabilities),
             "hasCredential": .bool(hasCredential)
         ])
@@ -261,6 +388,16 @@ public final class ApplicationTranslationService {
     }
 
     func captureSettings() async throws -> TranslationSettings { try await catalog.snapshot().settings }
+
+    func currentDebounceMs() async -> Int {
+        (try? await catalog.snapshot().settings.translationDebounceMs) ?? 150
+    }
+
+    func clearSentenceCache(gameID: String?) async throws -> (totalCount: Int, totalBytes: Int) {
+        try await sentenceCache.clear(gameID: gameID)
+        let stats = try await sentenceCache.stats(gameID: nil)
+        return (totalCount: stats.totalCount, totalBytes: stats.totalBytes)
+    }
 
     func allowTranslation(providerID: UUID) async throws {
         try await requireRemoteAccess(for: provider(providerID))
@@ -289,6 +426,8 @@ public final class ApplicationTranslationService {
             settings: settings,
             service: translator,
             repository: repository,
+            sentenceCache: sentenceCache,
+            providerDisplayName: configuration.name,
             initialEntries: entries
         )
     }
@@ -300,6 +439,57 @@ public final class ApplicationTranslationService {
         let octets = host.split(separator: ".")
         return octets.count == 4 && octets.first == "127"
             && octets.allSatisfy { Int($0).map { (0 ... 255).contains($0) } == true }
+    }
+}
+
+private actor SwitchableCredentialStore: CredentialStore {
+    private var mode: CredentialStorageMode
+    private let keychain: any CredentialStore
+    private let localFile: LocalFileCredentialStore
+    private let sessionOnly: SessionOnlyCredentialStore
+
+    init(
+        mode: CredentialStorageMode,
+        keychain: any CredentialStore,
+        localFile: LocalFileCredentialStore,
+        sessionOnly: SessionOnlyCredentialStore
+    ) {
+        self.mode = mode
+        self.keychain = keychain
+        self.localFile = localFile
+        self.sessionOnly = sessionOnly
+    }
+
+    func setMode(_ mode: CredentialStorageMode) {
+        self.mode = mode
+    }
+
+    private func activeStore() -> any CredentialStore {
+        switch mode {
+        case .keychain: keychain
+        case .localFile: localFile
+        case .sessionOnly: sessionOnly
+        }
+    }
+
+    func availability() async -> CredentialStoreAvailability {
+        await activeStore().availability()
+    }
+
+    func store(_ secret: String, for reference: String) async throws {
+        try await activeStore().store(secret, for: reference)
+    }
+
+    func secret(for reference: String) async throws -> String? {
+        try await activeStore().secret(for: reference)
+    }
+
+    func hasSecret(for reference: String) async throws -> Bool {
+        try await activeStore().hasSecret(for: reference)
+    }
+
+    func remove(reference: String) async throws {
+        try await activeStore().remove(reference: reference)
     }
 }
 
@@ -316,6 +506,14 @@ private actor TranslationApplicationCatalog {
     private var current: TranslationCatalogSnapshot?
 
     init(directory: URL) { self.directory = directory }
+
+    static func storedCredentialStorageMode(in directory: URL) -> CredentialStorageMode {
+        let file = directory.appendingPathComponent("bridge-profiles.json")
+        guard let data = try? Data(contentsOf: file),
+              let state = try? JSONDecoder().decode(TranslationCatalogSnapshot.self, from: data)
+        else { return .keychain }
+        return state.settings.credentialStorageMode
+    }
 
     func snapshot() throws -> TranslationCatalogSnapshot { try load() }
     func providers() throws -> [ProviderConfiguration] { try load().profiles }

@@ -231,7 +231,7 @@ impl Render for WhiskyApp {
                 } else if this.setup_dialog && !this.setup_installing {
                     this.dismiss_setup(cx);
                 } else if this.about {
-                    this.about = false;
+                    this.dismiss_about();
                 } else if this.preview.sheet.is_some() {
                     this.preview_dismiss(cx);
                 } else if this.detail_open {

@@ -701,4 +701,123 @@ struct TranslationSessionTests {
         #expect(await cache.value(for: key) == nil)
         #expect(provider.recordedRequests().isEmpty)
     }
+
+    @Test func persistentSentenceCacheHitsAcrossContextsAndRespectsEnableFlag() async throws {
+        let provider = RecordingProvider()
+        let service = try await TranslationService(
+            providers: [.openAIChat: provider],
+            credentialStore: testCredentialStore()
+        )
+        let root = FileManager.default.temporaryDirectory.appending(
+            path: UUID().uuidString,
+            directoryHint: .isDirectory
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = FileTranslationRepository(directory: root)
+        let cacheURL = root.appending(path: "sentence-cache.json", directoryHint: .notDirectory)
+        let sentenceCache = PersistentSentenceCache(fileURL: cacheURL)
+        let config = ProviderConfiguration(
+            name: "Custom OpenAI",
+            kind: .openAIChat,
+            modelID: "fixture-model",
+            credentialReference: "credential-ref"
+        )
+
+        let session1 = TranslationSession(
+            gameID: "game-cache",
+            configuration: config,
+            settings: TranslationSettings(sentenceCacheEnabled: true),
+            service: service,
+            repository: repository,
+            sentenceCache: sentenceCache,
+            providerDisplayName: "Custom OpenAI"
+        )
+        // First line populates persistent cache
+        let firstID = try await session1.submit(FinalizedTranslationSource(
+            revision: 1,
+            streamID: "s",
+            generation: 1,
+            text: "こんにちは",
+            speaker: "Mina"
+        ))
+        _ = try await waitForEntry(session1, id: firstID)
+        // Second line changes dialogue context for future lines
+        let secondID = try await session1.submit(FinalizedTranslationSource(
+            revision: 2,
+            streamID: "s",
+            generation: 1,
+            text: "元気？",
+            speaker: "Mina"
+        ))
+        _ = try await waitForEntry(session1, id: secondID)
+        #expect(provider.recordedRequests().count == 2)
+
+        // New session (fresh in-memory TranslationCache, different prior context) should hit persistent sentence cache
+        let reloadedCache = PersistentSentenceCache(fileURL: cacheURL)
+        let session2 = TranslationSession(
+            gameID: "game-cache",
+            configuration: config,
+            settings: TranslationSettings(sentenceCacheEnabled: true),
+            service: service,
+            repository: repository,
+            sentenceCache: reloadedCache,
+            providerDisplayName: "Custom OpenAI"
+        )
+        let contextPrimeID = try await session2.submit(FinalizedTranslationSource(
+            revision: 1,
+            streamID: "other",
+            generation: 1,
+            text: "別のセリフ"
+        ))
+        _ = try await waitForEntry(session2, id: contextPrimeID)
+        #expect(provider.recordedRequests().count == 3)
+
+        let hitID = try await session2.submit(FinalizedTranslationSource(
+            revision: 2,
+            streamID: "other",
+            generation: 1,
+            text: "  こんにちは  ",
+            speaker: "Mina"
+        ))
+        let hitEntry = try await waitForEntry(session2, id: hitID)
+        #expect(hitEntry.status == .completed)
+        #expect(hitEntry.translatedText == "translated: こんにちは")
+        // Provider was NOT called again
+        #expect(provider.recordedRequests().count == 3)
+
+        let cachedEntries = try await reloadedCache.list(gameID: "game-cache", query: "こんにちは", limit: nil)
+        #expect(cachedEntries.count == 1)
+        #expect(cachedEntries[0].hitCount == 2)
+        #expect(cachedEntries[0].providerName == "Custom OpenAI")
+
+        // When sentenceCacheEnabled == false, persistent cache is neither read nor written
+        let disabledSession = TranslationSession(
+            gameID: "game-cache",
+            configuration: config,
+            settings: TranslationSettings(sentenceCacheEnabled: false),
+            service: service,
+            repository: repository,
+            sentenceCache: reloadedCache,
+            providerDisplayName: "Custom OpenAI"
+        )
+        let bypassedID = try await disabledSession.submit(FinalizedTranslationSource(
+            revision: 1,
+            streamID: "disabled",
+            generation: 1,
+            text: "こんにちは",
+            speaker: "Mina"
+        ))
+        _ = try await waitForEntry(disabledSession, id: bypassedID)
+        #expect(provider.recordedRequests().count == 4)
+
+        let unstoredID = try await disabledSession.submit(FinalizedTranslationSource(
+            revision: 2,
+            streamID: "disabled",
+            generation: 1,
+            text: "保存しない文"
+        ))
+        _ = try await waitForEntry(disabledSession, id: unstoredID)
+        #expect(provider.recordedRequests().count == 5)
+        #expect(try await reloadedCache.list(gameID: "game-cache", query: "保存しない文", limit: nil).isEmpty)
+    }
 }

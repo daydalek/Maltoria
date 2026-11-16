@@ -7,7 +7,8 @@ use gpui_kit::component::{
 use gpui_kit::{prelude::*, *};
 use serde_json::json;
 
-use crate::controls::{col, icon, live_badge, muted, row};
+use crate::capture::{CapturePreset, exe_basename, filter_threads};
+use crate::controls::{col, icon, live_badge, muted, row, selectable_pill};
 use crate::state::WhiskyApp;
 use crate::theme::*;
 use crate::translation::provider_kind_label;
@@ -17,6 +18,21 @@ const THREAD_ROLES: [(&str, &str); 4] = [
     ("body", "正文"),
     ("speaker", "说话人"),
     ("choice", "选项"),
+];
+
+const OVERLAY_TEXT_COLORS: [(&str, &str); 5] = [
+    ("纯白", "#FFFFFF"),
+    ("暖黄", "#FDE047"),
+    ("冰蓝", "#7DD3FC"),
+    ("薄荷绿", "#86EFAC"),
+    ("樱粉", "#F9A8D4"),
+];
+
+const OVERLAY_SOURCE_COLORS: [(&str, &str); 4] = [
+    ("柔灰", "#D4D4D8"),
+    ("纯白", "#FFFFFF"),
+    ("浅黄", "#FEF08A"),
+    ("浅蓝", "#BAE6FD"),
 ];
 
 impl WhiskyApp {
@@ -88,24 +104,22 @@ impl WhiskyApp {
         } else {
             0
         };
-        let hook_input = if let Some(input) = self.capture.hook_input.clone() {
-            input
-        } else {
-            let input = cx.new(|cx| {
-                InputState::new(window, cx)
-                    .placeholder("显式 Hook code（UTF-8 <= 2048 字节）")
-                    .default_value(self.capture.hook_code.clone())
-            });
-            cx.subscribe(&input, |this, input, event: &InputEvent, cx| {
-                if matches!(event, InputEvent::Change) {
-                    this.capture.hook_code = input.read(cx).value().to_string();
-                    cx.notify();
-                }
-            })
-            .detach();
-            self.capture.hook_input = Some(input.clone());
-            input
-        };
+        let hook_input = ensure_capture_input(
+            &mut self.capture.hook_input,
+            "显式 Hook code（UTF-8 <= 2048 字节）",
+            self.capture.hook_code.clone(),
+            |this, value| this.capture.hook_code = value,
+            window,
+            cx,
+        );
+        let thread_filter_input = ensure_capture_input(
+            &mut self.capture.thread_filter_input,
+            "过滤 Hook 名称或预览文本...",
+            self.capture.thread_filter_query.clone(),
+            |this, value| this.capture.thread_filter_query = value,
+            window,
+            cx,
+        );
 
         let is_live = self.capture.active_game.is_some()
             || snap
@@ -203,6 +217,34 @@ impl WhiskyApp {
             probe_pending,
             !processes.is_empty(),
             self.capture.selected_process.is_some(),
+        );
+        let auto_bound_count = snap.as_ref().map(|s| s.auto_bound_count).unwrap_or(0);
+        let preset_notice = self.capture.preset_notice.clone();
+        let current_preset = context
+            .as_ref()
+            .and_then(|(container, entry_id, _)| {
+                self.capture.preset_for_game(container, entry_id).cloned()
+            })
+            .or_else(|| self.capture.preset.clone())
+            .unwrap_or_default();
+        let game_key = context
+            .as_ref()
+            .map(|(container, entry_id, _)| (container.clone(), entry_id.clone()));
+        let preset_bar = capture_preset_bar(
+            &current_preset,
+            game_key,
+            attached,
+            self.capture.is_selecting(),
+            self.capture.provider_id.is_some(),
+            probe_pending,
+            request_pending,
+            self.capture.auto_attach_pending
+                || self.capture.is_pending("translation.capture.autoAttach"),
+            self.capture.is_pending("translation.capture.preset/save")
+                || self.capture.is_pending("translation.capture.preset/clear"),
+            self.service_available("translation.capture.hud/show"),
+            self.capture.is_pending("translation.capture.hud/show"),
+            cx,
         );
         let control_card = section_card(
             "提供商与捕获控制",
@@ -348,6 +390,25 @@ impl WhiskyApp {
                                 })),
                         ),
                 )
+                .child(preset_bar)
+                .when(auto_bound_count > 0 || preset_notice.is_some(), |d| {
+                    d.child(
+                        row()
+                            .gap(px(8.))
+                            .flex_wrap()
+                            .items_center()
+                            .when(auto_bound_count > 0, |r| {
+                                r.child(pill_badge(
+                                    format!("✓ 已自动恢复 {auto_bound_count} 个线程绑定"),
+                                    installed_bg(),
+                                    installed_fg(),
+                                ))
+                            })
+                            .when_some(preset_notice, |r, note| {
+                                r.child(pill_badge(note, accent_subtle_bg(), accent_fg()))
+                            }),
+                    )
+                })
                 .when_some(guidance_hint, |d, hint| {
                     d.child(
                         row()
@@ -520,8 +581,16 @@ impl WhiskyApp {
         );
 
         // Card 4 — 文本线程与 Hook 注入
-        let thread_cards: Vec<AnyElement> = threads
-            .iter()
+        let filtered_threads = filter_threads(
+            &threads,
+            &self.capture.thread_roles,
+            self.capture.thread_filter_non_empty,
+            &self.capture.thread_filter_query,
+        );
+        let hidden_empty_count = filtered_threads.hidden_empty_count;
+        let thread_cards: Vec<AnyElement> = filtered_threads
+            .threads
+            .into_iter()
             .map(|t| {
                 let id = t.id.clone();
                 let name = if t.hook_name.is_empty() {
@@ -631,8 +700,53 @@ impl WhiskyApp {
                                 })),
                         ),
                 )
+                .child(
+                    row()
+                        .gap(px(8.))
+                        .items_center()
+                        .flex_wrap()
+                        .child(
+                            div().flex_1().min_w(px(180.)).child(
+                                Input::new(&thread_filter_input)
+                                    .prefix(icon("search", 13.).text_color(rgb(muted_color())))
+                                    .cleanable(true),
+                            ),
+                        )
+                        .child(selectable_pill(
+                            "capture-threads-filter-non-empty",
+                            "仅看有文本",
+                            self.capture.thread_filter_non_empty,
+                            false,
+                            cx.listener(|this, _, _, cx| {
+                                this.capture.thread_filter_non_empty =
+                                    !this.capture.thread_filter_non_empty;
+                                cx.notify();
+                            }),
+                        ))
+                        .when(hidden_empty_count > 0, |d| {
+                            d.child(
+                                muted(format!("已隐藏 {hidden_empty_count} 条空预览"))
+                                    .text_size(px(11.)),
+                            )
+                        }),
+                )
                 .child(if thread_cards.is_empty() {
-                    muted("附加游戏进程并触发对话后，文本线程将显示在此处。").into_any_element()
+                    if threads.is_empty() {
+                        muted("附加游戏进程并触发对话后，文本线程将显示在此处。")
+                    } else if hidden_empty_count > 0
+                        && self.capture.thread_filter_query.trim().is_empty()
+                    {
+                        muted(format!(
+                            "当前有 {hidden_empty_count} 条空预览线程被隐藏，点击「仅看有文本」可查看全部。"
+                        ))
+                    } else if hidden_empty_count > 0 {
+                        muted(format!(
+                            "没有匹配当前搜索条件的可见线程（另有 {hidden_empty_count} 条空预览线程被「仅看有文本」隐藏）。"
+                        ))
+                    } else {
+                        muted("没有匹配当前搜索条件的文本线程。")
+                    }
+                    .into_any_element()
                 } else {
                     col().gap(px(6.)).children(thread_cards).into_any_element()
                 })
@@ -803,6 +917,22 @@ impl WhiskyApp {
             })
             .collect();
 
+        let active_game_id = snap.as_ref().and_then(|s| s.game_id.clone());
+        if let Some((container, entry_id, _)) = context.as_ref() {
+            self.translation_page.cache.scope_context =
+                Some((container.clone(), entry_id.clone()));
+        }
+        if let Some(gid) = active_game_id.as_ref() {
+            self.translation_page.cache.scope_game_id = Some(gid.clone());
+        }
+        let clear_game_id = active_game_id.clone();
+        let browser_game_id = active_game_id;
+        let cache_expanded = self.translation_page.cache.expanded_in_capture;
+        let cache_clear_pending = self.capture.is_pending("translation.cache.clear")
+            || self.translation_page.is_pending("translation.cache.clear");
+        let cache_browser_view = cache_expanded
+            .then(|| self.translation_cache_browser(true, browser_game_id, window, cx));
+
         let history_card = section_card(
             &format!("会话历史（{}/{}）", self.capture.history.len(), history_total),
             None,
@@ -852,6 +982,7 @@ impl WhiskyApp {
                         .child(
                             row()
                                 .gap(px(6.))
+                                .flex_wrap()
                                 .child(
                                     Button::new("history-clear")
                                         .label("清除当前游戏历史")
@@ -869,21 +1000,49 @@ impl WhiskyApp {
                                 )
                                 .child(
                                     Button::new("cache-clear")
-                                        .label("清除会话缓存")
-                                        .disabled(
-                                            self.capture.is_pending("translation.cache.clear"),
-                                        )
-                                        .on_click(cx.listener(|this, _, _, cx| {
-                                            let _ = this.capture.request(
-                                                &this.bridge,
-                                                "translation.cache.clear",
-                                                json!({}),
-                                            );
+                                        .label("清除当前游戏缓存")
+                                        .disabled(cache_clear_pending)
+                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                            if this.translation_page.cache.has_scope()
+                                                || clear_game_id.is_some()
+                                            {
+                                                this.translation_page.clear_scoped_cache(
+                                                    &this.bridge,
+                                                    clear_game_id.clone(),
+                                                );
+                                            } else {
+                                                this.translation_page
+                                                    .clear_cache(&this.bridge, None);
+                                            }
+                                            cx.notify();
+                                        })),
+                                )
+                                .child(
+                                    Button::new("cache-toggle-browser")
+                                        .ghost()
+                                        .label(if cache_expanded {
+                                            "收起句缓存"
+                                        } else {
+                                            "查看/管理句缓存"
+                                        })
+                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                            let next =
+                                                !this.translation_page.cache.expanded_in_capture;
+                                            this.translation_page.cache.expanded_in_capture = next;
+                                            if next {
+                                                let scope =
+                                                    this.translation_page.cache.effective_game_id();
+                                                this.translation_page
+                                                    .refresh_cache(&this.bridge, scope);
+                                            }
                                             cx.notify();
                                         })),
                                 ),
                         ),
-                ),
+                )
+                .when_some(cache_browser_view, |d, browser| {
+                    d.child(divider_line()).child(browser)
+                }),
         );
 
         // Card 6 — macOS 原生字幕叠层
@@ -933,7 +1092,11 @@ impl WhiskyApp {
                             ))
                             .child(overlay_toggle_pill(
                                 "clickThrough",
-                                "点击穿透",
+                                if s.click_through {
+                                    "锁定位置（穿透）"
+                                } else {
+                                    "可拖动（已解锁）"
+                                },
                                 s.click_through,
                                 overlay_disabled,
                                 cx,
@@ -953,6 +1116,10 @@ impl WhiskyApp {
                                 cx,
                             )),
                     )
+                    .child(
+                        muted("提示：也可直接从桌面悬浮球快速切换字幕显隐与位置锁定/拖动状态。")
+                            .text_size(px(11.)),
+                    )
                     .child(divider_line())
                     .child(overlay_adjust_row(
                         "字号",
@@ -962,9 +1129,25 @@ impl WhiskyApp {
                         cx,
                     ))
                     .child(overlay_adjust_row(
-                        "不透明度",
-                        format!("{:.0}%", s.opacity * 100.0),
+                        "背景不透明度",
+                        format!("{:.0}%（0%–100%，0% 全透明）", s.opacity * 100.0),
                         &[("opacity-", "−"), ("opacity+", "+")],
+                        overlay_disabled,
+                        cx,
+                    ))
+                    .child(overlay_color_row(
+                        "译文字色",
+                        "textColor",
+                        &s.text_color,
+                        &OVERLAY_TEXT_COLORS,
+                        overlay_disabled,
+                        cx,
+                    ))
+                    .child(overlay_color_row(
+                        "原文字色",
+                        "sourceColor",
+                        &s.source_text_color,
+                        &OVERLAY_SOURCE_COLORS,
                         overlay_disabled,
                         cx,
                     ))
@@ -997,7 +1180,11 @@ impl WhiskyApp {
                 .when(!self.capture.overlay_platform.is_empty(), |d| {
                     d.child(muted(self.capture.overlay_platform.clone()).text_size(px(11.)))
                 });
-            section_card("macOS 原生字幕叠层", None, overlay_body)
+            section_card(
+                "macOS 原生字幕叠层",
+                Some("支持在全屏游戏 Space 上方悬浮显示原生字幕窗口。"),
+                overlay_body,
+            )
         } else {
             section_card(
                 "原生字幕叠层",
@@ -1029,6 +1216,250 @@ impl WhiskyApp {
             .child(body)
             .into_any_element()
     }
+}
+
+fn ensure_capture_input(
+    slot: &mut Option<Entity<InputState>>,
+    placeholder: &str,
+    default_value: String,
+    on_change: fn(&mut WhiskyApp, String),
+    window: &mut Window,
+    cx: &mut Context<WhiskyApp>,
+) -> Entity<InputState> {
+    if let Some(input) = slot.clone() {
+        return input;
+    }
+    let hint = placeholder.to_owned();
+    let input = cx.new(|cx| {
+        InputState::new(window, cx)
+            .placeholder(hint)
+            .default_value(default_value)
+    });
+    cx.subscribe(&input, move |this, input, event: &InputEvent, cx| {
+        if matches!(event, InputEvent::Change) {
+            on_change(this, input.read(cx).value().to_string());
+            cx.notify();
+        }
+    })
+    .detach();
+    *slot = Some(input.clone());
+    input
+}
+
+#[allow(clippy::too_many_arguments)]
+fn capture_preset_bar(
+    preset: &CapturePreset,
+    game_key: Option<(String, String)>,
+    attached: bool,
+    selecting: bool,
+    has_provider_id: bool,
+    probe_pending: bool,
+    request_pending: bool,
+    auto_attaching: bool,
+    preset_mutating: bool,
+    hud_available: bool,
+    hud_pending: bool,
+    cx: &Context<WhiskyApp>,
+) -> AnyElement {
+    let has_context = game_key.is_some();
+    let has_saved_state = preset.has_saved_state();
+    let arch = if preset.architecture.trim().is_empty() {
+        "x64".to_owned()
+    } else {
+        preset.architecture.clone()
+    };
+    let (body_count, speaker_count, choice_count) = preset.binding_counts();
+    let total_bindings = preset.thread_bindings.len();
+    let custom_hooks = preset.custom_hook_codes.len();
+    let has_target = preset
+        .target_exe_path
+        .as_deref()
+        .is_some_and(|p| !p.trim().is_empty());
+    let target_name = preset
+        .target_exe_path
+        .as_deref()
+        .filter(|p| !p.trim().is_empty())
+        .map(exe_basename)
+        .unwrap_or("未记录目标进程")
+        .to_owned();
+    let binding_summary = if total_bindings > 0 {
+        format!(
+            "线程绑定 {total_bindings}（正文 {body_count} · 说话人 {speaker_count} · 选项 {choice_count}）"
+        )
+    } else {
+        "线程绑定 0".to_owned()
+    };
+    let auto_attach_btn_disabled = attached
+        || !has_target
+        || request_pending
+        || auto_attaching
+        || (!selecting && (!has_context || !has_provider_id || probe_pending));
+
+    let enabled = preset.translation_enabled;
+    let prompt_on_launch = preset.prompt_attach_on_launch;
+    let key_for_enable = game_key.clone();
+    let key_for_prompt = game_key.clone();
+    let key_for_hud = game_key;
+
+    col()
+        .gap(px(8.))
+        .p(px(10.))
+        .rounded(px(8.))
+        .bg(rgba(card_bg()))
+        .border_1()
+        .border_color(rgba(card_border()))
+        .child(
+            row()
+                .justify_between()
+                .gap(px(8.))
+                .flex_wrap()
+                .items_center()
+                .child(
+                    row()
+                        .gap(px(6.))
+                        .flex_wrap()
+                        .items_center()
+                        .child(
+                            div()
+                                .text_size(px(12.))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(rgb(text()))
+                                .child("游戏翻译预设"),
+                        )
+                        .child(selectable_pill(
+                            "capture-preset-translation-enabled",
+                            "为此游戏启用翻译",
+                            enabled,
+                            preset_mutating || !has_context,
+                            cx.listener(move |this, _, _, cx| {
+                                if let Some((container, entry_id)) = &key_for_enable {
+                                    this.sync_capture_provider_selection();
+                                    this.capture.toggle_preset_translation_enabled(
+                                        &this.bridge,
+                                        container,
+                                        entry_id,
+                                        !enabled,
+                                    );
+                                    cx.notify();
+                                }
+                            }),
+                        ))
+                        .child(selectable_pill(
+                            "capture-preset-prompt-on-launch",
+                            "启动时弹出悬浮捕获窗",
+                            prompt_on_launch,
+                            preset_mutating || !has_context || !enabled,
+                            cx.listener(move |this, _, _, cx| {
+                                if let Some((container, entry_id)) = &key_for_prompt {
+                                    this.capture.toggle_preset_prompt_on_launch(
+                                        &this.bridge,
+                                        container,
+                                        entry_id,
+                                        !prompt_on_launch,
+                                    );
+                                    cx.notify();
+                                }
+                            }),
+                        )),
+                )
+                .when(hud_available, |r| {
+                    r.child(
+                        Button::new("capture-open-hud")
+                            .label("打开悬浮捕获窗")
+                            .disabled(!has_context || hud_pending)
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                if let Some((container, entry_id)) = &key_for_hud {
+                                    this.capture
+                                        .open_capture_hud(&this.bridge, container, entry_id);
+                                    cx.notify();
+                                }
+                            })),
+                    )
+                }),
+        )
+        .when(has_saved_state, |bar| {
+            bar.child(divider_line()).child(
+                row()
+                    .justify_between()
+                    .gap(px(8.))
+                    .flex_wrap()
+                    .items_center()
+                    .child(
+                        row()
+                            .gap(px(6.))
+                            .flex_wrap()
+                            .items_center()
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(rgb(text()))
+                                    .child("已记忆附加预设"),
+                            )
+                            .child(pill_badge(
+                                target_name,
+                                accent_subtle_bg(),
+                                accent_fg(),
+                            ))
+                            .child(pill_badge(arch, badge_bg(), badge_text()))
+                            .child(pill_badge(binding_summary, badge_bg(), badge_text()))
+                            .when(custom_hooks > 0, |r| {
+                                r.child(pill_badge(
+                                    format!("自定义 Hook {custom_hooks}"),
+                                    badge_bg(),
+                                    badge_text(),
+                                ))
+                            }),
+                    )
+                    .child(
+                        row()
+                            .gap(px(6.))
+                            .flex_wrap()
+                            .items_center()
+                            .child(selectable_pill(
+                                "capture-preset-auto-attach",
+                                "打开捕获时自动附加",
+                                preset.auto_attach,
+                                preset_mutating || !has_context,
+                                cx.listener(|this, _, _, cx| {
+                                    this.capture.toggle_preset_auto_attach(&this.bridge);
+                                    cx.notify();
+                                }),
+                            ))
+                            .when(!attached, |r| {
+                                r.child(
+                                    Button::new("capture-preset-run-auto-attach")
+                                        .when(!auto_attach_btn_disabled, |btn| btn.primary())
+                                        .label(if auto_attaching {
+                                            "自动附加中…"
+                                        } else {
+                                            "自动附加并恢复"
+                                        })
+                                        .disabled(auto_attach_btn_disabled)
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            if this.capture.is_selecting() {
+                                                this.capture.trigger_manual_auto_attach(&this.bridge);
+                                            } else {
+                                                this.capture.start_with_auto_attach(&this.bridge, true);
+                                            }
+                                            cx.notify();
+                                        })),
+                                )
+                            })
+                            .child(
+                                Button::new("capture-preset-clear")
+                                    .ghost()
+                                    .label("清除记忆")
+                                    .disabled(preset_mutating || !has_context)
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.capture.clear_preset(&this.bridge);
+                                        cx.notify();
+                                    })),
+                            ),
+                    ),
+            )
+        })
+        .into_any_element()
 }
 
 fn section_card(title: &str, subtitle: Option<&str>, body: impl IntoElement) -> Div {
@@ -1074,55 +1505,6 @@ fn pill_badge(label: impl Into<SharedString>, bg_rgba: u32, fg_rgb: u32) -> Div 
         .font_weight(FontWeight::MEDIUM)
         .text_color(rgb(fg_rgb))
         .child(label.into())
-}
-
-fn selectable_pill(
-    id: impl Into<ElementId>,
-    label: impl Into<SharedString>,
-    active: bool,
-    disabled: bool,
-    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-) -> AnyElement {
-    let mut pill = row()
-        .id(id)
-        .gap(px(5.))
-        .px(px(10.))
-        .py(px(5.))
-        .rounded(px(7.))
-        .bg(rgba(if active {
-            accent_subtle_bg()
-        } else {
-            card_bg()
-        }))
-        .border_1()
-        .border_color(rgba(if active {
-            accent_subtle_border()
-        } else {
-            card_border()
-        }))
-        .when(active, |d| {
-            d.child(icon("check", 12.).text_color(rgb(accent_fg())))
-        })
-        .child(
-            div()
-                .text_size(px(12.))
-                .font_weight(if active {
-                    FontWeight::SEMIBOLD
-                } else {
-                    FontWeight::NORMAL
-                })
-                .text_color(rgb(if active { accent_fg() } else { text() }))
-                .child(label.into()),
-        );
-    if disabled {
-        pill = pill.opacity(0.5);
-    } else {
-        pill = pill
-            .cursor_pointer()
-            .hover(|s| if active { s } else { s.bg(rgba(hover())) })
-            .on_click(on_click);
-    }
-    pill.into_any_element()
 }
 
 fn dialogue_box(label: &str, text_value: &str, is_empty: bool) -> Div {
@@ -1214,7 +1596,7 @@ fn overlay_adjust_row(
                 .gap(px(10.))
                 .child(
                     div()
-                        .w(px(64.))
+                        .w(px(88.))
                         .text_size(px(12.))
                         .text_color(rgb(subtext()))
                         .child(label.to_owned()),
@@ -1228,6 +1610,96 @@ fn overlay_adjust_row(
                 ),
         )
         .child(row().gap(px(6.)).flex_wrap().children(buttons))
+}
+
+fn overlay_color_row(
+    label: &str,
+    action_prefix: &'static str,
+    current_hex: &str,
+    presets: &[(&'static str, &'static str)],
+    disabled: bool,
+    cx: &Context<WhiskyApp>,
+) -> Div {
+    let chips = presets.iter().map(|&(color_label, hex)| {
+        let active = current_hex.eq_ignore_ascii_case(hex);
+        overlay_color_chip(action_prefix, color_label, hex, active, disabled, cx)
+    });
+    row()
+        .justify_between()
+        .items_center()
+        .gap(px(12.))
+        .flex_wrap()
+        .child(
+            div()
+                .w(px(88.))
+                .text_size(px(12.))
+                .text_color(rgb(subtext()))
+                .child(label.to_owned()),
+        )
+        .child(row().flex_1().min_w_0().gap(px(6.)).flex_wrap().children(chips))
+}
+
+fn overlay_color_chip(
+    action_prefix: &'static str,
+    label: &'static str,
+    hex: &'static str,
+    active: bool,
+    disabled: bool,
+    cx: &Context<WhiskyApp>,
+) -> AnyElement {
+    let swatch_rgb = u32::from_str_radix(hex.trim_start_matches('#'), 16).unwrap_or(0xffffff);
+    let mut chip = row()
+        .id(format!("overlay:{action_prefix}:{hex}"))
+        .gap(px(5.))
+        .px(px(10.))
+        .py(px(5.))
+        .rounded(px(7.))
+        .bg(rgba(if active {
+            accent_subtle_bg()
+        } else {
+            card_bg()
+        }))
+        .border_1()
+        .border_color(rgba(if active {
+            accent_subtle_border()
+        } else {
+            card_border()
+        }))
+        .child(
+            div()
+                .size(px(10.))
+                .rounded(px(3.))
+                .bg(rgb(swatch_rgb))
+                .border_1()
+                .border_color(rgba(card_border())),
+        )
+        .when(active, |d| {
+            d.child(icon("check", 12.).text_color(rgb(accent_fg())))
+        })
+        .child(
+            div()
+                .text_size(px(12.))
+                .font_weight(if active {
+                    FontWeight::SEMIBOLD
+                } else {
+                    FontWeight::NORMAL
+                })
+                .text_color(rgb(if active { accent_fg() } else { text() }))
+                .child(label),
+        );
+    if disabled {
+        chip = chip.opacity(0.5);
+    } else {
+        let action = format!("{action_prefix}:{hex}");
+        chip = chip
+            .cursor_pointer()
+            .hover(|s| if active { s } else { s.bg(rgba(hover())) })
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.capture.adjust_overlay(&this.bridge, &action);
+                cx.notify();
+            }));
+    }
+    chip.into_any_element()
 }
 
 fn divider_line() -> Div {
@@ -1251,7 +1723,7 @@ fn capture_guidance_hint(
         } else if !has_provider_id {
             Some("请先在上方点击选择一个翻译提供商，然后即可点击「开始并扫描进程」。")
         } else if !has_context {
-            Some("请先从游戏卡片右键菜单打开「游戏翻译…」。")
+            Some("请先从游戏详情、画廊、沉浸视图、运行设置或卡片右键菜单打开「游戏翻译与捕获」。")
         } else if probe_pending {
             Some("正在等待提供商探测完成，完成后即可开始捕获。")
         } else {

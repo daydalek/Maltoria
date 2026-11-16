@@ -95,3 +95,56 @@ pub(crate) fn phase_badge(label: impl Into<SharedString>) -> Div {
                 .child(label.into()),
         )
 }
+
+pub(crate) fn selectable_pill(
+    id: impl Into<ElementId>,
+    label: impl Into<SharedString>,
+    active: bool,
+    disabled: bool,
+    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> AnyElement {
+    let mut pill = row()
+        .id(id)
+        .gap(px(5.))
+        .px(px(10.))
+        .py(px(5.))
+        .rounded(px(7.))
+        .bg(rgba(if active {
+            theme::accent_subtle_bg()
+        } else {
+            theme::card_bg()
+        }))
+        .border_1()
+        .border_color(rgba(if active {
+            theme::accent_subtle_border()
+        } else {
+            theme::card_border()
+        }))
+        .when(active, |d| {
+            d.child(icon("check", 12.).text_color(rgb(theme::accent_fg())))
+        })
+        .child(
+            div()
+                .text_size(px(12.))
+                .font_weight(if active {
+                    FontWeight::SEMIBOLD
+                } else {
+                    FontWeight::NORMAL
+                })
+                .text_color(rgb(if active {
+                    theme::accent_fg()
+                } else {
+                    theme::text()
+                }))
+                .child(label.into()),
+        );
+    if disabled {
+        pill = pill.opacity(0.5);
+    } else {
+        pill = pill
+            .cursor_pointer()
+            .hover(|s| if active { s } else { s.bg(rgba(theme::hover())) })
+            .on_click(on_click);
+    }
+    pill.into_any_element()
+}

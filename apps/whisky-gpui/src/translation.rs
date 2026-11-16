@@ -42,6 +42,34 @@ pub(crate) struct ModelDescriptorDto {
     pub(crate) capabilities: Vec<String>,
 }
 
+pub(crate) const THINKING_LEVELS: [(&str, &str); 8] = [
+    ("default", "模型默认"),
+    ("off", "关闭"),
+    ("low", "Low"),
+    ("medium", "Medium"),
+    ("high", "High"),
+    ("xhigh", "XHigh"),
+    ("max", "Max"),
+    ("ultra", "Ultra"),
+];
+
+pub(crate) fn default_thinking_level() -> String {
+    "default".into()
+}
+
+pub(crate) fn normalize_thinking_level(value: &str) -> String {
+    let normalized = value.trim().to_ascii_lowercase();
+    THINKING_LEVELS
+        .iter()
+        .find(|(code, _)| *code == normalized)
+        .map(|(code, _)| (*code).to_owned())
+        .unwrap_or_else(default_thinking_level)
+}
+
+pub(crate) fn supports_thinking_level(kind: &str) -> bool {
+    matches!(kind, "openAIChat" | "anthropic" | "gemini" | "ollama")
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ProviderDto {
@@ -57,8 +85,18 @@ pub(crate) struct ProviderDto {
     pub(crate) model_metadata: Option<ModelDescriptorDto>,
     #[serde(rename = "openAIChatTokenLimitField")]
     pub(crate) open_ai_chat_token_limit_field: String,
+    #[serde(default = "default_thinking_level")]
+    pub(crate) thinking_level: String,
     pub(crate) capabilities: ProviderCapabilities,
     pub(crate) has_credential: bool,
+}
+
+pub(crate) fn default_translation_debounce_ms() -> u64 {
+    150
+}
+
+pub(crate) fn default_sentence_cache_enabled() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -73,6 +111,42 @@ pub(crate) struct TranslationSettingsDto {
     pub(crate) custom_prompt: String,
     pub(crate) source_language: String,
     pub(crate) target_language: String,
+    #[serde(
+        rename = "credentialStorageMode",
+        default = "default_credential_storage_mode"
+    )]
+    pub(crate) credential_storage_mode: String,
+    #[serde(
+        rename = "translationDebounceMs",
+        default = "default_translation_debounce_ms"
+    )]
+    pub(crate) translation_debounce_ms: u64,
+    #[serde(
+        rename = "sentenceCacheEnabled",
+        default = "default_sentence_cache_enabled"
+    )]
+    pub(crate) sentence_cache_enabled: bool,
+}
+
+pub(crate) fn default_credential_storage_mode() -> String {
+    "keychain".into()
+}
+
+pub(crate) fn normalize_credential_storage_mode(mode: &str) -> String {
+    match mode {
+        "keychain" | "localFile" | "sessionOnly" => mode.to_owned(),
+        _ => default_credential_storage_mode(),
+    }
+}
+
+pub(crate) fn credential_storage_label(storage: &str) -> String {
+    match storage {
+        "persistentKeychain" => "macOS 钥匙串".to_owned(),
+        "localPlaintextFile" => "本地文件（明文存储，免弹窗）".to_owned(),
+        "sessionOnly" => "仅当前会话内存（关闭后清除）".to_owned(),
+        "" => "正在读取".to_owned(),
+        other => other.to_owned(),
+    }
 }
 
 fn default_translation_settings() -> TranslationSettingsDto {
@@ -86,7 +160,132 @@ fn default_translation_settings() -> TranslationSettingsDto {
         custom_prompt: String::new(),
         source_language: "auto".into(),
         target_language: "en".into(),
+        credential_storage_mode: default_credential_storage_mode(),
+        translation_debounce_ms: default_translation_debounce_ms(),
+        sentence_cache_enabled: default_sentence_cache_enabled(),
     }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CacheEntryDto {
+    pub(crate) id: String,
+    #[serde(rename = "gameID", default)]
+    pub(crate) game_id: String,
+    #[serde(default)]
+    pub(crate) speaker: Option<String>,
+    #[serde(default)]
+    pub(crate) source_text: String,
+    #[serde(default)]
+    pub(crate) translated_text: String,
+    #[serde(default)]
+    pub(crate) provider_name: String,
+    #[serde(default)]
+    pub(crate) provider_kind: String,
+    #[serde(rename = "modelID", default)]
+    pub(crate) model_id: Option<String>,
+    #[serde(default)]
+    pub(crate) source_language: String,
+    #[serde(default)]
+    pub(crate) target_language: String,
+    #[serde(default)]
+    pub(crate) hit_count: u64,
+    #[serde(default)]
+    pub(crate) updated_at: f64,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CacheListResponseDto {
+    #[serde(default)]
+    pub(crate) total_count: u64,
+    #[serde(default)]
+    pub(crate) game_count: u64,
+    #[serde(default)]
+    pub(crate) total_bytes: u64,
+    #[serde(rename = "resolvedGameID", default)]
+    pub(crate) resolved_game_id: Option<String>,
+    #[serde(default)]
+    pub(crate) entries: Vec<CacheEntryDto>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct CacheDeleteResponseDto {
+    #[serde(default)]
+    removed: bool,
+    #[serde(default)]
+    total_count: u64,
+    #[serde(default)]
+    total_bytes: u64,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct CacheClearResponseDto {
+    #[serde(default)]
+    cleared: bool,
+    #[serde(default)]
+    total_count: u64,
+    #[serde(default)]
+    total_bytes: u64,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct TranslationCacheState {
+    pub(crate) entries: Vec<CacheEntryDto>,
+    pub(crate) total_count: u64,
+    pub(crate) game_count: u64,
+    pub(crate) total_bytes: u64,
+    pub(crate) loading: bool,
+    pub(crate) error: Option<String>,
+    pub(crate) scope_game_id: Option<String>,
+    pub(crate) scope_context: Option<(String, String)>,
+    pub(crate) only_current_game: bool,
+    pub(crate) query: String,
+    pub(crate) loaded_once: bool,
+    pub(crate) expanded_in_capture: bool,
+}
+
+impl TranslationCacheState {
+    pub(crate) fn has_scope(&self) -> bool {
+        self.scope_game_id
+            .as_deref()
+            .is_some_and(|s| !s.trim().is_empty())
+            || self.scope_context.is_some()
+    }
+
+    pub(crate) fn effective_game_id(&self) -> Option<String> {
+        if self.only_current_game {
+            self.scope_game_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_owned)
+        } else {
+            None
+        }
+    }
+}
+
+fn insert_cache_scope_params(
+    params: &mut serde_json::Map<String, Value>,
+    game_id: Option<&str>,
+    scope_context: Option<&(String, String)>,
+) {
+    if let Some(gid) = game_id.map(str::trim).filter(|s| !s.is_empty()) {
+        params.insert("gameID".into(), Value::String(gid.to_owned()));
+    } else if let Some((container, entry_id)) = scope_context {
+        params.insert("container".into(), Value::String(container.clone()));
+        params.insert("entryID".into(), Value::String(entry_id.clone()));
+    }
+}
+
+#[derive(Clone, Default)]
+struct CachePendingMeta {
+    generation: u64,
+    deleted_id: Option<String>,
+    cleared_game_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,9 +313,10 @@ pub(crate) struct ProviderWriteDto {
     pub(crate) model_metadata: Option<ModelDescriptorDto>,
     #[serde(rename = "openAIChatTokenLimitField")]
     pub(crate) open_ai_chat_token_limit_field: String,
+    pub(crate) thinking_level: String,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub(crate) struct ProviderDraft {
     pub(crate) id: Option<String>,
     pub(crate) name: String,
@@ -126,7 +326,46 @@ pub(crate) struct ProviderDraft {
     pub(crate) source_language: String,
     pub(crate) target_language: String,
     pub(crate) token_limit_field: String,
+    pub(crate) thinking_level: String,
     pub(crate) model_metadata: Option<ModelDescriptorDto>,
+}
+
+impl Default for ProviderDraft {
+    fn default() -> Self {
+        Self {
+            id: None,
+            name: String::new(),
+            kind: String::new(),
+            base_url: String::new(),
+            model_id: String::new(),
+            source_language: String::new(),
+            target_language: String::new(),
+            token_limit_field: String::new(),
+            thinking_level: default_thinking_level(),
+            model_metadata: None,
+        }
+    }
+}
+
+impl ProviderDraft {
+    pub(crate) fn set_thinking_level(&mut self, level: &str) {
+        self.thinking_level = normalize_thinking_level(level);
+    }
+}
+
+pub(crate) fn draft_from_provider(profile: &ProviderDto) -> ProviderDraft {
+    ProviderDraft {
+        id: Some(profile.id.clone()),
+        name: profile.name.clone(),
+        kind: profile.kind.clone(),
+        base_url: profile.base_url.clone(),
+        model_id: profile.model_id.clone().unwrap_or_default(),
+        source_language: profile.default_source_language.clone(),
+        target_language: profile.default_target_language.clone(),
+        token_limit_field: profile.open_ai_chat_token_limit_field.clone(),
+        thinking_level: normalize_thinking_level(&profile.thinking_level),
+        model_metadata: profile.model_metadata.clone(),
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -136,18 +375,20 @@ pub(crate) enum TranslationTab {
     Settings,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub(crate) struct TranslationPage {
     pub(crate) active: bool,
     pub(crate) return_to_capture: bool,
     pub(crate) tab: TranslationTab,
     pub(crate) context: Option<(String, String, String)>,
     pub(crate) providers: Vec<ProviderDto>,
+    pub(crate) providers_loaded: bool,
     pub(crate) selected_id: Option<String>,
     pub(crate) draft: ProviderDraft,
     pub(crate) settings: Option<TranslationSettingsDto>,
     pub(crate) remote_enabled: bool,
     pub(crate) credential_storage: String,
+    pub(crate) credential_storage_mode: String,
     pub(crate) models: Vec<ModelDescriptorDto>,
     pub(crate) model_info: Option<ModelDescriptorDto>,
     pub(crate) secret: SecretValue,
@@ -155,11 +396,48 @@ pub(crate) struct TranslationPage {
     pub(crate) inputs: BTreeMap<&'static str, Entity<InputState>>,
     pub(crate) prompt_input: Option<Entity<TextareaState>>,
     pub(crate) pending: BTreeMap<u64, PendingTranslationRequest>,
+    pub(crate) cache: TranslationCacheState,
+    cache_generation: u64,
+    cache_pending: BTreeMap<u64, CachePendingMeta>,
     selection_generation: u64,
     draft_generation: u64,
     settings_edit_generation: u64,
     pub(crate) error: Option<String>,
     pub(crate) message: Option<String>,
+}
+
+impl Default for TranslationPage {
+    fn default() -> Self {
+        Self {
+            active: false,
+            return_to_capture: false,
+            tab: TranslationTab::default(),
+            context: None,
+            providers: Vec::new(),
+            providers_loaded: false,
+            selected_id: None,
+            draft: ProviderDraft::default(),
+            settings: None,
+            remote_enabled: false,
+            credential_storage: String::new(),
+            credential_storage_mode: default_credential_storage_mode(),
+            models: Vec::new(),
+            model_info: None,
+            secret: SecretValue::default(),
+            pending_credential: SecretValue::default(),
+            inputs: BTreeMap::new(),
+            prompt_input: None,
+            pending: BTreeMap::new(),
+            cache: TranslationCacheState::default(),
+            cache_generation: 0,
+            cache_pending: BTreeMap::new(),
+            selection_generation: 0,
+            draft_generation: 0,
+            settings_edit_generation: 0,
+            error: None,
+            message: None,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -172,6 +450,10 @@ pub(crate) struct PendingTranslationRequest {
 }
 
 impl TranslationPage {
+    pub(crate) fn is_pending(&self, method: &str) -> bool {
+        self.pending.values().any(|request| request.method == method)
+    }
+
     pub(crate) fn provider_probe_pending(&self) -> bool {
         self.pending.values().any(|request| {
             matches!(
@@ -184,21 +466,39 @@ impl TranslationPage {
     pub(crate) fn open(&mut self, bridge: &BridgeSupervisor) {
         self.active = true;
         self.remote_enabled = true;
-        self.settings
+        let defaults = self
+            .settings
             .get_or_insert_with(default_translation_settings);
+        if self.credential_storage_mode.is_empty() {
+            self.credential_storage_mode =
+                normalize_credential_storage_mode(&defaults.credential_storage_mode);
+        }
+        self.cache.scope_context = self
+            .context
+            .as_ref()
+            .map(|(container, entry_id, _)| (container.clone(), entry_id.clone()));
+        if self.cache.scope_context.is_none() {
+            self.cache.scope_game_id = None;
+            self.cache.only_current_game = false;
+        }
         self.request(bridge, "translation.providers/list", json!({}));
         self.request(bridge, "translation.settings/get", json!({}));
+        let cache_game_id = self.cache.effective_game_id();
+        self.refresh_cache(bridge, cache_game_id);
     }
 
     pub(crate) fn bridge_disconnected(&mut self, reason: Option<&str>) {
         let had_pending = !self.pending.is_empty();
         self.pending.clear();
+        self.cache_pending.clear();
+        self.cache.loading = false;
         self.pending_credential.clear();
         if had_pending {
-            self.error = Some(match reason {
+            let msg = match reason {
                 Some(reason) => format!("桥接连接中断：{reason}"),
                 None => "桥接连接中断；未完成的翻译请求已取消。".into(),
-            });
+            };
+            self.error = Some(msg);
         }
     }
 
@@ -214,8 +514,10 @@ impl TranslationPage {
             return;
         };
         if pending.method != method {
+            self.cache_pending.remove(&request);
             return;
         }
+        let cache_meta = self.cache_pending.remove(&request);
         let selection_current = pending.selection_generation == self.selection_generation;
         let draft_current = pending.draft_generation == self.draft_generation;
         let settings_current = self.settings_response_is_current(&pending);
@@ -225,6 +527,27 @@ impl TranslationPage {
             Err(error) => {
                 if method == "translation.providers/save" {
                     self.pending_credential.clear();
+                }
+                if method == "translation.providers/list" {
+                    self.providers_loaded = true;
+                }
+                if matches!(
+                    method,
+                    "translation.cache/list"
+                        | "translation.cache/delete"
+                        | "translation.cache.clear"
+                ) {
+                    if method == "translation.cache/list" {
+                        self.cache.loading = self.is_pending("translation.cache/list");
+                    }
+                    let cache_current = cache_meta
+                        .as_ref()
+                        .is_none_or(|meta| meta.generation == self.cache_generation);
+                    if method != "translation.cache/list" || cache_current {
+                        self.cache.error = Some(error);
+                    }
+                    cx.notify();
+                    return;
                 }
                 let show_error = match method {
                     "translation.providers/save" => selection_current && draft_current,
@@ -238,6 +561,7 @@ impl TranslationPage {
             }
             Ok(value) => match method {
                 "translation.providers/list" => {
+                    self.providers_loaded = true;
                     match serde_json::from_value::<Vec<ProviderDto>>(value) {
                         Ok(profiles) => {
                             self.providers = profiles;
@@ -257,21 +581,11 @@ impl TranslationPage {
                     if settings_current {
                         match serde_json::from_value::<SettingsEnvelopeDto>(value) {
                             Ok(envelope) => {
-                                self.settings = Some(envelope.settings);
-                                self.remote_enabled = envelope.remote_providers_enabled;
-                                self.credential_storage = envelope.credential_storage;
-                                self.inputs.retain(|key, _| {
-                                    !matches!(
-                                        *key,
-                                        "context-window"
-                                            | "output-limit"
-                                            | "retention"
-                                            | "context-turns"
-                                            | "source-language"
-                                            | "target-language"
-                                    )
-                                });
-                                self.prompt_input = None;
+                                self.sync_settings_inputs(
+                                    envelope.settings,
+                                    envelope.remote_providers_enabled,
+                                    envelope.credential_storage,
+                                );
                                 self.message = Some("设置已加载".into());
                             }
                             Err(error) => self.error = Some(format!("无效的翻译设置：{error}")),
@@ -389,6 +703,80 @@ impl TranslationPage {
                             .map(|s| format!("连接测试成功：{s}"));
                     }
                 }
+                "translation.cache/list" => {
+                    self.cache.loading = self.is_pending("translation.cache/list");
+                    let cache_current = cache_meta
+                        .as_ref()
+                        .is_none_or(|meta| meta.generation == self.cache_generation);
+                    if cache_current {
+                        match serde_json::from_value::<CacheListResponseDto>(value) {
+                            Ok(response) => {
+                                self.cache.total_count = response.total_count;
+                                self.cache.game_count = response.game_count;
+                                self.cache.total_bytes = response.total_bytes;
+                                if let Some(resolved) = response
+                                    .resolved_game_id
+                                    .as_deref()
+                                    .map(str::trim)
+                                    .filter(|s| !s.is_empty())
+                                {
+                                    self.cache.scope_game_id = Some(resolved.to_owned());
+                                }
+                                self.cache.entries = response.entries;
+                                self.cache.loaded_once = true;
+                                self.cache.error = None;
+                            }
+                            Err(error) => {
+                                self.cache.error = Some(format!("无效的缓存列表数据：{error}"));
+                            }
+                        }
+                    }
+                }
+                "translation.cache/delete" => {
+                    match serde_json::from_value::<CacheDeleteResponseDto>(value) {
+                        Ok(response) => {
+                            self.cache.total_count = response.total_count;
+                            self.cache.total_bytes = response.total_bytes;
+                            if response.total_count == 0 {
+                                self.cache.game_count = 0;
+                            }
+                            if let Some(deleted_id) = cache_meta.and_then(|meta| meta.deleted_id) {
+                                self.cache.entries.retain(|entry| entry.id != deleted_id);
+                            }
+                            self.cache.error = None;
+                            if response.removed {
+                                self.message = Some("已删除缓存条目".into());
+                            }
+                        }
+                        Err(error) => {
+                            self.cache.error = Some(format!("无效的删除缓存响应：{error}"));
+                        }
+                    }
+                }
+                "translation.cache.clear" => {
+                    match serde_json::from_value::<CacheClearResponseDto>(value) {
+                        Ok(response) => {
+                            self.cache.total_count = response.total_count;
+                            self.cache.total_bytes = response.total_bytes;
+                            let cleared_game_id = cache_meta.and_then(|meta| meta.cleared_game_id);
+                            if response.total_count == 0 {
+                                self.cache.game_count = 0;
+                                self.cache.entries.clear();
+                            } else if let Some(game_id) = cleared_game_id {
+                                self.cache.entries.retain(|entry| entry.game_id != game_id);
+                            } else {
+                                self.cache.entries.clear();
+                            }
+                            self.cache.error = None;
+                            if response.cleared {
+                                self.message = Some("翻译缓存已清空".into());
+                            }
+                        }
+                        Err(error) => {
+                            self.cache.error = Some(format!("无效的清空缓存响应：{error}"));
+                        }
+                    }
+                }
                 _ => {}
             },
         }
@@ -462,6 +850,158 @@ impl TranslationPage {
                 "translation.modelInfo",
                 json!({"providerID":id,"modelID":self.field("model", cx)}),
             );
+        }
+    }
+
+    pub(crate) fn refresh_cache(
+        &mut self,
+        bridge: &BridgeSupervisor,
+        game_id: Option<String>,
+    ) {
+        self.cache_generation = self.cache_generation.wrapping_add(1);
+        self.cache.loading = true;
+        self.cache.error = None;
+        let mut params = serde_json::Map::new();
+        if let Some(gid) = game_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            params.insert("gameID".into(), Value::String(gid.to_owned()));
+        } else if self.cache.only_current_game {
+            insert_cache_scope_params(
+                &mut params,
+                self.cache.scope_game_id.as_deref(),
+                self.cache.scope_context.as_ref(),
+            );
+        }
+        let query = self.cache.query.trim();
+        if !query.is_empty() {
+            params.insert("query".into(), Value::String(query.to_owned()));
+        }
+        params.insert("limit".into(), json!(100));
+        let ok = self.request_cache(
+            bridge,
+            "translation.cache/list",
+            Value::Object(params),
+            CachePendingMeta {
+                generation: self.cache_generation,
+                deleted_id: None,
+                cleared_game_id: None,
+            },
+        );
+        if !ok {
+            self.cache.loading = false;
+        }
+    }
+
+    pub(crate) fn set_cache_only_current_game(
+        &mut self,
+        bridge: &BridgeSupervisor,
+        only_current_game: bool,
+    ) {
+        self.cache.only_current_game = only_current_game;
+        let game_id = self.cache.effective_game_id();
+        self.refresh_cache(bridge, game_id);
+    }
+
+    pub(crate) fn delete_cache_entry(
+        &mut self,
+        bridge: &BridgeSupervisor,
+        id: impl Into<String>,
+    ) {
+        let id = id.into();
+        self.cache.error = None;
+        self.request_cache(
+            bridge,
+            "translation.cache/delete",
+            json!({ "id": id }),
+            CachePendingMeta {
+                generation: self.cache_generation,
+                deleted_id: Some(id),
+                cleared_game_id: None,
+            },
+        );
+    }
+
+    pub(crate) fn clear_scoped_cache(
+        &mut self,
+        bridge: &BridgeSupervisor,
+        game_id: Option<String>,
+    ) {
+        self.cache.error = None;
+        let mut params = serde_json::Map::new();
+        insert_cache_scope_params(
+            &mut params,
+            game_id
+                .as_deref()
+                .or(self.cache.scope_game_id.as_deref()),
+            self.cache.scope_context.as_ref(),
+        );
+        let cleared_game_id = params
+            .get("gameID")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        self.request_cache(
+            bridge,
+            "translation.cache.clear",
+            Value::Object(params),
+            CachePendingMeta {
+                generation: self.cache_generation,
+                deleted_id: None,
+                cleared_game_id,
+            },
+        );
+    }
+
+    pub(crate) fn clear_cache(&mut self, bridge: &BridgeSupervisor, game_id: Option<String>) {
+        self.cache.error = None;
+        let scoped_game_id = game_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned);
+        let params = match &scoped_game_id {
+            Some(gid) => json!({ "gameID": gid }),
+            None => json!({}),
+        };
+        self.request_cache(
+            bridge,
+            "translation.cache.clear",
+            params,
+            CachePendingMeta {
+                generation: self.cache_generation,
+                deleted_id: None,
+                cleared_game_id: scoped_game_id,
+            },
+        );
+    }
+
+    fn request_cache(
+        &mut self,
+        bridge: &BridgeSupervisor,
+        method: &str,
+        params: Value,
+        meta: CachePendingMeta,
+    ) -> bool {
+        let request = next_request_id();
+        let pending = PendingTranslationRequest {
+            method: method.to_owned(),
+            provider_id: None,
+            selection_generation: self.selection_generation,
+            draft_generation: self.draft_generation,
+            settings_edit_generation: self.settings_edit_generation,
+        };
+        match bridge.translation_request(request, method, params) {
+            Ok(()) => {
+                self.pending.insert(request, pending);
+                self.cache_pending.insert(request, meta);
+                true
+            }
+            Err(error) => {
+                self.cache.error = Some(error);
+                false
+            }
         }
     }
 
@@ -594,17 +1134,7 @@ impl TranslationPage {
         if let Some(profile) =
             id.and_then(|id| self.providers.iter().find(|profile| profile.id == id))
         {
-            self.draft = ProviderDraft {
-                id: Some(profile.id.clone()),
-                name: profile.name.clone(),
-                kind: profile.kind.clone(),
-                base_url: profile.base_url.clone(),
-                model_id: profile.model_id.clone().unwrap_or_default(),
-                source_language: profile.default_source_language.clone(),
-                target_language: profile.default_target_language.clone(),
-                token_limit_field: profile.open_ai_chat_token_limit_field.clone(),
-                model_metadata: profile.model_metadata.clone(),
-            };
+            self.draft = draft_from_provider(profile);
         } else {
             self.draft = ProviderDraft::default();
         }
@@ -618,6 +1148,9 @@ impl TranslationPage {
         let trimmed = self.draft.base_url.trim();
         if trimmed.is_empty() || (!old_kind.is_empty() && trimmed == default_endpoint(&old_kind)) {
             self.draft.base_url = default_endpoint(kind).into();
+        }
+        if !supports_thinking_level(kind) || self.draft.thinking_level.is_empty() {
+            self.draft.thinking_level = default_thinking_level();
         }
         self.clear_model_metadata();
         self.models.clear();
@@ -674,6 +1207,11 @@ impl TranslationPage {
         self.draft_generation = self.draft_generation.wrapping_add(1);
     }
 
+    pub(crate) fn set_thinking_level(&mut self, level: &str) {
+        self.draft.set_thinking_level(level);
+        self.draft_generation = self.draft_generation.wrapping_add(1);
+    }
+
     pub(crate) fn toggle_source_history(&mut self) {
         let settings = self
             .settings
@@ -693,6 +1231,76 @@ impl TranslationPage {
     pub(crate) fn toggle_remote_enabled(&mut self) {
         self.remote_enabled = !self.remote_enabled;
         self.settings_edit_generation = self.settings_edit_generation.wrapping_add(1);
+    }
+
+    pub(crate) fn toggle_sentence_cache_enabled(&mut self) {
+        let settings = self
+            .settings
+            .get_or_insert_with(default_translation_settings);
+        settings.sentence_cache_enabled = !settings.sentence_cache_enabled;
+        self.settings_edit_generation = self.settings_edit_generation.wrapping_add(1);
+    }
+
+    pub(crate) fn set_translation_debounce_ms(&mut self, ms: u64) {
+        let clamped = ms.min(5_000);
+        let settings = self
+            .settings
+            .get_or_insert_with(default_translation_settings);
+        settings.translation_debounce_ms = clamped;
+        self.settings_edit_generation = self.settings_edit_generation.wrapping_add(1);
+        self.inputs.remove("debounce-ms");
+    }
+
+    pub(crate) fn apply_translation_debounce_preset(
+        &mut self,
+        ms: u64,
+        window: &mut Window,
+        cx: &mut Context<WhiskyApp>,
+    ) {
+        let input = self.inputs.get("debounce-ms").cloned();
+        self.set_translation_debounce_ms(ms);
+        if let Some(input) = input {
+            let value = ms.min(5_000).to_string();
+            input.update(cx, |state, cx| state.set_value(value, window, cx));
+            self.inputs.insert("debounce-ms", input);
+        }
+    }
+
+    pub(crate) fn set_credential_storage_mode(&mut self, mode: &str) {
+        let normalized = normalize_credential_storage_mode(mode);
+        self.credential_storage_mode = normalized.clone();
+        let settings = self
+            .settings
+            .get_or_insert_with(default_translation_settings);
+        settings.credential_storage_mode = normalized;
+        self.settings_edit_generation = self.settings_edit_generation.wrapping_add(1);
+    }
+
+    pub(crate) fn sync_settings_inputs(
+        &mut self,
+        mut settings: TranslationSettingsDto,
+        remote_providers_enabled: bool,
+        credential_storage: String,
+    ) {
+        let mode = normalize_credential_storage_mode(&settings.credential_storage_mode);
+        settings.credential_storage_mode = mode.clone();
+        self.credential_storage_mode = mode;
+        self.settings = Some(settings);
+        self.remote_enabled = remote_providers_enabled;
+        self.credential_storage = credential_storage;
+        self.inputs.retain(|key, _| {
+            !matches!(
+                *key,
+                "context-window"
+                    | "output-limit"
+                    | "retention"
+                    | "context-turns"
+                    | "debounce-ms"
+                    | "source-language"
+                    | "target-language"
+            )
+        });
+        self.prompt_input = None;
     }
 
     fn settings_response_is_current(&self, pending: &PendingTranslationRequest) -> bool {
@@ -737,6 +1345,17 @@ impl TranslationPage {
             "context-window" | "output-limit" | "retention" | "context-turns" | "prompt"
             | "source-language" | "target-language" => {
                 self.settings_edit_generation = self.settings_edit_generation.wrapping_add(1);
+            }
+            "debounce-ms" => {
+                self.settings_edit_generation = self.settings_edit_generation.wrapping_add(1);
+                if let Ok(ms) = parse_setting_range(value.trim(), "翻译防抖延迟", 0, 5_000) {
+                    self.settings
+                        .get_or_insert_with(default_translation_settings)
+                        .translation_debounce_ms = ms;
+                }
+            }
+            "cache-query" => {
+                self.cache.query = value.to_owned();
             }
             _ => {}
         }
@@ -787,6 +1406,11 @@ impl TranslationPage {
                 input.update(cx, |state, cx| state.set_value(String::new(), window, cx));
             }
         }
+        let thinking_level = if supports_thinking_level(&self.draft.kind) {
+            normalize_thinking_level(&self.draft.thinking_level)
+        } else {
+            default_thinking_level()
+        };
         let draft = ProviderWriteDto {
             id: self.draft.id.clone().unwrap_or_else(new_profile_id),
             name: name.trim().to_owned(),
@@ -797,6 +1421,7 @@ impl TranslationPage {
             default_target_language: self.field("provider-target-language", cx),
             model_metadata: self.draft.model_metadata.clone(),
             open_ai_chat_token_limit_field: self.draft.token_limit_field.clone(),
+            thinking_level,
         };
         match serde_json::to_value(draft) {
             Ok(provider) => {
@@ -872,6 +1497,7 @@ impl TranslationPage {
             source_language: "auto".into(),
             target_language: "en".into(),
             token_limit_field: "max_completion_tokens".into(),
+            thinking_level: default_thinking_level(),
             ..ProviderDraft::default()
         };
         self.draft_generation = self.draft_generation.wrapping_add(1);
@@ -952,6 +1578,46 @@ impl TranslationPage {
             custom_prompt: self.field("prompt", cx),
             source_language: self.field("source-language", cx),
             target_language: self.field("target-language", cx),
+            credential_storage_mode: normalize_credential_storage_mode(
+                if self.credential_storage_mode.is_empty() {
+                    self.settings
+                        .as_ref()
+                        .map(|s| s.credential_storage_mode.as_str())
+                        .unwrap_or("keychain")
+                } else {
+                    self.credential_storage_mode.as_str()
+                },
+            ),
+            translation_debounce_ms: if self.inputs.contains_key("debounce-ms") {
+                match parse_setting_range(
+                    self.field("debounce-ms", cx).trim(),
+                    "翻译防抖延迟",
+                    0,
+                    5_000,
+                ) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        self.error = Some(e);
+                        return;
+                    }
+                }
+            } else {
+                let stored = self
+                    .settings
+                    .as_ref()
+                    .map(|s| s.translation_debounce_ms)
+                    .unwrap_or_else(default_translation_debounce_ms);
+                if stored > 5_000 {
+                    self.error = Some("翻译防抖延迟 必须在 0 到 5000 之间".into());
+                    return;
+                }
+                stored
+            },
+            sentence_cache_enabled: self
+                .settings
+                .as_ref()
+                .map(|s| s.sentence_cache_enabled)
+                .unwrap_or_else(default_sentence_cache_enabled),
         };
         if settings.custom_prompt.len() > 16_384 {
             self.error = Some("自定义提示最多 16384 UTF-8 字节。".into());
@@ -1307,6 +1973,7 @@ mod tests {
                 capabilities: vec!["chatCompletion".into()],
             }),
             open_ai_chat_token_limit_field: "max_completion_tokens".into(),
+            thinking_level: "off".into(),
         };
         let value = serde_json::to_value(provider).unwrap();
         assert_eq!(value["defaultSourceLanguage"], "auto");
@@ -1317,6 +1984,93 @@ mod tests {
         assert_eq!(value["baseURL"], "http://localhost:11434");
         assert_eq!(value["modelID"], "qwen");
         assert_eq!(value["openAIChatTokenLimitField"], "max_completion_tokens");
+        assert_eq!(value["thinkingLevel"], "off");
+        assert!(value.get("thinking_level").is_none());
+    }
+
+    #[test]
+    fn provider_dto_defaults_thinking_level_and_preserves_explicit_values() {
+        let minimal = serde_json::json!({
+            "id": "p1",
+            "name": "Chat",
+            "kind": "openAIChat",
+            "baseURL": "https://api.openai.com/v1",
+            "modelID": "gpt-5",
+            "defaultSourceLanguage": "ja",
+            "defaultTargetLanguage": "zh-Hans",
+            "modelMetadata": null,
+            "openAIChatTokenLimitField": "max_completion_tokens",
+            "capabilities": {
+                "modelDiscovery": true,
+                "contextDiscovery": false,
+                "streaming": true,
+                "customPrompt": true,
+                "context": true
+            },
+            "hasCredential": true
+        });
+        let dto: ProviderDto = serde_json::from_value(minimal).unwrap();
+        assert_eq!(dto.thinking_level, "default");
+        assert_eq!(draft_from_provider(&dto).thinking_level, "default");
+
+        let with_thinking = serde_json::json!({
+            "id": "p2",
+            "name": "Claude",
+            "kind": "anthropic",
+            "baseURL": "https://api.anthropic.com/v1",
+            "modelID": "claude-sonnet-4-5",
+            "defaultSourceLanguage": "ja",
+            "defaultTargetLanguage": "zh-Hans",
+            "modelMetadata": null,
+            "openAIChatTokenLimitField": "max_completion_tokens",
+            "thinkingLevel": "xhigh",
+            "capabilities": {
+                "modelDiscovery": true,
+                "contextDiscovery": true,
+                "streaming": true,
+                "customPrompt": true,
+                "context": true
+            },
+            "hasCredential": false
+        });
+        let dto_explicit: ProviderDto = serde_json::from_value(with_thinking).unwrap();
+        assert_eq!(dto_explicit.thinking_level, "xhigh");
+        let mut draft = draft_from_provider(&dto_explicit);
+        assert_eq!(draft.thinking_level, "xhigh");
+
+        draft.set_thinking_level("ULTRA");
+        assert_eq!(draft.thinking_level, "ultra");
+        draft.set_thinking_level("unknown-value");
+        assert_eq!(draft.thinking_level, "default");
+    }
+
+    #[gpui_kit::test]
+    fn switching_between_thinking_and_non_thinking_kinds_updates_thinking_level(
+        cx: &mut gpui_kit::TestAppContext,
+    ) {
+        cx.update(|app| gpui_kit::init(app));
+        let (_events_tx, events_rx) = smol::channel::unbounded();
+        let bridge = BridgeSupervisor::disconnected_for_tests();
+        let window = cx.add_window(|window, cx| {
+            WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, false)
+        });
+
+        window
+            .update(cx, |this, window, cx| {
+                this.translation_page.new_provider("openAIChat");
+                assert_eq!(this.translation_page.draft.thinking_level, "default");
+                this.translation_page.set_thinking_level("off");
+                assert_eq!(this.translation_page.draft.thinking_level, "off");
+
+                // Switching to another reasoning-capable kind preserves thinking level.
+                this.translation_page.switch_kind("gemini", window, cx);
+                assert_eq!(this.translation_page.draft.thinking_level, "off");
+
+                // Switching to DeepL / openAICompletions resets thinking level to default.
+                this.translation_page.switch_kind("deepL", window, cx);
+                assert_eq!(this.translation_page.draft.thinking_level, "default");
+            })
+            .unwrap();
     }
 
     #[test]
@@ -1588,6 +2342,452 @@ mod tests {
             .unwrap();
     }
 
+    #[test]
+    fn translation_settings_credential_storage_mode_round_trips_and_defaults() {
+        let minimal = serde_json::json!({
+            "contextWindowOverride": null,
+            "outputTokenLimit": 2048,
+            "historyRetentionTurns": 20,
+            "contextTurnLimit": 8,
+            "includeSourceHistory": false,
+            "includeTranslatedHistory": false,
+            "customPrompt": "",
+            "sourceLanguage": "auto",
+            "targetLanguage": "zh-Hans"
+        });
+        let dto: TranslationSettingsDto = serde_json::from_value(minimal).unwrap();
+        assert_eq!(dto.credential_storage_mode, "keychain");
+
+        let local_file = TranslationSettingsDto {
+            credential_storage_mode: "localFile".into(),
+            ..dto.clone()
+        };
+        let encoded = serde_json::to_value(&local_file).unwrap();
+        assert_eq!(encoded["credentialStorageMode"], "localFile");
+        assert!(encoded.get("credential_storage_mode").is_none());
+        let decoded: TranslationSettingsDto = serde_json::from_value(encoded).unwrap();
+        assert_eq!(decoded.credential_storage_mode, "localFile");
+
+        let session_only: TranslationSettingsDto = serde_json::from_value(serde_json::json!({
+            "contextWindowOverride": null,
+            "outputTokenLimit": 1024,
+            "historyRetentionTurns": 10,
+            "contextTurnLimit": 4,
+            "includeSourceHistory": true,
+            "includeTranslatedHistory": true,
+            "customPrompt": "Glossary",
+            "sourceLanguage": "ja",
+            "targetLanguage": "en",
+            "credentialStorageMode": "sessionOnly"
+        }))
+        .unwrap();
+        assert_eq!(session_only.credential_storage_mode, "sessionOnly");
+
+        assert_eq!(
+            credential_storage_label("persistentKeychain"),
+            "macOS 钥匙串"
+        );
+        assert_eq!(
+            credential_storage_label("localPlaintextFile"),
+            "本地文件（明文存储，免弹窗）"
+        );
+        assert_eq!(
+            credential_storage_label("sessionOnly"),
+            "仅当前会话内存（关闭后清除）"
+        );
+    }
+
+    #[gpui_kit::test]
+    fn translation_page_tracks_and_saves_credential_storage_mode(
+        cx: &mut gpui_kit::TestAppContext,
+    ) {
+        cx.update(|app| gpui_kit::init(app));
+        let (_events_tx, events_rx) = smol::channel::unbounded();
+        let (bridge, drain) = BridgeSupervisor::recording_for_tests();
+        let window = cx.add_window(|window, cx| {
+            WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, false)
+        });
+
+        window
+            .update(cx, |this, window, cx| {
+                this.translation_page.open(&this.bridge);
+                let initial_calls = drain();
+                assert!(initial_calls.iter().any(|(m, _)| m == "translation.settings/get"));
+                let get_id = this
+                    .translation_page
+                    .pending
+                    .iter()
+                    .find(|(_, req)| req.method == "translation.settings/get")
+                    .map(|(id, _)| *id)
+                    .unwrap();
+
+                // Mount required settings inputs before editing/saving.
+                this.translation_page
+                    .input("output-limit", "2048", "", window, cx);
+                this.translation_page
+                    .input("retention", "20", "", window, cx);
+                this.translation_page
+                    .input("context-turns", "8", "", window, cx);
+                this.translation_page
+                    .input("source-language", "auto", "", window, cx);
+                this.translation_page
+                    .input("target-language", "zh-Hans", "", window, cx);
+
+                // Selecting localFile bumps settings_edit_generation so stale settings/get replies are ignored.
+                this.translation_page.set_credential_storage_mode("localFile");
+                assert_eq!(this.translation_page.credential_storage_mode, "localFile");
+                assert_eq!(
+                    this.translation_page
+                        .settings
+                        .as_ref()
+                        .unwrap()
+                        .credential_storage_mode,
+                    "localFile"
+                );
+
+                this.translation_page.reply(
+                    get_id,
+                    "translation.settings/get",
+                    Ok(serde_json::json!({
+                        "settings": {
+                            "contextWindowOverride": null,
+                            "outputTokenLimit": 2048,
+                            "historyRetentionTurns": 20,
+                            "contextTurnLimit": 8,
+                            "includeSourceHistory": false,
+                            "includeTranslatedHistory": false,
+                            "customPrompt": "",
+                            "sourceLanguage": "auto",
+                            "targetLanguage": "en",
+                            "credentialStorageMode": "keychain"
+                        },
+                        "remoteProvidersEnabled": true,
+                        "credentialStorage": "persistentKeychain"
+                    })),
+                    &this.bridge,
+                    cx,
+                );
+                assert_eq!(this.translation_page.credential_storage_mode, "localFile");
+
+                // Save settings sends credentialStorageMode in settings envelope.
+                this.translation_page.save_settings(&this.bridge, cx);
+                let calls = drain();
+                let save_call = calls
+                    .iter()
+                    .find(|(m, _)| m == "translation.settings/save")
+                    .expect("translation.settings/save should be sent");
+                assert_eq!(save_call.1["settings"]["credentialStorageMode"], "localFile");
+                assert_eq!(save_call.1["remoteProvidersEnabled"], true);
+
+                let save_id = this
+                    .translation_page
+                    .pending
+                    .iter()
+                    .find(|(_, req)| req.method == "translation.settings/save")
+                    .map(|(id, _)| *id)
+                    .unwrap();
+                this.translation_page.reply(
+                    save_id,
+                    "translation.settings/save",
+                    Ok(serde_json::json!({
+                        "settings": save_call.1["settings"],
+                        "remoteProvidersEnabled": true,
+                        "credentialStorage": "localPlaintextFile"
+                    })),
+                    &this.bridge,
+                    cx,
+                );
+                assert_eq!(this.translation_page.credential_storage, "localPlaintextFile");
+                assert_eq!(this.translation_page.credential_storage_mode, "localFile");
+
+                // Unknown mode falls back to keychain.
+                this.translation_page.set_credential_storage_mode("unexpected");
+                assert_eq!(this.translation_page.credential_storage_mode, "keychain");
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn translation_settings_debounce_and_sentence_cache_round_trip_and_default() {
+        let minimal = serde_json::json!({
+            "contextWindowOverride": null,
+            "outputTokenLimit": 2048,
+            "historyRetentionTurns": 20,
+            "contextTurnLimit": 8,
+            "includeSourceHistory": false,
+            "includeTranslatedHistory": false,
+            "customPrompt": "",
+            "sourceLanguage": "auto",
+            "targetLanguage": "zh-Hans"
+        });
+        let dto: TranslationSettingsDto = serde_json::from_value(minimal).unwrap();
+        assert_eq!(dto.translation_debounce_ms, 150);
+        assert!(dto.sentence_cache_enabled);
+
+        let custom = TranslationSettingsDto {
+            translation_debounce_ms: 500,
+            sentence_cache_enabled: false,
+            ..dto.clone()
+        };
+        let encoded = serde_json::to_value(&custom).unwrap();
+        assert_eq!(encoded["translationDebounceMs"], 500);
+        assert_eq!(encoded["sentenceCacheEnabled"], false);
+        assert!(encoded.get("translation_debounce_ms").is_none());
+        assert!(encoded.get("sentence_cache_enabled").is_none());
+
+        let decoded: TranslationSettingsDto = serde_json::from_value(encoded).unwrap();
+        assert_eq!(decoded.translation_debounce_ms, 500);
+        assert!(!decoded.sentence_cache_enabled);
+    }
+
+    #[gpui_kit::test]
+    fn translation_page_validates_and_saves_debounce_and_sentence_cache(
+        cx: &mut gpui_kit::TestAppContext,
+    ) {
+        cx.update(|app| gpui_kit::init(app));
+        let (_events_tx, events_rx) = smol::channel::unbounded();
+        let (bridge, drain) = BridgeSupervisor::recording_for_tests();
+        let window = cx.add_window(|window, cx| {
+            WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, false)
+        });
+
+        window
+            .update(cx, |this, window, cx| {
+                this.translation_page.open(&this.bridge);
+                let initial_calls = drain();
+                assert!(initial_calls.iter().any(|(m, _)| m == "translation.cache/list"));
+
+                this.translation_page
+                    .input("output-limit", "2048", "", window, cx);
+                this.translation_page
+                    .input("retention", "20", "", window, cx);
+                this.translation_page
+                    .input("context-turns", "8", "", window, cx);
+                this.translation_page
+                    .input("source-language", "auto", "", window, cx);
+                this.translation_page
+                    .input("target-language", "zh-Hans", "", window, cx);
+                this.translation_page
+                    .input("debounce-ms", "150", "", window, cx);
+
+                // Toggle sentence cache off and set debounce via helper.
+                this.translation_page.toggle_sentence_cache_enabled();
+                assert!(!this.translation_page.settings.as_ref().unwrap().sentence_cache_enabled);
+
+                this.translation_page.set_translation_debounce_ms(300);
+                assert_eq!(
+                    this.translation_page
+                        .settings
+                        .as_ref()
+                        .unwrap()
+                        .translation_debounce_ms,
+                    300
+                );
+                assert!(!this.translation_page.inputs.contains_key("debounce-ms"));
+
+                // Save sends updated translationDebounceMs and sentenceCacheEnabled.
+                this.translation_page.save_settings(&this.bridge, cx);
+                let calls = drain();
+                let save_call = calls
+                    .iter()
+                    .find(|(m, _)| m == "translation.settings/save")
+                    .expect("translation.settings/save should be sent");
+                assert_eq!(save_call.1["settings"]["translationDebounceMs"], 300);
+                assert_eq!(save_call.1["settings"]["sentenceCacheEnabled"], false);
+
+                // Remount debounce input and test out-of-range validation (0..=5000).
+                let invalid_input = this
+                    .translation_page
+                    .input("debounce-ms", "300", "", window, cx);
+                invalid_input.update(cx, |state, input_cx| {
+                    state.set_value("5001", window, input_cx);
+                    input_cx.emit(InputEvent::Change);
+                });
+                this.translation_page.error = None;
+                this.translation_page.save_settings(&this.bridge, cx);
+                assert!(this.translation_page.error.is_some());
+                assert!(!drain().iter().any(|(m, _)| m == "translation.settings/save"));
+
+                // Valid boundary 0 saves cleanly.
+                invalid_input.update(cx, |state, input_cx| {
+                    state.set_value("0", window, input_cx);
+                    input_cx.emit(InputEvent::Change);
+                });
+                this.translation_page.error = None;
+                this.translation_page.save_settings(&this.bridge, cx);
+                let calls = drain();
+                let zero_save = calls
+                    .iter()
+                    .find(|(m, _)| m == "translation.settings/save")
+                    .expect("0 ms debounce should be valid");
+                assert_eq!(zero_save.1["settings"]["translationDebounceMs"], 0);
+            })
+            .unwrap();
+    }
+
+    #[gpui_kit::test]
+    fn translation_page_handles_cache_list_delete_and_clear_replies(
+        cx: &mut gpui_kit::TestAppContext,
+    ) {
+        cx.update(|app| gpui_kit::init(app));
+        let (_events_tx, events_rx) = smol::channel::unbounded();
+        let (bridge, drain) = BridgeSupervisor::recording_for_tests();
+        let window = cx.add_window(|window, cx| {
+            WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, false)
+        });
+
+        window
+            .update(cx, |this, _, cx| {
+                this.translation_page.cache.scope_game_id = Some("key".into());
+                this.translation_page.cache.query = "瑚太朗".into();
+                this.translation_page
+                    .set_cache_only_current_game(&this.bridge, true);
+                assert!(this.translation_page.cache.loading);
+
+                let calls = drain();
+                let list_call = calls
+                    .iter()
+                    .find(|(m, _)| m == "translation.cache/list")
+                    .expect("translation.cache/list should be sent");
+                assert_eq!(list_call.1["gameID"], "key");
+                assert_eq!(list_call.1["query"], "瑚太朗");
+
+                let list_id = this
+                    .translation_page
+                    .pending
+                    .iter()
+                    .find(|(_, req)| req.method == "translation.cache/list")
+                    .map(|(id, _)| *id)
+                    .unwrap();
+                this.translation_page.reply(
+                    list_id,
+                    "translation.cache/list",
+                    Ok(serde_json::json!({
+                        "totalCount": 2,
+                        "gameCount": 2,
+                        "totalBytes": 4096,
+                        "entries": [
+                            {
+                                "id": "sha-1",
+                                "gameID": "key",
+                                "speaker": "瑚太朗",
+                                "sourceText": "おはよう",
+                                "translatedText": "早上好",
+                                "providerName": "OpenAI",
+                                "providerKind": "openAIChat",
+                                "modelID": "gpt-5",
+                                "sourceLanguage": "ja",
+                                "targetLanguage": "zh-Hans",
+                                "hitCount": 3,
+                                "updatedAt": 1763200000.0
+                            },
+                            {
+                                "id": "sha-2",
+                                "gameID": "other-game",
+                                "speaker": null,
+                                "sourceText": "さようなら",
+                                "translatedText": "再见",
+                                "providerName": "DeepL",
+                                "providerKind": "deepL",
+                                "modelID": null,
+                                "sourceLanguage": "ja",
+                                "targetLanguage": "zh-Hans",
+                                "hitCount": 1,
+                                "updatedAt": 1763200100.0
+                            }
+                        ]
+                    })),
+                    &this.bridge,
+                    cx,
+                );
+                assert!(!this.translation_page.cache.loading);
+                assert!(this.translation_page.cache.loaded_once);
+                assert_eq!(this.translation_page.cache.total_count, 2);
+                assert_eq!(this.translation_page.cache.game_count, 2);
+                assert_eq!(this.translation_page.cache.total_bytes, 4096);
+                assert_eq!(this.translation_page.cache.entries.len(), 2);
+                assert_eq!(
+                    this.translation_page.cache.entries[0].speaker.as_deref(),
+                    Some("瑚太朗")
+                );
+
+                // Delete entry sha-1.
+                this.translation_page.delete_cache_entry(&this.bridge, "sha-1");
+                let del_calls = drain();
+                let del_call = del_calls
+                    .iter()
+                    .find(|(m, _)| m == "translation.cache/delete")
+                    .unwrap();
+                assert_eq!(del_call.1["id"], "sha-1");
+
+                let del_id = this
+                    .translation_page
+                    .pending
+                    .iter()
+                    .find(|(_, req)| req.method == "translation.cache/delete")
+                    .map(|(id, _)| *id)
+                    .unwrap();
+                this.translation_page.reply(
+                    del_id,
+                    "translation.cache/delete",
+                    Ok(serde_json::json!({
+                        "removed": true,
+                        "totalCount": 1,
+                        "totalBytes": 2048
+                    })),
+                    &this.bridge,
+                    cx,
+                );
+                assert_eq!(this.translation_page.cache.total_count, 1);
+                assert_eq!(this.translation_page.cache.total_bytes, 2048);
+                assert_eq!(this.translation_page.cache.entries.len(), 1);
+                assert_eq!(this.translation_page.cache.entries[0].id, "sha-2");
+
+                // Scoped clear for "other-game" removes sha-2.
+                this.translation_page
+                    .clear_cache(&this.bridge, Some("other-game".into()));
+                let clear_scoped_calls = drain();
+                let clear_scoped_call = clear_scoped_calls
+                    .iter()
+                    .find(|(m, _)| m == "translation.cache.clear")
+                    .unwrap();
+                assert_eq!(clear_scoped_call.1["gameID"], "other-game");
+
+                let clear_scoped_id = this
+                    .translation_page
+                    .pending
+                    .iter()
+                    .find(|(_, req)| req.method == "translation.cache.clear")
+                    .map(|(id, _)| *id)
+                    .unwrap();
+                this.translation_page.reply(
+                    clear_scoped_id,
+                    "translation.cache.clear",
+                    Ok(serde_json::json!({
+                        "cleared": true,
+                        "totalCount": 0,
+                        "totalBytes": 0
+                    })),
+                    &this.bridge,
+                    cx,
+                );
+                assert_eq!(this.translation_page.cache.total_count, 0);
+                assert_eq!(this.translation_page.cache.game_count, 0);
+                assert_eq!(this.translation_page.cache.total_bytes, 0);
+                assert!(this.translation_page.cache.entries.is_empty());
+
+                // Unscoped clear omits gameID.
+                this.translation_page.clear_cache(&this.bridge, None);
+                let clear_all_calls = drain();
+                let clear_all_call = clear_all_calls
+                    .iter()
+                    .find(|(m, _)| m == "translation.cache.clear")
+                    .unwrap();
+                assert!(clear_all_call.1.get("gameID").is_none());
+            })
+            .unwrap();
+    }
+
     fn test_provider(id: &str) -> ProviderDto {
         ProviderDto {
             id: id.into(),
@@ -1599,6 +2799,7 @@ mod tests {
             default_target_language: "en".into(),
             model_metadata: None,
             open_ai_chat_token_limit_field: "max_completion_tokens".into(),
+            thinking_level: default_thinking_level(),
             capabilities: ProviderCapabilities {
                 model_discovery: true,
                 context_discovery: true,
@@ -1623,8 +2824,8 @@ pub(crate) fn default_endpoint(kind: &str) -> &'static str {
 
 pub(crate) fn provider_kind_label(kind: &str) -> &str {
     match kind {
-        "openAIChat" => "OpenAI Chat",
-        "openAICompletions" => "OpenAI Completions",
+        "openAIChat" => "OpenAI Chat Completions",
+        "openAICompletions" => "OpenAI Legacy Completions",
         "ollama" => "Ollama（本地）",
         "deepL" => "DeepL",
         "anthropic" => "Anthropic",

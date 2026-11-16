@@ -189,7 +189,9 @@ private:
             FreeLibrary(library);
             return false;
         }
-        settings(100, 932, 10000, 1000, true);
+        // flushDelay = 0 flushes FULL_STRING hooks immediately instead of concatenating
+        // fast-forwarded dialogue lines across calls; debouncing is handled by the host bridge.
+        settings(0, 932, 10000, 1000, true);
         start(on_connect, on_disconnect, on_created, on_removed, on_text,
               on_info, on_insert, on_embed, on_i18n, on_game_info);
         // Do not unload a DLL whose worker threads may still invoke callbacks.
