@@ -19,16 +19,101 @@
 import Foundation
 import WhiskyCore
 
+/// Token-bucket + AIMD pacer shared by `SourceGatekeeper` and `YMGalClient`.
+struct AdaptiveTokenBucket: Sendable {
+    private static let progressiveCooldowns: [TimeInterval] = [2.0, 5.0, 12.0]
+    private static let maxCooldown: TimeInterval = 15.0
+    private static let maxAdaptiveInterval: TimeInterval = 4.0
+
+    let minInterval: TimeInterval
+    let burstCapacity: Int
+    private(set) var adaptiveInterval: TimeInterval
+    private(set) var consecutiveRateLimits = 0
+    private var tokens: Double
+    private var lastRefillAt: Date
+    private var lastRequestAt: Date?
+    private(set) var cooldownUntil: (date: Date, code: Int)?
+
+    init(minInterval: TimeInterval, burstCapacity: Int = 1) {
+        let clampedInterval = max(0, minInterval)
+        let clampedBurst = max(1, burstCapacity)
+        self.minInterval = clampedInterval
+        self.burstCapacity = clampedBurst
+        self.adaptiveInterval = clampedInterval
+        self.tokens = Double(clampedBurst)
+        self.lastRefillAt = Date()
+    }
+
+    mutating func clearExpiredCooldown(now: Date = Date()) -> (date: Date, code: Int)? {
+        guard let cooldown = cooldownUntil else { return nil }
+        if now < cooldown.date {
+            return cooldown
+        }
+        cooldownUntil = nil
+        return nil
+    }
+
+    mutating func nextWaitDuration(now: Date = Date()) -> TimeInterval {
+        guard adaptiveInterval > 0 else { return 0 }
+        if burstCapacity <= 1 {
+            guard let last = lastRequestAt else { return 0 }
+            let elapsed = now.timeIntervalSince(last)
+            return elapsed < adaptiveInterval ? (adaptiveInterval - elapsed) : 0
+        }
+        let elapsed = max(0, now.timeIntervalSince(lastRefillAt))
+        tokens = min(Double(burstCapacity), tokens + elapsed / adaptiveInterval)
+        lastRefillAt = now
+        if tokens >= 1.0 {
+            tokens -= 1.0
+            return 0
+        }
+        let wait = (1.0 - tokens) * adaptiveInterval
+        tokens = 0
+        lastRefillAt = now.addingTimeInterval(wait)
+        return wait
+    }
+
+    mutating func markRequestFinished() {
+        lastRequestAt = Date()
+    }
+
+    mutating func recordSuccess() {
+        consecutiveRateLimits = 0
+        adaptiveInterval = max(minInterval, adaptiveInterval * 0.8)
+    }
+
+    mutating func recordRateLimit(_ code: Int, retryAfter: TimeInterval?) {
+        if let retryAfter {
+            if retryAfter > 0 {
+                let until = Date().addingTimeInterval(retryAfter)
+                cooldownUntil = (until, code)
+                tokens = 0
+                lastRefillAt = until
+            }
+            return
+        }
+        guard minInterval > 0 else { return }
+        consecutiveRateLimits += 1
+        let index = min(consecutiveRateLimits - 1, Self.progressiveCooldowns.count - 1)
+        let delay = min(Self.maxCooldown, Self.progressiveCooldowns[index])
+        let until = Date().addingTimeInterval(delay)
+        cooldownUntil = (until, code)
+        adaptiveInterval = min(Self.maxAdaptiveInterval, max(adaptiveInterval * 2.0, 0.5))
+        tokens = 0
+        lastRefillAt = until
+    }
+}
+
 /// Serializes requests per source, caches recent queries/details, paces burst traffic,
 /// and honors HTTP 429/503 Retry-After cooldowns so batch syncs do not hammer sites.
 public actor SourceGatekeeper {
-    private static let bangumi = SourceGatekeeper(minInterval: 0.25)
-    private static let vndb = SourceGatekeeper(minInterval: 0.25)
-    private static let steam = SourceGatekeeper(minInterval: 0.25)
+    private static let bangumi = SourceGatekeeper(minInterval: 0.10, burstCapacity: 3)
+    private static let vndb = SourceGatekeeper(minInterval: 0.12, burstCapacity: 3)
+    private static let steam = SourceGatekeeper(minInterval: 0.15, burstCapacity: 2)
     private static let fallback = SourceGatekeeper(minInterval: 0)
-    private static let bangumiTransport = SourceGatekeeper(minInterval: 0.25)
-    private static let vndbTransport = SourceGatekeeper(minInterval: 0.25)
-    private static let steamTransport = SourceGatekeeper(minInterval: 0.25)
+    private static let bangumiTransport = SourceGatekeeper(minInterval: 0)
+    private static let vndbTransport = SourceGatekeeper(minInterval: 0)
+    private static let steamTransport = SourceGatekeeper(minInterval: 0)
     private static let fallbackTransport = SourceGatekeeper(minInterval: 0)
 
     static func shared(for source: GameMetadataSource) -> SourceGatekeeper {
@@ -49,18 +134,28 @@ public actor SourceGatekeeper {
         }
     }
 
-    private let minInterval: TimeInterval
+    private var pacer: AdaptiveTokenBucket
     private var busy = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
     private var searches: [String: (Date, [GameMetadata])] = [:]
     private var gameDetails: [String: (Date, GameMetadata)] = [:]
     private var characterResults: [String: (Date, [GameCharacter])] = [:]
     private var characterFailures: [String: (Date, Error)] = [:]
-    private var lastRequestAt: Date?
-    private var cooldownUntil: (date: Date, code: Int)?
 
-    public init(minInterval: TimeInterval) {
-        self.minInterval = minInterval
+    var adaptiveInterval: TimeInterval {
+        pacer.adaptiveInterval
+    }
+
+    var consecutiveRateLimits: Int {
+        pacer.consecutiveRateLimits
+    }
+
+    var cooldownDate: Date? {
+        pacer.cooldownUntil?.date
+    }
+
+    public init(minInterval: TimeInterval, burstCapacity: Int = 1) {
+        self.pacer = AdaptiveTokenBucket(minInterval: minInterval, burstCapacity: burstCapacity)
     }
 
     private func acquire() async throws {
@@ -83,24 +178,12 @@ public actor SourceGatekeeper {
     }
 
     private func paceAndCheckCooldown() async throws {
-        if let cooldown = cooldownUntil {
-            if Date() < cooldown.date {
-                throw ProviderError.http(cooldown.code)
-            }
-            cooldownUntil = nil
+        if let cooldown = pacer.clearExpiredCooldown() {
+            throw ProviderError.http(cooldown.code)
         }
-        if minInterval > 0, let last = lastRequestAt {
-            let elapsed = Date().timeIntervalSince(last)
-            if elapsed < minInterval {
-                try await Task.sleep(for: .milliseconds(Int((minInterval - elapsed) * 1_000)))
-            }
-        }
-    }
-
-    private func recordRateLimit(_ code: Int, retryAfter: TimeInterval?) {
-        let delay = retryAfter ?? (minInterval > 0 ? 15.0 : 0)
+        let delay = pacer.nextWaitDuration()
         if delay > 0 {
-            cooldownUntil = (Date().addingTimeInterval(delay), code)
+            try await Task.sleep(for: .milliseconds(Int((delay * 1_000).rounded(.up))))
         }
     }
 
@@ -115,13 +198,14 @@ public actor SourceGatekeeper {
             return cached.1
         }
         try await paceAndCheckCooldown()
-        defer { lastRequestAt = Date() }
+        defer { pacer.markRequestFinished() }
         do {
             let results = try await operation()
+            pacer.recordSuccess()
             Self.insertCache(results, forKey: key, into: &searches, ttl: 300, limit: 64)
             return results
         } catch let ProviderError.rateLimited(code, retryAfter) {
-            recordRateLimit(code, retryAfter: retryAfter)
+            pacer.recordRateLimit(code, retryAfter: retryAfter)
             throw ProviderError.http(code)
         }
     }
@@ -137,28 +221,33 @@ public actor SourceGatekeeper {
             return cached.1
         }
         try await paceAndCheckCooldown()
-        defer { lastRequestAt = Date() }
+        defer { pacer.markRequestFinished() }
         do {
             let result = try await operation()
+            pacer.recordSuccess()
             Self.insertCache(result, forKey: id, into: &gameDetails, ttl: 600, limit: 100)
             return result
         } catch let ProviderError.rateLimited(code, retryAfter) {
-            recordRateLimit(code, retryAfter: retryAfter)
+            pacer.recordRateLimit(code, retryAfter: retryAfter)
             throw ProviderError.http(code)
         }
     }
 
     /// A serialized, paced operation whose result belongs to the caller's local store.
+    /// Rethrows `ProviderError.rateLimited` after recording local cooldown so outer
+    /// gatekeepers can apply AIMD backoff as well.
     public func paced<T: Sendable>(operation: @Sendable () async throws -> T) async throws -> T {
         try await acquire()
         defer { release() }
         try await paceAndCheckCooldown()
-        defer { lastRequestAt = Date() }
+        defer { pacer.markRequestFinished() }
         do {
-            return try await operation()
+            let result = try await operation()
+            pacer.recordSuccess()
+            return result
         } catch let ProviderError.rateLimited(code, retryAfter) {
-            recordRateLimit(code, retryAfter: retryAfter)
-            throw ProviderError.http(code)
+            pacer.recordRateLimit(code, retryAfter: retryAfter)
+            throw ProviderError.rateLimited(code, retryAfter: retryAfter)
         }
     }
 
@@ -175,14 +264,15 @@ public actor SourceGatekeeper {
             throw failed.1
         }
         try await paceAndCheckCooldown()
-        defer { lastRequestAt = Date() }
+        defer { pacer.markRequestFinished() }
         do {
             let result = try await operation()
+            pacer.recordSuccess()
             Self.insertCache(result, forKey: id, into: &characterResults, ttl: 600, limit: 100)
             characterFailures[id] = nil
             return result
         } catch let ProviderError.rateLimited(code, retryAfter) {
-            recordRateLimit(code, retryAfter: retryAfter)
+            pacer.recordRateLimit(code, retryAfter: retryAfter)
             throw ProviderError.http(code)
         } catch {
             if !Task.isCancelled {

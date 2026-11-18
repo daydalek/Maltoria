@@ -24,7 +24,7 @@ import FoundationNetworking
 
 /// Public catalog reads use anonymous access. No application secret ships in the desktop bundle.
 public struct NextMoeProvider: Sendable {
-    private static let requestGate = SourceGatekeeper(minInterval: 2.1)
+    private static let requestGate = SourceGatekeeper(minInterval: 0.8, burstCapacity: 1)
     let session: URLSession
     let networkAccess: MetadataNetworkAccess
 
@@ -43,7 +43,9 @@ public struct NextMoeProvider: Sendable {
     public func details(_ candidate: GameMetadata, includeCharacters: Bool = true) async throws -> GameMetadata {
         guard candidate.source == .nextmoe, Self.validID(candidate.sourceID) else { throw URLError(.badURL) }
         var includes = "titles,intros,companies"
-        if includeCharacters { includes += ",characters" }
+        if includeCharacters {
+            includes += ",characters"
+        }
         let work: Work = try await get("works/\(candidate.sourceID)", ["include": includes])
         return work.metadata()
     }
@@ -73,7 +75,7 @@ public struct NextMoeProvider: Sendable {
                     throw ProviderError.rateLimited(
                         http.statusCode,
                         retryAfter:
-                        PublicGameMetadataProvider.parseRetryAfter(http.value(forHTTPHeaderField: "Retry-After")) ?? 60
+                        PublicGameMetadataProvider.parseRetryAfter(http.value(forHTTPHeaderField: "Retry-After")) ?? 5
                     )
                 }
                 throw ProviderError.http(http.statusCode)
@@ -81,7 +83,9 @@ public struct NextMoeProvider: Sendable {
             try Task.checkCancellation()
             return try JSONDecoder().decode(T.self, from: data)
         }
-        if session === URLSession.shared { return try await Self.requestGate.paced(operation: operation) }
+        if session === URLSession.shared {
+            return try await Self.requestGate.paced(operation: operation)
+        }
         return try await operation()
     }
 }

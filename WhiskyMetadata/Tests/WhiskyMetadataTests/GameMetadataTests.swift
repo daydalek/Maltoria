@@ -294,6 +294,213 @@ struct GameMetadataTests {
         #expect(detail.title == "Recovered Detail")
         #expect(detailStart.duration(to: clock.now) >= .milliseconds(140))
     }
+
+    @Test func steamExtractsAlternateTitlesFromBilingualSeparators() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [BilingualMetadataProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let provider = PublicGameMetadataProvider(source: .steam, session: session)
+        let games = try await provider.search("千恋＊万花")
+        #expect(games.count == 4)
+        let senren = try #require(games.first { $0.sourceID == "1144400" })
+        #expect(senren.alternateTitles == ["Senren＊Banka", "千恋＊万花"])
+        let nekopara = try #require(games.first { $0.sourceID == "1144401" })
+        #expect(nekopara.alternateTitles == ["NEKOPARA Vol. 1", "ネコぱら Vol.1"])
+        #expect(games.first { $0.sourceID == "999" }?.alternateTitles == nil)
+        #expect(games.first { $0.sourceID == "998" }?.alternateTitles == nil)
+
+        let result = GameMetadataSearchResult(source: .steam, games: games)
+        #expect(FolderGameMatching.candidate(
+            query: "千恋＊万花", results: [result], sources: [.steam]
+        ) == senren)
+        #expect(FolderGameMatching.candidate(
+            query: "Senren＊Banka", results: [result], sources: [.steam]
+        ) == senren)
+    }
+
+    @Test func ymgalDecodesExtensionNameStringsObjectsAndUnknownValues() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [BilingualMetadataProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let provider = PublicGameMetadataProvider(source: .ymgal, session: session)
+
+        let stringGames = try await provider.search("string-aliases")
+        let senren = try #require(stringGames.first)
+        #expect(senren.alternateTitles == ["Senren*Banka", "千恋万花"])
+        let stringResult = GameMetadataSearchResult(source: .ymgal, games: stringGames)
+        #expect(FolderGameMatching.candidate(
+            query: "Senren*Banka", results: [stringResult], sources: [.ymgal]
+        ) == senren)
+
+        let objectGames = try await provider.search("object-aliases")
+        let sakura = try #require(objectGames.first { $0.sourceID == "202" })
+        #expect(sakura.alternateTitles == ["Cherry Blossom Poem", "Sakura no Uta", "櫻之詩"])
+        #expect(objectGames.first { $0.sourceID == "203" }?.alternateTitles == nil)
+        let objectResult = GameMetadataSearchResult(source: .ymgal, games: objectGames)
+        for alias in ["Sakura no Uta", "Cherry Blossom Poem", "樱之诗", "サクラノ詩"] {
+            #expect(FolderGameMatching.candidate(
+                query: alias, results: [objectResult], sources: [.ymgal]
+            ) == sakura)
+        }
+        let detail = try await provider.details(for: sakura)
+        #expect(detail.alternateTitles == ["Sakura no Uta -Detail-"])
+    }
+
+    @Test func usingLibraryTitleCleansBrandAndBilingualSuffixes() {
+        let game = GameMetadata(
+            source: .vndb,
+            sourceID: "v101",
+            title: "Sakura no Uta",
+            originalTitle: "サクラノ詩",
+            titleLanguage: "en"
+        )
+        let cleaned = game.usingLibraryTitle("[Makura] 樱之诗（サクラノ詩） 汉化版 v1.0")
+        #expect(cleaned.title == "樱之诗")
+        #expect(cleaned.originalTitle == "サクラノ詩")
+        #expect(cleaned.alternateTitles?.contains("Sakura no Uta") == true)
+
+        let parenthetical = game.usingLibraryTitle("[Key] 夏日口袋 (Summer Pockets) 官方中文版")
+        #expect(parenthetical.title == "夏日口袋")
+    }
+
+    @Test func automaticMatchQueriesFastSourcesConcurrentlyAndFallsBackToSingleNextMoeQuery() async {
+        let barrier = FastSourceBarrier(targetCount: 2)
+        let preferred = BarrierQueryProvider(source: .bangumi, games: [])
+        let vndb = BarrierQueryProvider(source: .vndb, games: [], barrier: barrier)
+        let steam = BarrierQueryProvider(
+            source: .steam,
+            games: [GameMetadata(source: .steam, sourceID: "777", title: "CLANNAD")],
+            barrier: barrier
+        )
+        let nextmoe = BarrierQueryProvider(
+            source: .nextmoe,
+            games: [GameMetadata(source: .nextmoe, sourceID: "9", title: "CLANNAD")]
+        )
+        let hitOutcome = await GameMetadataSearch.automaticMatch(
+            "CLANNAD",
+            providers: [preferred, vndb, steam, nextmoe]
+        )
+        #expect(hitOutcome.candidate?.source == .steam)
+        #expect(await barrier.peakConcurrent == 2)
+        #expect(await nextmoe.queries.isEmpty)
+
+        // When all fast sources miss on a bilingual name, NextMoe runs once with the cleaner query.
+        let bangumiMiss = BarrierQueryProvider(source: .bangumi, games: [])
+        let vndbMiss = BarrierQueryProvider(source: .vndb, games: [])
+        let nextMoeFallback = BarrierQueryProvider(
+            source: .nextmoe,
+            games: [GameMetadata(source: .nextmoe, sourceID: "12", title: "樱之诗")]
+        )
+        let fallbackOutcome = await GameMetadataSearch.automaticMatch(
+            "樱之诗（サクラノ詩）",
+            providers: [bangumiMiss, vndbMiss, nextMoeFallback]
+        )
+        #expect(fallbackOutcome.candidate?.source == .nextmoe)
+        #expect(await nextMoeFallback.queries == ["樱之诗"])
+    }
+
+    @Test func sourceGatekeeperTokenBucketBurstAndAdaptiveAIMDRecovery() async throws {
+        let gatekeeper = SourceGatekeeper(minInterval: 0.08, burstCapacity: 3)
+        let clock = ContinuousClock()
+        let burstStart = clock.now
+        for idx in 0 ..< 3 {
+            _ = try await gatekeeper.search("burst-\(idx)") { [] }
+        }
+        #expect(burstStart.duration(to: clock.now) < .milliseconds(50))
+
+        let fourthStart = clock.now
+        _ = try await gatekeeper.search("fourth") { [] }
+        #expect(fourthStart.duration(to: clock.now) >= .milliseconds(50))
+
+        do {
+            _ = try await gatekeeper.search("rate-limit-hit") {
+                throw ProviderError.rateLimited(429, retryAfter: nil)
+            }
+            Issue.record("Expected HTTP 429")
+        } catch let ProviderError.http(code) {
+            #expect(code == 429)
+        }
+        #expect(await gatekeeper.consecutiveRateLimits == 1)
+        #expect(await gatekeeper.adaptiveInterval == 0.5)
+        let cooldown = try #require(await gatekeeper.cooldownDate)
+        let remaining = cooldown.timeIntervalSinceNow
+        #expect(remaining > 1.0 && remaining <= 2.2)
+
+        await #expect(throws: ProviderError.self) {
+            _ = try await gatekeeper.search("during-cooldown") { [] }
+        }
+
+        // Verify progressive cooldown escalation (2s -> 5s -> 12s) and AIMD decay on 2xx success.
+        var bucket = AdaptiveTokenBucket(minInterval: 0.10, burstCapacity: 3)
+        bucket.recordRateLimit(429, retryAfter: nil)
+        #expect(bucket.consecutiveRateLimits == 1)
+        #expect(bucket.adaptiveInterval == 0.5)
+        #expect((bucket.cooldownUntil?.date.timeIntervalSinceNow ?? 0) <= 2.2)
+
+        bucket.recordRateLimit(429, retryAfter: nil)
+        #expect(bucket.consecutiveRateLimits == 2)
+        #expect(bucket.adaptiveInterval == 1.0)
+        #expect((bucket.cooldownUntil?.date.timeIntervalSinceNow ?? 0) > 4.0)
+
+        bucket.recordRateLimit(429, retryAfter: nil)
+        #expect(bucket.consecutiveRateLimits == 3)
+        #expect(bucket.adaptiveInterval == 2.0)
+        #expect((bucket.cooldownUntil?.date.timeIntervalSinceNow ?? 0) > 10.5)
+
+        bucket.recordSuccess()
+        #expect(bucket.consecutiveRateLimits == 0)
+        #expect(bucket.adaptiveInterval == 1.6)
+        for _ in 0 ..< 16 {
+            bucket.recordSuccess()
+        }
+        #expect(bucket.adaptiveInterval == 0.10)
+    }
+}
+
+private actor FastSourceBarrier {
+    private let targetCount: Int
+    private var active = 0
+    private(set) var peakConcurrent = 0
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    init(targetCount: Int) {
+        self.targetCount = targetCount
+    }
+
+    func enterAndWait() async {
+        active += 1
+        peakConcurrent = max(peakConcurrent, active)
+        if active >= targetCount {
+            let pending = waiters
+            waiters.removeAll()
+            pending.forEach { $0.resume() }
+        } else {
+            await withCheckedContinuation { waiters.append($0) }
+        }
+    }
+}
+
+private actor BarrierQueryProvider: GameMetadataProvider {
+    nonisolated let source: GameMetadataSource
+    private let games: [GameMetadata]
+    private let barrier: FastSourceBarrier?
+    private(set) var queries: [String] = []
+
+    init(source: GameMetadataSource, games: [GameMetadata], barrier: FastSourceBarrier? = nil) {
+        self.source = source
+        self.games = games
+        self.barrier = barrier
+    }
+
+    func search(_ query: String) async throws -> [GameMetadata] {
+        queries.append(query)
+        if let barrier {
+            await barrier.enterAndWait()
+        }
+        return games
+    }
 }
 
 private actor CountingProvider: GameMetadataProvider {
@@ -535,15 +742,22 @@ extension PublicGameMetadataProvider {
 }
 
 extension GameMetadataStore {
-    init(directory: URL) { self.init(directory: directory, networkAccess: {}) }
+    init(directory: URL) {
+        self.init(directory: directory, networkAccess: {})
+    }
 }
 
 private class CharacterTimeoutProtocol: URLProtocol {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var attempts: [String: Int] = [:]
 
-    override class func canInit(with request: URLRequest) -> Bool { true }
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override class func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
 
     override func startLoading() {
         guard let url = request.url else { return }
@@ -570,4 +784,83 @@ private class CharacterTimeoutProtocol: URLProtocol {
     }
 
     override func stopLoading() {}
+}
+
+private final class BilingualMetadataProtocol: URLProtocol {
+    override static func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    override static func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let url = request.url,
+              let response = HTTPURLResponse(
+                  url: url, statusCode: 200, httpVersion: nil,
+                  headerFields: ["Content-Type": "application/json"]
+              )
+        else { return }
+        let body = responseBody(for: url)
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(body.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+
+    private func responseBody(for url: URL) -> String {
+        if url.host == "www.ymgal.games" {
+            return ymgalBody(for: url)
+        }
+        return #"""
+        {"items":[
+            {"id":1144400,"name":"Senren＊Banka / 千恋＊万花"},
+            {"id":1144401,"name":"NEKOPARA Vol. 1 | ネコぱら Vol.1"},
+            {"id":999,"name":"Fate/stay night"},
+            {"id":998,"name":"Clannad"}
+        ]}
+        """#
+    }
+
+    private func ymgalBody(for url: URL) -> String {
+        if url.path == "/oauth/token" {
+            return #"{"access_token":"fixture-token"}"#
+        }
+        if url.path == "/open/archive" {
+            return #"""
+            {"success":true,"code":0,"data":{"game":{
+                "gid":202,"name":"サクラノ詩","chineseName":"樱之诗",
+                "extensionName":[{"title":"Sakura no Uta -Detail-"},{"other":true}]
+            }}}
+            """#
+        }
+        let keyword = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first { $0.name == "keyword" }?.value
+        if keyword == "string-aliases" {
+            return #"""
+            {"success":true,"code":0,"data":{"result":[{
+                "id":201,"name":"千恋＊万花","chineseName":"千恋＊万花",
+                "extensionName":["Senren*Banka","  千恋万花  ","Senren*Banka"," ","千恋＊万花"]
+            }]}}
+            """#
+        }
+        return #"""
+        {"success":true,"code":0,"data":{"result":[
+            {
+                "id":"202","name":"サクラノ詩","chineseName":"樱之诗",
+                "extensionName":[
+                    {"name":"Sakura no Uta"},
+                    {"extensionName":"櫻之詩"},
+                    {"title":"Cherry Blossom Poem"},
+                    {"unknown":123},
+                    42,
+                    null
+                ]
+            },
+            {"id":"203","name":"Null Aliases","extensionName":null}
+        ]}}
+        """#
+    }
 }

@@ -25,8 +25,7 @@ import FoundationNetworking
 extension PublicGameMetadataProvider {
     public func fetchCharacters(for candidate: GameMetadata) async throws -> [GameCharacter] {
         try await networkAccess()
-        guard candidate.source == source else { return [] }
-        guard source == .vndb || source == .bangumi else { return [] }
+        guard candidate.source == source, source == .vndb || source == .bangumi else { return [] }
         let sourceID = candidate.sourceID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return try await gatekeeper.characters(sourceID) {
             try await fetchCharactersWithRetry {
@@ -69,20 +68,28 @@ extension PublicGameMetadataProvider {
         }
         let preparedRequest = request
         let data = try await transportGate.paced {
-            try await networkAccess()
-            let (data, response) = try await session.data(for: preparedRequest)
-            guard let response = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
-            guard (200 ..< 300).contains(response.statusCode) else {
+            for attempt in 0 ..< 2 {
+                try await networkAccess()
+                let (data, response) = try await session.data(for: preparedRequest)
+                guard let response = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+                if (200 ..< 300).contains(response.statusCode) {
+                    try Task.checkCancellation()
+                    return data
+                }
                 if response.statusCode == 429 || response.statusCode == 503 {
-                    throw ProviderError.rateLimited(
-                        response.statusCode,
-                        retryAfter: Self.parseRetryAfter(response.value(forHTTPHeaderField: "Retry-After"))
-                    )
+                    let retryAfter = Self.parseRetryAfter(response.value(forHTTPHeaderField: "Retry-After"))
+                    if attempt == 0, (retryAfter ?? 0) <= 2.5 {
+                        let delay = retryAfter ?? 1.2
+                        try Task.checkCancellation()
+                        try await Task.sleep(for: .milliseconds(Int((delay * 1_000).rounded(.up))))
+                        try Task.checkCancellation()
+                        continue
+                    }
+                    throw ProviderError.rateLimited(response.statusCode, retryAfter: retryAfter)
                 }
                 throw ProviderError.http(response.statusCode)
             }
-            try Task.checkCancellation()
-            return data
+            throw URLError(.badServerResponse)
         }
         return try JSONDecoder().decode(type, from: data)
     }

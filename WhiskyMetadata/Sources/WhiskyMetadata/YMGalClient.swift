@@ -25,20 +25,18 @@ import FoundationNetworking
 /// One request at a time across the app, including token refresh. The public
 /// client is published at https://www.ymgal.games/developer (non-commercial use).
 actor YMGalClient {
-    static let shared = YMGalClient(session: .shared, minInterval: 0.25)
+    static let shared = YMGalClient(session: .shared, minInterval: 0.10, burstCapacity: 3)
     private let session: URLSession
-    private let minInterval: TimeInterval
+    private var pacer: AdaptiveTokenBucket
     private var token: String?
     private var busy = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
     private var searches: [String: (Date, [GameMetadata])] = [:]
     private var games: [String: (Date, GameMetadata)] = [:]
-    private var lastRequestAt: Date?
-    private var cooldownUntil: (date: Date, code: Int)?
 
-    init(session: URLSession, minInterval: TimeInterval = 0) {
+    init(session: URLSession, minInterval: TimeInterval = 0, burstCapacity: Int = 1) {
         self.session = session
-        self.minInterval = minInterval
+        self.pacer = AdaptiveTokenBucket(minInterval: minInterval, burstCapacity: burstCapacity)
     }
 
     private func acquire() async throws {
@@ -103,11 +101,8 @@ actor YMGalClient {
         parameters: [String: String],
         networkAccess: @escaping MetadataNetworkAccess
     ) async throws -> T {
-        if let cooldown = cooldownUntil {
-            if Date() < cooldown.date {
-                throw YMGalError(code: cooldown.code, message: "请求过于频繁，请稍后重试")
-            }
-            cooldownUntil = nil
+        if let cooldown = pacer.clearExpiredCooldown() {
+            throw YMGalError(code: cooldown.code, message: "请求过于频繁，请稍后重试")
         }
         for attempt in 0 ..< 2 {
             if token == nil {
@@ -126,8 +121,8 @@ actor YMGalClient {
                     networkAccess: networkAccess
                 )
                 guard response.success, response.code == 0 else {
-                    if response.code == 429, minInterval > 0 {
-                        cooldownUntil = (Date().addingTimeInterval(15), 429)
+                    if response.code == 429 {
+                        pacer.recordRateLimit(429, retryAfter: nil)
                     }
                     throw YMGalError(code: response.code, message: response.msg ?? "请求失败")
                 }
@@ -154,13 +149,44 @@ actor YMGalClient {
         authenticated: Bool,
         networkAccess: @escaping MetadataNetworkAccess
     ) async throws -> T {
-        try Task.checkCancellation()
-        if minInterval > 0, let last = lastRequestAt {
-            let elapsed = Date().timeIntervalSince(last)
-            if elapsed < minInterval {
-                try await Task.sleep(for: .milliseconds(Int((minInterval - elapsed) * 1_000)))
+        let request = try makeRequest(path: path, parameters: parameters, authenticated: authenticated)
+        for attempt in 0 ..< 2 {
+            try Task.checkCancellation()
+            let wait = pacer.nextWaitDuration()
+            if wait > 0 {
+                try await Task.sleep(for: .milliseconds(Int((wait * 1_000).rounded(.up))))
             }
+            defer { pacer.markRequestFinished() }
+            try await networkAccess()
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+            if (200 ..< 300).contains(http.statusCode) {
+                pacer.recordSuccess()
+                try Task.checkCancellation()
+                return try JSONDecoder().decode(T.self, from: data)
+            }
+            if http.statusCode == 429 || http.statusCode == 503 {
+                let retryAfter = PublicGameMetadataProvider.parseRetryAfter(
+                    http.value(forHTTPHeaderField: "Retry-After")
+                )
+                if attempt == 0, (retryAfter ?? 0) <= 2.5 {
+                    let delay = retryAfter ?? 1.2
+                    try Task.checkCancellation()
+                    try await Task.sleep(for: .milliseconds(Int((delay * 1_000).rounded(.up))))
+                    continue
+                }
+                pacer.recordRateLimit(http.statusCode, retryAfter: retryAfter)
+            }
+            throw ProviderError.http(http.statusCode)
         }
+        throw URLError(.badServerResponse)
+    }
+
+    private func makeRequest(
+        path: String,
+        parameters: [String: String],
+        authenticated: Bool
+    ) throws -> URLRequest {
         guard var url = URLComponents(string: "https://www.ymgal.games" + path) else {
             throw URLError(.badURL)
         }
@@ -173,23 +199,7 @@ actor YMGalClient {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             request.setValue("1", forHTTPHeaderField: "version")
         }
-        defer { lastRequestAt = Date() }
-        try await networkAccess()
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
-        guard (200 ..< 300).contains(http.statusCode) else {
-            if http.statusCode == 429 || http.statusCode == 503 {
-                let retryAfter = PublicGameMetadataProvider.parseRetryAfter(
-                    http.value(forHTTPHeaderField: "Retry-After")
-                ) ?? (minInterval > 0 ? 15.0 : 0)
-                if retryAfter > 0 {
-                    cooldownUntil = (Date().addingTimeInterval(retryAfter), http.statusCode)
-                }
-            }
-            throw ProviderError.http(http.statusCode)
-        }
-        try Task.checkCancellation()
-        return try JSONDecoder().decode(T.self, from: data)
+        return request
     }
 }
 
@@ -223,10 +233,41 @@ private struct YmgalIdentifier: Decodable {
     }
 }
 
+/// Resiliently decode YMGal `extensionName` entries across string and object shapes.
+private struct YmgalExtensionName: Decodable {
+    let value: String?
+
+    enum CodingKeys: String, CodingKey {
+        case name, extensionName, title
+    }
+
+    init(from decoder: Decoder) throws {
+        if let container = try? decoder.container(keyedBy: CodingKeys.self) {
+            let candidates = [
+                try? container.decodeIfPresent(String.self, forKey: .name),
+                try? container.decodeIfPresent(String.self, forKey: .extensionName),
+                try? container.decodeIfPresent(String.self, forKey: .title)
+            ]
+            value = candidates
+                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .first { !$0.isEmpty }
+            return
+        }
+        if let single = try? decoder.singleValueContainer(),
+           let string = try? single.decode(String.self) {
+            let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+            value = trimmed.isEmpty ? nil : trimmed
+            return
+        }
+        value = nil
+    }
+}
+
 private struct YmgalGame: Decodable {
     let id: YmgalIdentifier?
     let name: String
     let chineseName: String?
+    let extensionName: [YmgalExtensionName]?
     let introduction: String?
     let mainImg: String?
     let orgName: String?
@@ -234,12 +275,19 @@ private struct YmgalGame: Decodable {
 
     func metadata(id fallback: String = "") -> GameMetadata {
         let identifier = id?.value ?? fallback
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedChinese = chineseName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let original = trimmedName.isEmpty ? name : trimmedName
+        let primaryTitle = (trimmedChinese?.isEmpty == false ? trimmedChinese : nil) ?? original
+        let aliases = Set((extensionName ?? []).compactMap(\.value))
+            .subtracting([primaryTitle, original])
         return GameMetadata(
             source: .ymgal, sourceID: identifier,
-            title: (chineseName?.isEmpty == false ? chineseName : nil) ?? name,
-            originalTitle: name, summary: introduction ?? "", developer: orgName ?? "",
+            title: primaryTitle,
+            originalTitle: original, summary: introduction ?? "", developer: orgName ?? "",
             releaseDate: releaseDate ?? "", coverURL: mainImg.flatMap(URL.init(string:)),
-            pageURL: URL(string: "https://www.ymgal.games/ga\(identifier)")
+            pageURL: URL(string: "https://www.ymgal.games/ga\(identifier)"),
+            alternateTitles: aliases.isEmpty ? nil : aliases.sorted()
         )
     }
 }

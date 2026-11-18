@@ -101,8 +101,26 @@ extension PublicGameMetadataProvider {
                 source: .steam, sourceID: String(game.id), title: game.name,
                 coverURL: URL(string: "https://cdn.akamai.steamstatic.com/steam/apps/\(game.id)/library_600x900.jpg"),
                 thumbnailURL: game.tinyImage,
-                pageURL: URL(string: "https://store.steampowered.com/app/\(game.id)")
+                pageURL: URL(string: "https://store.steampowered.com/app/\(game.id)"),
+                alternateTitles: Self.steamAlternateTitles(for: game.name)
             )
         }
+    }
+
+    private static let steamTitleSeparators = [" // ", " / ", " ／ ", " | ", " ｜ "]
+
+    /// Extract individual language titles from bilingual Steam listing names.
+    private static func steamAlternateTitles(for name: String) -> [String]? {
+        var parts = [name]
+        for separator in steamTitleSeparators {
+            parts = parts.flatMap { $0.components(separatedBy: separator) }
+        }
+        let cleaned = parts
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard cleaned.count >= 2 else { return nil }
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let aliases = Set(cleaned.filter { $0 != name && $0 != trimmedName }).sorted()
+        return aliases.isEmpty ? nil : aliases
     }
 }

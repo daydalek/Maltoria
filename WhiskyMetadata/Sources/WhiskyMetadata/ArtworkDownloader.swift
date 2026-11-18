@@ -29,7 +29,7 @@ struct ArtworkDownloadRecord {
 
 struct ArtworkRateLimitError: Error, Sendable {
     let statusCode: Int
-    let retryAfter: TimeInterval
+    let retryAfter: TimeInterval?
 }
 
 struct ArtworkHostCooldown: Sendable {
@@ -38,15 +38,17 @@ struct ArtworkHostCooldown: Sendable {
 }
 
 actor ArtworkTransportLimiter {
-    static let shared = ArtworkTransportLimiter(minInterval: 0.25)
+    static let shared = ArtworkTransportLimiter(minInterval: 0.05)
 
     private static let maximumTrackedHosts = 256
+    private static let progressiveCooldowns: [TimeInterval] = [2.0, 5.0, 12.0]
 
     private let minInterval: TimeInterval
     private var active = 0
     private var waiters: [CheckedContinuation<Void, Never>] = []
     private var nextRequestAt: [String: Date] = [:]
     private var hostCooldowns: [String: ArtworkHostCooldown] = [:]
+    private var rateLimitStrikes: [String: Int] = [:]
     private var activeHosts: [String: Int] = [:]
 
     init(minInterval: TimeInterval) {
@@ -71,21 +73,32 @@ actor ArtworkTransportLimiter {
         try await acquire()
         defer { release() }
         try enforceCooldown(for: host)
-        let now = Date()
-        let start = max(now, nextRequestAt[host] ?? now)
-        nextRequestAt[host] = start.addingTimeInterval(minInterval)
-        let delay = start.timeIntervalSince(now)
-        if delay > 0 {
-            try await Task.sleep(for: .seconds(delay))
+        for attempt in 0 ..< 2 {
+            let now = Date()
+            let start = max(now, nextRequestAt[host] ?? now)
+            nextRequestAt[host] = start.addingTimeInterval(minInterval)
+            let delay = start.timeIntervalSince(now)
+            if delay > 0 {
+                try await Task.sleep(for: .seconds(delay))
+            }
+            try Task.checkCancellation()
+            try enforceCooldown(for: host)
+            do {
+                let data = try await operation()
+                decayStrikes(for: host)
+                return data
+            } catch let error as ArtworkRateLimitError {
+                if attempt == 0, (error.retryAfter ?? 0) <= 2.5 {
+                    let backoff = error.retryAfter ?? 1.0
+                    try await Task.sleep(for: .milliseconds(Int((backoff * 1_000).rounded(.up))))
+                    try Task.checkCancellation()
+                    continue
+                }
+                extendCooldown(for: host, with: error)
+                throw error
+            }
         }
-        try Task.checkCancellation()
-        try enforceCooldown(for: host)
-        do {
-            return try await operation()
-        } catch let error as ArtworkRateLimitError {
-            extendCooldown(for: host, with: error)
-            throw error
-        }
+        throw URLError(.badServerResponse)
     }
 
     private func enforceCooldown(for host: String) throws {
@@ -98,8 +111,27 @@ actor ArtworkTransportLimiter {
         throw ArtworkRateLimitError(statusCode: cooldown.statusCode, retryAfter: retryAfter)
     }
 
+    private func decayStrikes(for host: String) {
+        guard let strikes = rateLimitStrikes[host] else { return }
+        if strikes <= 1 {
+            rateLimitStrikes[host] = nil
+        } else {
+            rateLimitStrikes[host] = strikes - 1
+        }
+    }
+
     private func extendCooldown(for host: String, with error: ArtworkRateLimitError) {
-        let until = Date().addingTimeInterval(max(30, error.retryAfter))
+        let duration: TimeInterval
+        if let retryAfter = error.retryAfter {
+            duration = retryAfter
+        } else {
+            let strike = rateLimitStrikes[host, default: 0] + 1
+            rateLimitStrikes[host] = strike
+            let index = min(strike - 1, Self.progressiveCooldowns.count - 1)
+            duration = min(15.0, Self.progressiveCooldowns[index])
+        }
+        guard duration > 0 else { return }
+        let until = Date().addingTimeInterval(duration)
         guard hostCooldowns[host].map({ $0.until < until }) ?? true else { return }
         hostCooldowns[host] = ArtworkHostCooldown(statusCode: error.statusCode, until: until)
     }
@@ -125,6 +157,16 @@ actor ArtworkTransportLimiter {
                 .sorted { $0.value < $1.value }
             for (host, _) in removable.prefix(pacingExcess) {
                 nextRequestAt[host] = nil
+            }
+        }
+
+        let strikeExcess = rateLimitStrikes.count - Self.maximumTrackedHosts
+        if strikeExcess > 0 {
+            let removable = rateLimitStrikes.keys.filter {
+                activeHosts[$0] == nil && hostCooldowns[$0] == nil && $0 != hostToKeep
+            }
+            for host in removable.prefix(strikeExcess) {
+                rateLimitStrikes[host] = nil
             }
         }
     }
@@ -254,7 +296,7 @@ final class ArtworkDataLoader: NSObject, URLSessionDataDelegate, @unchecked Send
                     statusCode: http.statusCode,
                     retryAfter: PublicGameMetadataProvider.parseRetryAfter(
                         http.value(forHTTPHeaderField: "Retry-After")
-                    ) ?? 30
+                    )
                 )))
             } else {
                 finish(.failure(ProviderError.http(http.statusCode)))
