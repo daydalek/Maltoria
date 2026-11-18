@@ -889,13 +889,26 @@ impl WhiskyApp {
                 )
             })
             .when(self.settings, |d| {
+                let back_label = if self.translation_page.active {
+                    if self.translation_page.return_to_capture {
+                        "‹ 返回游戏捕获"
+                    } else {
+                        "‹ 返回设置"
+                    }
+                } else {
+                    "‹ 返回"
+                };
                 d.child(
                     Button::new("settings-back")
-                        .label("‹ 返回")
+                        .label(back_label)
                         .ghost()
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.settings = false;
-                            cx.notify();
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            if this.translation_page.active {
+                                this.close_translation_settings(window, cx);
+                            } else {
+                                this.settings = false;
+                                cx.notify();
+                            }
                         })),
                 )
             })
@@ -959,17 +972,6 @@ impl WhiskyApp {
                                 .prefix(icon("search", 13.).text_color(rgb(muted_color())))
                                 .cleanable(true),
                         ),
-                )
-            })
-            .when(self.settings, |d| {
-                d.child(
-                    Button::new("settings-done")
-                        .label("完成")
-                        .primary()
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.settings = false;
-                            cx.notify();
-                        })),
                 )
             })
     }

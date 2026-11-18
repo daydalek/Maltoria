@@ -1453,33 +1453,6 @@ impl TranslationPage {
         }
     }
 
-    pub(crate) fn save_credential(
-        &mut self,
-        bridge: &BridgeSupervisor,
-        window: &mut Window,
-        cx: &mut Context<WhiskyApp>,
-    ) {
-        let Some(id) = self.selected_id.clone() else {
-            self.error = Some("先保存并选择一个提供商，再设置凭证。".into());
-            return;
-        };
-        self.secret.set(self.field("credential", cx));
-        if self.secret.is_empty() {
-            self.error = Some("请输入凭证，空值不会覆盖已保存的凭证。".into());
-            return;
-        }
-        let key = self.secret.expose().to_owned();
-        self.secret.clear();
-        if let Some(input) = self.inputs.remove("credential") {
-            input.update(cx, |state, cx| state.set_value(String::new(), window, cx));
-        }
-        self.request(
-            bridge,
-            "translation.credential.set",
-            json!({"providerID":id,"key":key}),
-        );
-    }
-
     pub(crate) fn remove_credential(&mut self, bridge: &BridgeSupervisor) {
         if let Some(id) = &self.selected_id {
             self.request(

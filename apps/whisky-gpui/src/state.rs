@@ -7726,7 +7726,11 @@ impl WhiskyApp {
     }
     pub(crate) fn preview_title(&self) -> SharedString {
         if self.settings {
-            return "设置".into();
+            return if self.translation_page.active {
+                "游戏翻译".into()
+            } else {
+                "设置".into()
+            };
         }
         match self.preview.page {
             PreviewPage::Library => "游戏库".into(),

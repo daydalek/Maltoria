@@ -2719,6 +2719,8 @@ impl WhiskyApp {
         let Some(page) = self.game_info.as_ref() else {
             return div().into_any_element();
         };
+        let container = page.container.clone();
+        let entry_id = page.entry_id.clone();
         let title = page.title.clone();
         let searching = page.searching;
         let applying = page.applying;
@@ -2727,13 +2729,171 @@ impl WhiskyApp {
         let matches = page.matches.clone();
         let config_message = page.config_message.clone();
         let editable = page.editor.loaded && !page.editor.busy;
+        let loaded = page.editor.loaded;
         let message = page.editor.message.clone();
+        let bindings = page.editor.record["bindings"].clone();
+        let snapshots = page.editor.record["snapshots"].clone();
+        let default_source = page.editor.source("default").to_owned();
+        let basic_source = page.editor.effective_source("basic").to_owned();
+        let allowed = self.metadata_sources();
+        let dirty = self.metadata_editor_dirty(cx);
+
+        let game_entry = self
+            .entries
+            .iter()
+            .find(|g| g.container == container && g.id == entry_id);
+        let game_art = game_entry.and_then(|g| g.art.clone());
+        let game_meta_line = game_entry.map(|g| {
+            [g.studio.as_deref(), g.release.as_deref()]
+                .into_iter()
+                .flatten()
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+                .join(" · ")
+        }).filter(|s| !s.is_empty());
+
         let input = self.metadata_search_input(window, cx);
 
+        // Hero summary card: brings title, cover, binding status, and unsaved indicator into focus.
+        let mut bound_pills: Vec<AnyElement> = crate::metadata_editor::PROVIDERS
+            .iter()
+            .filter_map(|&(source, label)| {
+                let id = bindings[source].as_str().unwrap_or("");
+                (!id.is_empty()).then(|| {
+                    info_pill(
+                        format!("{label} · {id}"),
+                        crate::theme::installed_bg(),
+                        crate::theme::installed_fg(),
+                    )
+                })
+            })
+            .collect();
+        if bound_pills.is_empty() && loaded {
+            bound_pills.push(info_pill(
+                "尚未关联在线平台",
+                crate::theme::badge_bg(),
+                crate::theme::warning_fg(),
+            ));
+        }
+        if loaded {
+            bound_pills.push(info_pill(
+                format!("默认来源：{}", source_label(&default_source)),
+                crate::theme::badge_bg(),
+                crate::theme::badge_text(),
+            ));
+        }
+
+        let hero_warning = if loaded && allowed.is_empty() {
+            Some("未启用任何元数据平台，请在全局设置中开启来源后再搜索或刷新。".to_owned())
+        } else if loaded && bindings[&basic_source].as_str().is_none_or(str::is_empty) {
+            Some(format!(
+                "当前基本信息来源「{}」尚未关联作品，请在下方搜索或按 ID 关联。",
+                source_label(&basic_source)
+            ))
+        } else {
+            None
+        };
+
+        let hero_cover = match game_art {
+            Some(path) => self
+                .artwork_image(path)
+                .w(px(54.))
+                .h(px(76.))
+                .flex_shrink_0()
+                .rounded(px(7.))
+                .object_fit(ObjectFit::Cover)
+                .into_any_element(),
+            None => div()
+                .w(px(54.))
+                .h(px(76.))
+                .flex_shrink_0()
+                .rounded(px(7.))
+                .bg(gradient(
+                    crate::theme::placeholder_gradient().0,
+                    crate::theme::placeholder_gradient().1,
+                ))
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(icon("package", 20.).text_color(rgb(crate::theme::muted_color())))
+                .into_any_element(),
+        };
+
+        let mut hero_card = col()
+            .flex_shrink_0()
+            .gap(px(10.))
+            .p(px(16.))
+            .rounded(px(10.))
+            .bg(rgba(crate::theme::section_bg()))
+            .border_1()
+            .border_color(rgba(crate::theme::section_border()))
+            .child(
+                row()
+                    .gap(px(14.))
+                    .items_start()
+                    .child(hero_cover)
+                    .child(
+                        col()
+                            .flex_1()
+                            .min_w_0()
+                            .gap(px(6.))
+                            .child(
+                                row()
+                                    .justify_between()
+                                    .gap(px(8.))
+                                    .flex_wrap()
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w_0()
+                                            .truncate()
+                                            .text_size(px(16.))
+                                            .font_weight(FontWeight::BOLD)
+                                            .text_color(rgb(crate::theme::text()))
+                                            .child(title),
+                                    )
+                                    .when(dirty, |d| {
+                                        d.child(info_pill(
+                                            "有未保存修改",
+                                            crate::theme::accent_subtle_bg(),
+                                            crate::theme::accent_fg(),
+                                        ))
+                                    }),
+                            )
+                            .when_some(game_meta_line, |d, line| {
+                                d.child(muted(line).text_size(px(12.)).truncate())
+                            })
+                            .child(row().gap(px(6.)).flex_wrap().children(bound_pills)),
+                    ),
+            );
+        if let Some(warning) = hero_warning {
+            hero_card = hero_card.child(
+                row()
+                    .gap(px(8.))
+                    .px(px(10.))
+                    .py(px(8.))
+                    .rounded(px(8.))
+                    .bg(rgba(0xf5a62318))
+                    .border_1()
+                    .border_color(rgba(0xf5a62344))
+                    .child(icon("triangle-alert", 13.).text_color(rgb(crate::theme::warning_fg())))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .text_size(px(11.5))
+                            .line_height(relative(1.4))
+                            .text_color(rgb(crate::theme::warning_fg()))
+                            .child(warning),
+                    ),
+            );
+        }
+
+        // Section 1: Online Search & Bindings
         let search_row = row()
             .id("metadata-search-row")
             .gap(px(8.))
-            .py(px(8.))
+            .py(px(4.))
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
                 if event.keystroke.key == "enter" {
                     this.command(Command::MetadataSearch, cx);
@@ -2746,31 +2906,101 @@ impl WhiskyApp {
                         .cleanable(true),
                 ),
             )
-            .child(Button::new("metadata-bind-id")
-                .label("按 ID / 网址关联")
-                .disabled(!editable || searching)
-                .on_click(cx.listener(|this, _, _, cx| this.bind_metadata_id(cx))))
+            .child(
+                Button::new("metadata-bind-id")
+                    .label("按 ID / 网址关联")
+                    .disabled(!editable || searching)
+                    .on_click(cx.listener(|this, _, _, cx| this.bind_metadata_id(cx))),
+            )
             .child(
                 Button::new("metadata-search")
                     .label(if searching { "搜索中…" } else { "搜索" })
                     .primary()
-                    .disabled(searching || !editable || !self.service_available("metadata.search") || self.flag("offline") || self.metadata_sources().is_empty())
+                    .disabled(
+                        searching
+                            || !editable
+                            || !self.service_available("metadata.search")
+                            || self.flag("offline")
+                            || self.metadata_sources().is_empty(),
+                    )
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.command(Command::MetadataSearch, cx);
                     })),
             )
             .into_any_element();
 
-        let mut metadata_rows = {
-            let mut rows = self.metadata_editor_rows(window, cx);
-            rows.insert(0, self.info("当前标题", title));
-            rows.push(self.info("资料关联", "名称可不同。输入名称搜索，或粘贴平台 ID / 作品网址关联；只更新草稿。"));
-            rows.push(self.metadata_source_row(cx));
-            rows.push(search_row);
-            rows
-        };
+        let mut search_rows: Vec<AnyElement> = Vec::new();
+        let mut bound_cards: Vec<AnyElement> = Vec::new();
+        for &(source, label) in crate::metadata_editor::PROVIDERS {
+            let id = bindings[source].as_str().unwrap_or("");
+            if !id.is_empty() {
+                let snap_title = snapshots[source]["title"].as_str().unwrap_or("");
+                let snap_title = if snap_title.is_empty() {
+                    "尚无快照 · 保存后刷新"
+                } else {
+                    snap_title
+                };
+                bound_cards.push(
+                    row()
+                        .gap(px(8.))
+                        .px(px(10.))
+                        .py(px(7.))
+                        .rounded(px(8.))
+                        .bg(rgba(crate::theme::card_bg_subtle()))
+                        .border_1()
+                        .border_color(rgba(crate::theme::card_border()))
+                        .child(info_pill(
+                            label,
+                            crate::theme::installed_bg(),
+                            crate::theme::installed_fg(),
+                        ))
+                        .child(info_pill(
+                            format!("ID {id}"),
+                            crate::theme::badge_bg(),
+                            crate::theme::badge_text(),
+                        ))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
+                                .text_size(px(12.))
+                                .text_color(rgb(crate::theme::text()))
+                                .child(snap_title.to_owned()),
+                        )
+                        .child(
+                            Button::new(format!("metadata-unbind-{source}"))
+                                .ghost()
+                                .label("解除关联")
+                                .disabled(!editable)
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.unbind_metadata_source(source, cx)
+                                })),
+                        )
+                        .into_any_element(),
+                );
+            }
+        }
+        if !bound_cards.is_empty() {
+            search_rows.push(
+                col()
+                    .gap(px(6.))
+                    .py(px(4.))
+                    .child(
+                        muted("当前已关联（草稿）")
+                            .text_size(px(11.))
+                            .font_weight(FontWeight::SEMIBOLD),
+                    )
+                    .children(bound_cards)
+                    .into_any_element(),
+            );
+            search_rows.push(div().w_full().h(px(1.)).my(px(4.)).bg(rgba(crate::theme::divider())).into_any_element());
+        }
+
+        search_rows.push(self.metadata_source_row(cx));
+        search_rows.push(search_row);
         if searching {
-            metadata_rows.push(
+            search_rows.push(
                 row()
                     .gap(px(8.))
                     .py(px(8.))
@@ -2780,13 +3010,51 @@ impl WhiskyApp {
             );
         }
         if let Some(error) = &error {
-            metadata_rows.push(muted(error.clone()).into_any_element());
+            search_rows.push(
+                row()
+                    .gap(px(8.))
+                    .px(px(10.))
+                    .py(px(8.))
+                    .rounded(px(8.))
+                    .bg(rgba(0xff5f571a))
+                    .border_1()
+                    .border_color(rgba(0xff5f574d))
+                    .child(icon("triangle-alert", 13.).text_color(rgb(crate::theme::danger_fg())))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .text_size(px(12.))
+                            .text_color(rgb(crate::theme::danger_fg()))
+                            .child(error.clone()),
+                    )
+                    .into_any_element(),
+            );
         }
         if let Some(message) = message {
-            metadata_rows.push(muted(message).into_any_element());
+            search_rows.push(
+                row()
+                    .gap(px(8.))
+                    .px(px(10.))
+                    .py(px(8.))
+                    .rounded(px(8.))
+                    .bg(rgba(crate::theme::installed_bg()))
+                    .border_1()
+                    .border_color(rgba(crate::theme::card_border()))
+                    .child(icon("check", 13.).text_color(rgb(crate::theme::installed_fg())))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .text_size(px(12.))
+                            .text_color(rgb(crate::theme::installed_fg()))
+                            .child(message),
+                    )
+                    .into_any_element(),
+            );
         }
         for (group_index, group) in groups.iter().enumerate() {
-            metadata_rows.push(
+            search_rows.push(
                 muted(source_label(&group.source))
                     .text_size(px(11.))
                     .font_weight(FontWeight::SEMIBOLD)
@@ -2794,13 +3062,23 @@ impl WhiskyApp {
                     .into_any_element(),
             );
             if let Some(provider_error) = &group.error {
-                metadata_rows
-                    .push(muted(format!("查询失败：{provider_error}")).text_size(px(11.)).into_any_element());
+                search_rows.push(
+                    muted(format!("查询失败：{provider_error}"))
+                        .text_size(px(11.))
+                        .into_any_element(),
+                );
             }
             for (game_index, candidate) in group.games.iter().enumerate() {
+                let candidate_id = candidate.raw["sourceID"].as_str().unwrap_or("");
+                let already_bound = !candidate_id.is_empty()
+                    && bindings[&group.source].as_str() == Some(candidate_id);
                 let mut details = candidate.developer.clone();
-                if let Some(id) = candidate.raw["sourceID"].as_str() {
-                    details = format!("ID {id} · {details}");
+                if !candidate_id.is_empty() {
+                    details = if details.is_empty() {
+                        format!("ID {candidate_id}")
+                    } else {
+                        format!("ID {candidate_id} · {details}")
+                    };
                 }
                 if !candidate.release_date.is_empty() {
                     if !details.is_empty() {
@@ -2808,20 +3086,29 @@ impl WhiskyApp {
                     }
                     details.push_str(&candidate.release_date);
                 }
-                metadata_rows.push(
+                search_rows.push(
                     row()
                         .gap(px(12.))
                         .p(px(10.))
                         .my(px(3.))
                         .rounded(px(8.))
-                        .bg(rgba(crate::theme::card_bg_subtle()))
+                        .bg(rgba(if already_bound {
+                            crate::theme::accent_subtle_bg()
+                        } else {
+                            crate::theme::card_bg_subtle()
+                        }))
                         .border_1()
-                        .border_color(rgba(crate::theme::card_border()))
+                        .border_color(rgba(if already_bound {
+                            crate::theme::accent_subtle_border()
+                        } else {
+                            crate::theme::card_border()
+                        }))
                         .child(match &candidate.thumbnail {
                             // Narrow fixed-size thumbnail: the row stays
                             // compact, and a placeholder keeps the height
                             // consistent when a provider has no image.
-                            Some(path) => self.artwork_image(path.clone())
+                            Some(path) => self
+                                .artwork_image(path.clone())
                                 .w(px(34.))
                                 .h(px(48.))
                                 .flex_shrink_0()
@@ -2833,11 +3120,17 @@ impl WhiskyApp {
                                 .h(px(48.))
                                 .flex_shrink_0()
                                 .rounded(px(5.))
-                                .bg(gradient(crate::theme::placeholder_gradient().0, crate::theme::placeholder_gradient().1))
+                                .bg(gradient(
+                                    crate::theme::placeholder_gradient().0,
+                                    crate::theme::placeholder_gradient().1,
+                                ))
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .child(icon("package", 16.).text_color(rgb(crate::theme::muted_color())))
+                                .child(
+                                    icon("package", 16.)
+                                        .text_color(rgb(crate::theme::muted_color())),
+                                )
                                 .into_any_element(),
                         })
                         .child(
@@ -2851,7 +3144,9 @@ impl WhiskyApp {
                                         .truncate()
                                         .child(candidate.title.clone()),
                                 )
-                                .when(!details.is_empty(), |d| d.child(muted(details).text_size(px(11.))))
+                                .when(!details.is_empty(), |d| {
+                                    d.child(muted(details).text_size(px(11.)))
+                                })
                                 .when(!candidate.summary.is_empty(), |d| {
                                     d.child(
                                         muted(candidate.summary.clone())
@@ -2862,8 +3157,12 @@ impl WhiskyApp {
                         )
                         .child(
                             Button::new(format!("metadata-apply:{group_index}:{game_index}"))
-                                .label("关联到草稿")
-                                .disabled(!editable)
+                                .label(if already_bound {
+                                    "✓ 已在草稿"
+                                } else {
+                                    "关联到草稿"
+                                })
+                                .disabled(!editable || already_bound)
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     this.command(
                                         Command::MetadataApply(group_index, game_index),
@@ -2876,29 +3175,58 @@ impl WhiskyApp {
             }
         }
         if groups.is_empty() && !searching {
-            metadata_rows.push(
-                muted("输入此平台使用的名称搜索；不会自动合并同名或相似作品。")
+            search_rows.push(
+                muted("输入目标平台上的名称搜索，或粘贴作品 ID / 网址直接关联；所有修改仅更新草稿，点击「保存资料」生效。")
                     .text_size(px(11.))
+                    .line_height(relative(1.4))
                     .into_any_element(),
             );
         }
-        let cover_rows = vec![
-            muted("以下操作立即生效，不属于资料草稿。自定义封面优先于在线封面；导入后图片复制到容器内。")
-                .text_size(px(11.))
-                .into_any_element(),
+
+        // Section 2: Manual Editing & Custom Cover
+        let mut edit_rows = self.metadata_manual_rows(window, cx);
+        if !edit_rows.is_empty() {
+            edit_rows.push(div().w_full().h(px(1.)).my(px(4.)).bg(rgba(crate::theme::divider())).into_any_element());
+        }
+        edit_rows.push(
             row()
-                .gap(px(8.))
-                .py(px(8.))
-                .child(self.action("cover-import", "选择本地图片…", Command::MetadataCover, cx))
-                .child(self.action(
-                    "cover-reset",
-                    "恢复默认封面",
-                    Command::MetadataCoverReset,
-                    cx,
-                ))
-                .when(applying, |d| d.child(Spinner::new().with_size(px(14.))))
+                .gap(px(12.))
+                .py(px(6.))
+                .items_center()
+                .flex_wrap()
+                .child(
+                    col()
+                        .flex_1()
+                        .min_w_0()
+                        .gap(px(2.))
+                        .child("自定义封面")
+                        .child(
+                            muted("立即生效（不属于资料草稿），本地图片优先级高于在线封面。")
+                                .text_size(px(11.)),
+                        ),
+                )
+                .child(
+                    row()
+                        .gap(px(8.))
+                        .child(self.action(
+                            "cover-import",
+                            "选择本地图片…",
+                            Command::MetadataCover,
+                            cx,
+                        ))
+                        .child(self.action(
+                            "cover-reset",
+                            "恢复默认封面",
+                            Command::MetadataCoverReset,
+                            cx,
+                        ))
+                        .when(applying, |d| d.child(Spinner::new().with_size(px(14.)))),
+                )
                 .into_any_element(),
-        ];
+        );
+
+        // Section 3: Source Policy & Characters Preview
+        let source_rows = self.metadata_policy_and_character_rows(cx);
 
         let mut config_rows: Vec<AnyElement> = Vec::new();
         match matches {
@@ -3012,9 +3340,20 @@ impl WhiskyApp {
         self.form(
             "game-info-scroll",
             vec![
-                self.section("game-metadata", "游戏资料", metadata_rows, cx),
-                self.section("game-cover", "封面", cover_rows, cx),
-                self.section("game-gamedb", if self.service_available("gameConfig.apply") { "GameDB 推荐配置" } else { "GameDB 配置参考" }, config_rows, cx),
+                hero_card.into_any_element(),
+                self.section("game-metadata-search", "在线匹配与关联", search_rows, cx),
+                self.section("game-metadata-edit", "手动编辑与封面", edit_rows, cx),
+                self.section("game-metadata-sources", "来源策略与角色预览", source_rows, cx),
+                self.section(
+                    "game-gamedb",
+                    if self.service_available("gameConfig.apply") {
+                        "GameDB 推荐配置"
+                    } else {
+                        "GameDB 配置参考"
+                    },
+                    config_rows,
+                    cx,
+                ),
             ],
         )
     }
@@ -4764,106 +5103,250 @@ impl WhiskyApp {
 }
 
 impl WhiskyApp {
-    fn metadata_editor_rows(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let Some(page) = self.game_info.as_ref() else { return Vec::new(); };
-        let editable = page.editor.loaded && !page.editor.busy;
-        let bindings = page.editor.record["bindings"].clone();
-        let snapshots = page.editor.record["snapshots"].clone();
-        let allowed = self.metadata_sources();
+    fn metadata_manual_rows(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let Some(page) = self.game_info.as_ref() else {
+            return Vec::new();
+        };
+        if !page.editor.loaded {
+            return vec![muted("正在读取本地资料配置…").text_size(px(11.)).into_any_element()];
+        }
+        let editable = !page.editor.busy;
+        let title = self.metadata_editor_input("manualTitle", window, cx);
+        let summary = self.metadata_editor_input("manualSummary", window, cx);
+        let Some((title_enabled, summary_enabled)) = self.game_info.as_ref().map(|page| {
+            (
+                page.editor.manual_enabled("manualTitle"),
+                page.editor.manual_enabled("manualSummary"),
+            )
+        }) else {
+            return Vec::new();
+        };
+
+        vec![
+            col()
+                .gap(px(8.))
+                .py(px(4.))
+                .child(
+                    Switch::new("metadata-manual-title")
+                        .label("手动编辑标题")
+                        .checked(title_enabled)
+                        .disabled(!editable)
+                        .on_change(cx.listener(|this, enabled, _, cx| {
+                            this.toggle_metadata_manual("manualTitle", *enabled, cx)
+                        })),
+                )
+                .when(title_enabled, |d| d.child(Input::new(&title).disabled(!editable)))
+                .child(
+                    Switch::new("metadata-manual-summary")
+                        .label("手动编辑简介")
+                        .checked(summary_enabled)
+                        .disabled(!editable)
+                        .on_change(cx.listener(|this, enabled, _, cx| {
+                            this.toggle_metadata_manual("manualSummary", *enabled, cx)
+                        })),
+                )
+                .when(summary_enabled, |d| d.child(Input::new(&summary).disabled(!editable)))
+                .child(
+                    muted("手动内容优先于平台资料；关闭开关可恢复来源内容，取消或关闭窗口将丢弃未保存修改。")
+                        .text_size(px(11.))
+                        .line_height(relative(1.4)),
+                )
+                .into_any_element(),
+        ]
+    }
+
+    fn metadata_policy_and_character_rows(&self, cx: &Context<Self>) -> Vec<AnyElement> {
+        let Some(page) = self.game_info.as_ref() else {
+            return Vec::new();
+        };
+        let snapshots = &page.editor.record["snapshots"];
         let mut rows = vec![
-            muted("默认来源用于所有资料；仅在需要时指定分类例外。未关联的平台不会猜测匹配，手动内容优先。")
-                .text_size(px(11.)).into_any_element(),
+            muted("默认来源用于所有字段；仅需对个别字段使用不同平台时再设置分类例外。")
+                .text_size(px(11.))
+                .line_height(relative(1.4))
+                .into_any_element(),
             self.metadata_policy_row("default", "默认来源", false, cx),
         ];
-        let basic = page.editor.effective_source("basic");
-        if page.editor.loaded && bindings[basic].as_str().is_none_or(str::is_empty) {
-            rows.push(muted(format!("基本信息来源 {} 尚未关联。请在该平台搜索并关联作品，或更改默认/基本信息来源；否则不会生成显示资料。", source_label(basic)))
-                .text_size(px(11.)).into_any_element());
-        }
-        if allowed.is_empty() {
-            rows.push(muted("未允许任何搜索平台。请在设置中启用来源后再搜索或刷新；手动资料仍可编辑。")
-                .text_size(px(11.)).into_any_element());
-        }
-        for &(category, label) in crate::metadata_editor::CATEGORIES {
-            if category == "characters" && !crate::metadata_editor::PROVIDERS.iter().any(|(source, _)|
-                page.editor.capabilities[*source]["characters"].as_bool() == Some(true)) {
-                rows.push(self.info("角色", "当前提供方未提供角色资料 · 暂不可用"));
+
+        let category_cell = |category: &'static str, label: &'static str| -> AnyElement {
+            if category == "characters"
+                && !crate::metadata_editor::PROVIDERS.iter().any(|(source, _)| {
+                    page.editor.capabilities[*source]["characters"].as_bool() == Some(true)
+                })
+            {
+                row()
+                    .gap(px(8.))
+                    .py(px(4.))
+                    .child(div().flex_1().text_size(px(12.)).child(label))
+                    .child(muted("暂不可用").text_size(px(11.)))
+                    .into_any_element()
             } else {
-                rows.push(self.metadata_policy_row(category, label, true, cx));
+                self.metadata_policy_row(category, label, true, cx)
             }
-        }
+        };
+
+        let grid_rows: Vec<AnyElement> = crate::metadata_editor::CATEGORIES
+            .chunks(2)
+            .map(|pair| {
+                let mut r = row().gap(px(16.));
+                for &(category, label) in pair {
+                    r = r.child(div().flex_1().min_w_0().child(category_cell(category, label)));
+                }
+                r.into_any_element()
+            })
+            .collect();
+
+        rows.push(
+            col()
+                .gap(px(6.))
+                .p(px(10.))
+                .my(px(4.))
+                .rounded(px(8.))
+                .bg(rgba(crate::theme::card_bg_subtle()))
+                .border_1()
+                .border_color(rgba(crate::theme::card_border()))
+                .child(
+                    muted("分类例外（默认跟随上方来源）")
+                        .text_size(px(11.))
+                        .font_weight(FontWeight::SEMIBOLD),
+                )
+                .children(grid_rows)
+                .into_any_element(),
+        );
+
         let character_source = page.editor.effective_source("characters");
         if page.editor.capabilities[character_source]["characters"].as_bool() == Some(true) {
             let characters = snapshots[character_source]["characters"].as_array();
-            rows.push(muted(format!("角色资料 · {}", source_label(character_source))).text_size(px(11.)).into_any_element());
+            let count = characters.map_or(0, Vec::len);
+            let expanded = page.editor.characters_expanded;
+
+            let mut header = row()
+                .justify_between()
+                .gap(px(8.))
+                .pt(px(6.))
+                .child(
+                    row()
+                        .gap(px(6.))
+                        .child(
+                            muted(format!("角色资料 · {}", source_label(character_source)))
+                                .text_size(px(11.5))
+                                .font_weight(FontWeight::SEMIBOLD),
+                        )
+                        .when(count > 0, |d| {
+                            d.child(info_pill(
+                                format!("{count} 位"),
+                                crate::theme::badge_bg(),
+                                crate::theme::badge_text(),
+                            ))
+                        }),
+                );
+            if count > 3 {
+                header = header.child(
+                    Button::new("metadata-character-disclosure")
+                        .ghost()
+                        .label(if expanded {
+                            "收起".to_owned()
+                        } else {
+                            format!("查看全部 {count} 位")
+                        })
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            if let Some(page) = this.game_info.as_mut() {
+                                page.editor.characters_expanded = !page.editor.characters_expanded;
+                            }
+                            cx.notify();
+                        })),
+                );
+            }
+            rows.push(header.into_any_element());
+
             match characters {
                 Some(characters) if !characters.is_empty() => {
-                    let expanded = page.editor.characters_expanded;
                     let limit = if expanded { characters.len() } else { 3 };
-                    for character in characters.iter().take(limit) {
-                        let name = character["name"].as_str().unwrap_or("未命名");
-                        let original = character["originalName"].as_str().unwrap_or("");
-                        let role = character["role"].as_str().unwrap_or("");
-                        rows.push(muted([name, original, role].into_iter().filter(|text| !text.is_empty())
-                            .collect::<Vec<_>>().join(" · ")).text_size(px(11.)).into_any_element());
-                    }
-                    if characters.len() > 3 {
-                        rows.push(Button::new("metadata-character-disclosure")
-                            .label(if expanded { "收起角色预览".to_owned() } else { format!("查看全部 {} 位角色", characters.len()) })
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                if let Some(page) = this.game_info.as_mut() {
-                                    page.editor.characters_expanded = !page.editor.characters_expanded;
-                                }
-                                cx.notify();
-                            })).into_any_element());
-                    }
+                    let char_items: Vec<AnyElement> = characters
+                        .iter()
+                        .take(limit)
+                        .map(|character| {
+                            let name = character["name"].as_str().unwrap_or("未命名");
+                            let original = character["originalName"].as_str().unwrap_or("");
+                            let role = character["role"].as_str().unwrap_or("");
+                            row()
+                                .justify_between()
+                                .gap(px(8.))
+                                .child(
+                                    row()
+                                        .gap(px(6.))
+                                        .flex_1()
+                                        .min_w_0()
+                                        .child(
+                                            div()
+                                                .text_size(px(12.))
+                                                .font_weight(FontWeight::MEDIUM)
+                                                .text_color(rgb(crate::theme::text()))
+                                                .truncate()
+                                                .child(name.to_owned()),
+                                        )
+                                        .when(!original.is_empty() && original != name, |d| {
+                                            d.child(
+                                                muted(original.to_owned())
+                                                    .text_size(px(11.))
+                                                    .truncate(),
+                                            )
+                                        }),
+                                )
+                                .when(!role.is_empty(), |d| {
+                                    d.child(info_pill(
+                                        role.to_owned(),
+                                        crate::theme::badge_bg(),
+                                        crate::theme::badge_text(),
+                                    ))
+                                })
+                                .into_any_element()
+                        })
+                        .collect();
+                    rows.push(
+                        col()
+                            .gap(px(6.))
+                            .p(px(10.))
+                            .rounded(px(8.))
+                            .bg(rgba(crate::theme::card_bg_subtle()))
+                            .border_1()
+                            .border_color(rgba(crate::theme::card_border()))
+                            .children(char_items)
+                            .into_any_element(),
+                    );
                 }
-                Some(_) => rows.push(muted("该作品未返回角色资料。").text_size(px(11.)).into_any_element()),
-                None => rows.push(muted("尚无角色快照；关联作品并保存后，刷新已保存的关联以获取角色。")
-                    .text_size(px(11.)).into_any_element()),
+                Some(_) => {
+                    rows.push(
+                        muted("该作品未返回角色资料。")
+                            .text_size(px(11.))
+                            .into_any_element(),
+                    );
+                }
+                None => {
+                    rows.push(
+                        muted("尚无角色快照；关联作品并保存后，可点击左下角「刷新已保存的关联」获取角色。")
+                            .text_size(px(11.))
+                            .into_any_element(),
+                    );
+                }
             }
         } else if page.editor.loaded {
-            rows.push(muted(format!("当前角色来源 {} 不支持角色资料；可选择支持的分类来源，不会自动回退。", source_label(character_source)))
-                .text_size(px(11.)).into_any_element());
+            rows.push(
+                muted(format!(
+                    "当前角色来源「{}」不支持角色资料；可从上方选择支持的分类来源。",
+                    source_label(character_source)
+                ))
+                .text_size(px(11.))
+                .into_any_element(),
+            );
         }
-        for &(source, label) in crate::metadata_editor::PROVIDERS {
-            let id = bindings[source].as_str().unwrap_or("");
-            if !id.is_empty() {
-                let title = snapshots[source]["title"].as_str().unwrap_or("");
-                let title = if title.is_empty() { "尚无快照 · 保存后刷新" } else { title };
-                rows.push(row().gap(px(8.)).py(px(4.))
-                    .child(div().flex_1().child(muted(format!("{label} · ID {id} · {title}"))))
-                    .child(Button::new(format!("metadata-unbind-{source}")).label("解除关联")
-                        .disabled(!editable)
-                        .on_click(cx.listener(move |this, _, _, cx| this.unbind_metadata_source(source, cx))))
-                    .into_any_element());
-            }
-        }
-        if self.game_info.as_ref().is_some_and(|page| page.editor.loaded) {
-            let title = self.metadata_editor_input("manualTitle", window, cx);
-            let summary = self.metadata_editor_input("manualSummary", window, cx);
-            let editor_state = self.game_info.as_ref().map(|page| {
-                (page.editor.manual_enabled("manualTitle"), page.editor.manual_enabled("manualSummary"))
-            });
-            if let Some((title_enabled, summary_enabled)) = editor_state {
-            rows.push(col().gap(px(6.)).py(px(8.))
-                .child(Switch::new("metadata-manual-title").label("手动编辑标题")
-                    .checked(title_enabled).disabled(!editable)
-                    .on_change(cx.listener(|this, enabled, _, cx|
-                        this.toggle_metadata_manual("manualTitle", *enabled, cx))))
-                .when(title_enabled, |d| d.child(Input::new(&title).disabled(!editable)))
-                .child(Switch::new("metadata-manual-summary").label("手动编辑简介")
-                    .checked(summary_enabled).disabled(!editable)
-                    .on_change(cx.listener(|this, enabled, _, cx|
-                        this.toggle_metadata_manual("manualSummary", *enabled, cx))))
-                .when(summary_enabled, |d| d.child(Input::new(&summary).disabled(!editable)))
-                .child(muted("开启手动编辑时，空白也会作为本地内容保存。关闭对应开关可恢复来源内容。取消或关闭窗口丢弃未保存修改。").text_size(px(11.)))
-                .into_any_element());
-            }
-        }
-        let dirty = self.metadata_editor_dirty(cx);
-        if dirty {
-            rows.push(muted("存在未保存修改；请先保存后再按平台 ID 刷新。").text_size(px(11.)).into_any_element());
+
+        if self.metadata_editor_dirty(cx) {
+            rows.push(
+                muted("存在未保存修改；请先点击「保存资料」，再执行按平台 ID 刷新。")
+                    .text_size(px(11.))
+                    .into_any_element(),
+            );
         }
         rows
     }
@@ -4875,8 +5358,8 @@ impl WhiskyApp {
         let capabilities = page.editor.capabilities.clone();
         let allowed = page.editor.policy_sources(self.metadata_sources());
         let view = cx.entity().downgrade();
-        row().gap(px(12.)).py(px(5.))
-            .child(div().flex_1().child(label))
+        row().gap(px(8.)).py(px(3.))
+            .child(div().flex_1().min_w_0().text_size(px(12.5)).child(label))
             .child(Button::new(format!("metadata-policy-{category}"))
                 .label(format!("{display}  ⌄"))
                 .disabled(!page.editor.loaded || page.editor.busy)
@@ -4906,19 +5389,39 @@ impl WhiskyApp {
     fn metadata_source_row(&self, cx: &mut Context<Self>) -> AnyElement {
         let Some(page) = self.game_info.as_ref() else { return div().into_any_element(); };
         let allowed = self.metadata_sources();
-        let mut line = row().gap(px(8.)).py(px(6.)).items_center().flex_wrap().child(
-            muted("搜索平台").text_size(px(11.)),
+        let mut line = row().gap(px(6.)).py(px(4.)).items_center().flex_wrap().child(
+            muted("搜索平台").text_size(px(11.5)).mr(px(4.)),
         );
         for &(source, label) in crate::metadata_editor::PROVIDERS {
-            line = line.child(
-                Button::new(format!("metadata-search-source-{source}"))
-                    .label(if page.editor.search_source == source { format!("✓ {label}") } else { label.into() })
-                    .disabled(page.searching || page.editor.busy || !page.editor.loaded || !allowed.iter().any(|enabled| enabled == source))
-                    .on_click(cx.listener(move |this, _, _, cx| this.set_metadata_search_source(source, cx))),
-            );
+            let active = page.editor.search_source == source;
+            let disabled = page.searching
+                || page.editor.busy
+                || !page.editor.loaded
+                || !allowed.iter().any(|enabled| enabled == source);
+            line = line.child(selectable_pill(
+                format!("metadata-search-source-{source}"),
+                label,
+                active,
+                disabled,
+                cx.listener(move |this, _, _, cx| this.set_metadata_search_source(source, cx)),
+            ));
         }
         line.into_any_element()
     }
+}
+
+fn info_pill(label: impl Into<SharedString>, bg_rgba: u32, fg_rgb: u32) -> AnyElement {
+    row()
+        .flex_shrink_0()
+        .px(px(8.))
+        .py(px(2.))
+        .rounded_full()
+        .bg(rgba(bg_rgba))
+        .text_size(px(11.))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(rgb(fg_rgb))
+        .child(label.into())
+        .into_any_element()
 }
 
 fn source_label(source: &str) -> &str {

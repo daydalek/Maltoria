@@ -82,11 +82,6 @@ impl WhiskyApp {
 
     fn translation_header(&self, cx: &Context<Self>) -> AnyElement {
         let page = &self.translation_page;
-        let back_label = if page.return_to_capture {
-            "← 返回游戏捕获"
-        } else {
-            "← 返回设置"
-        };
         let context_badge = page.context.as_ref().map(|(container, game_id, title)| {
             pill_badge(
                 format!("{title} · {game_id}（{container}）"),
@@ -96,6 +91,10 @@ impl WhiskyApp {
             )
         });
         let tab = page.tab;
+        let subtitle = match tab {
+            TranslationTab::Providers => "管理模型提供商、接口端点与 API 密钥。",
+            TranslationTab::Settings => "调整全局语言、上下文预算、句子缓存与凭证安全方式。",
+        };
 
         let mut providers_btn = Button::new("translation-tab-providers").label("提供商配置");
         providers_btn = if tab == TranslationTab::Providers {
@@ -118,22 +117,8 @@ impl WhiskyApp {
                 row()
                     .gap(px(10.))
                     .flex_wrap()
-                    .child(
-                        Button::new("translation-back")
-                            .ghost()
-                            .label(back_label)
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.close_translation_settings(window, cx);
-                            })),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(18.))
-                            .font_weight(FontWeight::BOLD)
-                            .text_color(rgb(text()))
-                            .child("游戏翻译"),
-                    )
-                    .when_some(context_badge, |d, badge| d.child(badge)),
+                    .when_some(context_badge, |d, badge| d.child(badge))
+                    .child(muted(subtitle)),
             )
             .child(
                 row()
@@ -586,10 +571,37 @@ impl WhiskyApp {
                     }),
             );
 
-        // Card 1 — 基本信息与接口
+        let cred_status = if has_credential {
+            pill_badge("✓ 已安全保存", installed_bg(), installed_fg(), None)
+        } else if kind == "ollama" {
+            pill_badge("本地通常免密钥", badge_bg(), badge_text(), None)
+        } else {
+            pill_badge("尚未设置", badge_bg(), warning_fg(), None)
+        };
+        let storage_label = credential_storage_label(&self.translation_page.credential_storage);
+        let is_plaintext_storage = self.translation_page.credential_storage == "localPlaintextFile";
+        let storage_badge = pill_badge(
+            format!("存储：{storage_label}"),
+            badge_bg(),
+            if is_plaintext_storage {
+                warning_fg()
+            } else {
+                badge_text()
+            },
+            None,
+        );
+        let cred_hint = if has_credential {
+            "留空将保留现有密钥；输入新密钥后点击底部「保存提供商」即可一并更新。"
+        } else if kind == "ollama" {
+            "本地 Ollama 通常无需密钥；如需鉴权，填写后点击底部「保存提供商」即可一并保存。"
+        } else {
+            "输入 API 密钥后点击底部「保存提供商」，即可与接口配置一并保存。"
+        };
+
+        // Card 1 — 基本信息与接口（包含 API 端点与 API 密钥）
         let basic_card = section_card(
             "基本信息与接口",
-            Some("选择提供商协议类型，并填写名称与 API 接口地址。"),
+            Some("选择提供商协议类型，并填写名称、API 端点与访问密钥。"),
             col()
                 .gap(px(10.))
                 .child(labeled_field(
@@ -606,6 +618,45 @@ impl WhiskyApp {
                             muted(format!("默认端点：{}", default_endpoint(&kind)))
                                 .text_size(px(11.)),
                         ),
+                ))
+                .child(divider_line())
+                .child(labeled_field(
+                    "API 密钥",
+                    col()
+                        .gap(px(6.))
+                        .child(
+                            row()
+                                .gap(px(8.))
+                                .flex_wrap()
+                                .child(cred_status)
+                                .child(storage_badge),
+                        )
+                        .child(
+                            row()
+                                .gap(px(8.))
+                                .child(div().flex_1().min_w_0().child(credential_input))
+                                .when(selected && has_credential, |d| {
+                                    d.child(
+                                        Button::new("translation-credential-remove")
+                                            .danger()
+                                            .label("移除密钥")
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.translation_page.remove_credential(&this.bridge);
+                                                cx.notify();
+                                            })),
+                                    )
+                                }),
+                        )
+                        .child(muted(cred_hint).text_size(px(11.)))
+                        .when(is_plaintext_storage, |d| {
+                            d.child(
+                                div()
+                                    .text_size(px(11.))
+                                    .line_height(relative(1.4))
+                                    .text_color(rgb(warning_fg()))
+                                    .child("当前为本地明文文件存储（0600 权限，免弹窗）；切换存储模式后需在此重新保存密钥。"),
+                            )
+                        }),
                 )),
         );
 
@@ -826,87 +877,15 @@ impl WhiskyApp {
         };
         let model_card = section_card("模型配置", None, model_card_body);
 
-        // Card 3 — API 凭证与默认语言
-        let cred_status = if has_credential {
-            pill_badge("✓ 已安全保存", installed_bg(), installed_fg(), None)
-        } else if kind == "ollama" {
-            pill_badge("本地通常免密钥", badge_bg(), badge_text(), None)
-        } else {
-            pill_badge("尚未设置", badge_bg(), warning_fg(), None)
-        };
-        let storage_label = credential_storage_label(&self.translation_page.credential_storage);
-        let is_plaintext_storage = self.translation_page.credential_storage == "localPlaintextFile";
-        let storage_badge = pill_badge(
-            format!("存储：{storage_label}"),
-            badge_bg(),
-            if is_plaintext_storage {
-                warning_fg()
-            } else {
-                badge_text()
-            },
-            None,
-        );
-
-        let cred_card = section_card(
-            "API 凭证与默认语言",
-            None,
-            col()
+        // Card 3 — 默认语言
+        let lang_card = section_card(
+            "默认语言",
+            Some("可选：为当前提供商指定默认源语言与目标语言，留空或设为自动时跟随全局翻译设置。"),
+            row()
                 .gap(px(12.))
-                .child(labeled_field(
-                    "凭证状态",
-                    row().gap(px(8.)).flex_wrap().child(cred_status).child(storage_badge),
-                ))
-                .child(labeled_field(
-                    "API 凭证",
-                    col()
-                        .gap(px(6.))
-                        .child(
-                            row()
-                                .gap(px(8.))
-                                .child(div().flex_1().min_w_0().child(credential_input))
-                                .child(
-                                    Button::new("translation-credential-save")
-                                        .label("仅保存凭证")
-                                        .disabled(!selected)
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.translation_page
-                                                .save_credential(&this.bridge, window, cx);
-                                            cx.notify();
-                                        })),
-                                )
-                                .child(
-                                    Button::new("translation-credential-remove")
-                                        .danger()
-                                        .label("移除凭证")
-                                        .disabled(!selected || !has_credential)
-                                        .on_click(cx.listener(|this, _, _, cx| {
-                                            this.translation_page.remove_credential(&this.bridge);
-                                            cx.notify();
-                                        })),
-                                ),
-                        )
-                        .child(
-                            muted("输入新密钥后直接点击底部「保存提供商」，即可同时保存配置与凭证。")
-                                .text_size(px(11.)),
-                        )
-                        .when(is_plaintext_storage, |d| {
-                            d.child(
-                                div()
-                                    .text_size(px(11.))
-                                    .line_height(relative(1.4))
-                                    .text_color(rgb(warning_fg()))
-                                    .child("当前为本地明文文件存储（0600 权限，免弹窗）；切换存储模式后需在此重新保存密钥。"),
-                            )
-                        }),
-                ))
-                .child(divider_line())
-                .child(
-                    row()
-                        .gap(px(12.))
-                        .items_start()
-                        .child(div().flex_1().min_w_0().child(source_field))
-                        .child(div().flex_1().min_w_0().child(target_field)),
-                ),
+                .items_start()
+                .child(div().flex_1().min_w_0().child(source_field))
+                .child(div().flex_1().min_w_0().child(target_field)),
         );
 
         // Bottom Action Bar
@@ -946,7 +925,7 @@ impl WhiskyApp {
             .child(title_row)
             .child(basic_card)
             .child(model_card)
-            .child(cred_card)
+            .child(lang_card)
             .child(action_bar)
             .into_any_element()
     }
