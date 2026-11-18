@@ -47,8 +47,14 @@ private final class SlowCharacterCompletion: @unchecked Sendable {
 }
 
 private final class SlowCharacterProtocol: URLProtocol, @unchecked Sendable {
-    override static func canInit(with request: URLRequest) -> Bool { true }
-    override static func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override static func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    override static func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
     override func startLoading() {
         let completion = SlowCharacterCompletion(self)
         DispatchQueue.global().asyncAfter(deadline: .now() + 6) {
@@ -175,8 +181,14 @@ private final class SlowCharacterProtocol: URLProtocol, @unchecked Sendable {
 }
 
 private final class SyncPortraitProtocol: URLProtocol, @unchecked Sendable {
-    override static func canInit(with request: URLRequest) -> Bool { true }
-    override static func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override static func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    override static func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
     override func stopLoading() {}
 
     override func startLoading() {
@@ -274,4 +286,194 @@ private final class SyncPortraitProtocol: URLProtocol, @unchecked Sendable {
     #expect(current.pendingMetadata == ["Other/New"])
     let raw = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: location)) as? [String: Any])
     #expect(raw["future"] as? String == "retained")
+}
+
+@Test @MainActor func metadataSyncConcurrentlyMatchesMultipleEntriesAndCachesAllPortraits() async throws {
+    let fixture = try MetadataFixture()
+    defer { fixture.remove() }
+    ConcurrentSyncProtocol.reset()
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [ConcurrentSyncProtocol.self]
+    let session = URLSession(configuration: configuration)
+    defer { session.invalidateAndCancel() }
+
+    let names = ["Alpha", "Beta", "Gamma"]
+    for name in names {
+        let folder = fixture.bottle.appendingPathComponent("Games/\(name)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    }
+    var library = FolderGameLibrary()
+    library.automaticMetadata = true
+    library.roots = ["Games"]
+    library.initializedRoots = ["Games"]
+    library.knownFolders = names.map { "Games/\($0)" }
+    library.pendingMetadata = Set(names.map { "Games/\($0)" })
+    try library.save(bottleURL: fixture.bottle)
+
+    let jobs = BridgeJobStore()
+    let service = LibraryMetadataService(jobs: jobs, session: session, networkAccess: {})
+    var params = fixture.params
+    params["automatic"] = .bool(true)
+    params["includeCharacters"] = .bool(true)
+    params["sources"] = .array([.string("bangumi")])
+    let synced = try await waitForMetadataJob(
+        service.call("metadata.sync", params: params, workspace: fixture.workspace),
+        jobs: jobs
+    )
+    #expect(synced.object?["matched"] == .integer(3))
+    #expect(synced.object?["failed"] == .integer(0))
+    #expect(synced.object?["scanned"] == .integer(3))
+    #expect(ConcurrentSyncProtocol.maxConcurrentPortraits >= 2)
+
+    let folderEntries = try await fixture.workspace.entries(in: fixture.bottle)
+        .filter { $0.source == .folder }
+    #expect(folderEntries.count == 3)
+    for entry in folderEntries {
+        let store = GameMetadataStore(directory: entry.metadataDirectory, networkAccess: {})
+        let metadata = try #require(await store.load(for: entry.metadataIdentity))
+        let cover = try #require(metadata.coverURL)
+        let cachedCover = try #require(store.cachedCoverURL(for: cover))
+        #expect(try Data(contentsOf: cachedCover) == pngPixel)
+        let characters = try #require(metadata.characters)
+        #expect(characters.count == 2)
+        for character in characters {
+            let portraitURL = try #require(character.imageURL)
+            let cachedPortrait = try #require(store.cachedCoverURL(for: portraitURL))
+            #expect(try Data(contentsOf: cachedPortrait) == pngPixel)
+        }
+    }
+    let updatedLibrary = try FolderGameLibrary.load(bottleURL: fixture.bottle)
+    #expect(updatedLibrary.pendingMetadata.isEmpty)
+}
+
+private final class ConcurrentSyncProtocol: URLProtocol, @unchecked Sendable {
+    private static let lock = NSLock()
+    private nonisolated(unsafe) static var searchCount = 0
+    private nonisolated(unsafe) static var activePortraits = 0
+    private nonisolated(unsafe) static var peakPortraits = 0
+    private nonisolated(unsafe) static var waitingPortraits: [() -> Void] = []
+
+    static var maxConcurrentPortraits: Int {
+        lock.withLock { peakPortraits }
+    }
+
+    static func reset() {
+        lock.withLock {
+            searchCount = 0
+            activePortraits = 0
+            peakPortraits = 0
+            waitingPortraits = []
+        }
+    }
+
+    override static func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    override static func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func stopLoading() {}
+
+    override func startLoading() {
+        guard let url = request.url else { return }
+        if url.host == "fixture.example" {
+            if url.path.hasPrefix("/portrait-") {
+                let release: [() -> Void] = Self.lock.withLock {
+                    Self.activePortraits += 1
+                    Self.peakPortraits = max(Self.peakPortraits, Self.activePortraits)
+                    let finish = { [weak self] in
+                        self?.sendResponse(url: url, contentType: "image/png", data: pngPixel)
+                        Self.lock.withLock { Self.activePortraits = max(0, Self.activePortraits - 1) }
+                    }
+                    Self.waitingPortraits.append(finish)
+                    guard Self.peakPortraits >= 2, Self.searchCount >= 3 else {
+                        return []
+                    }
+                    let ready = Self.waitingPortraits
+                    Self.waitingPortraits.removeAll()
+                    return ready
+                }
+                release.forEach { $0() }
+                return
+            }
+            sendResponse(url: url, contentType: "image/png", data: pngPixel)
+            return
+        }
+        if url.path.hasSuffix("/characters") {
+            let parts = url.path.split(separator: "/")
+            let id = parts.count >= 3 ? String(parts[parts.count - 2]) : "1"
+            let body = """
+            [
+              {"id":1,"name":"Hero-\(id)-1","relation":"主角",\
+            "images":{"large":"https://fixture.example/portrait-\(id)-1.png"}},
+              {"id":2,"name":"Hero-\(id)-2","relation":"配角",\
+            "images":{"large":"https://fixture.example/portrait-\(id)-2.png"}}
+            ]
+            """
+            sendResponse(url: url, contentType: "application/json", data: Data(body.utf8))
+            return
+        }
+        let bodyData = searchBody(for: request)
+        sendResponse(url: url, contentType: "application/json", data: bodyData)
+        let release: [() -> Void] = Self.lock.withLock {
+            Self.searchCount += 1
+            guard Self.peakPortraits >= 2, Self.searchCount >= 3 else {
+                return []
+            }
+            let ready = Self.waitingPortraits
+            Self.waitingPortraits.removeAll()
+            return ready
+        }
+        release.forEach { $0() }
+    }
+
+    private func searchBody(for request: URLRequest) -> Data {
+        let bodyData: Data? = if let data = request.httpBody {
+            data
+        } else if let stream = request.httpBodyStream {
+            Self.readStream(stream)
+        } else {
+            nil
+        }
+        let payload = bodyData.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        let title = (payload?["keyword"] as? String) ?? "Alpha"
+        let id = switch title {
+        case "Alpha": 101
+        case "Beta": 102
+        default: 103
+        }
+        let body = """
+        {"data":[{"id":\(id),"name":"\(title)","name_cn":"\(title)",\
+        "images":{"large":"https://fixture.example/cover-\(id).png"}}]}
+        """
+        return Data(body.utf8)
+    }
+
+    private static func readStream(_ stream: InputStream) -> Data {
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 1_024)
+        while stream.hasBytesAvailable {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            guard count > 0 else { break }
+            data.append(contentsOf: buffer.prefix(count))
+        }
+        return data
+    }
+
+    private func sendResponse(url: URL, contentType: String, data: Data) {
+        guard let response = HTTPURLResponse(
+            url: url,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: ["Content-Type": contentType]
+        )
+        else { return }
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
 }

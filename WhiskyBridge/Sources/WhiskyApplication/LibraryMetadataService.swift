@@ -162,16 +162,37 @@ public final class LibraryMetadataService {
         ])
     }
 
-    /// Serialize portrait downloads across apply/sync jobs and space cache misses.
+    /// Cache unique portrait URLs concurrently (bounded to 4 tasks to match transport slots).
     func cacheCharacterImages(_ metadata: GameMetadata, store: GameMetadataStore) async {
-        let urls = Array(Set((metadata.characters ?? []).compactMap(\.imageURL)))
-        for url in urls {
-            guard !Task.isCancelled else { return }
-            guard store.cachedCoverURL(for: url) == nil else { continue }
-            do {
-                try await store.cacheCover(from: url, session: session)
-            } catch {
-                if Task.isCancelled { return }
+        let urls = Array(Set((metadata.characters ?? []).compactMap(\.imageURL))).filter {
+            store.cachedCoverURL(for: $0) == nil
+        }
+        guard !urls.isEmpty, !Task.isCancelled else { return }
+        let session = self.session
+        await withTaskGroup(of: Void.self) { group in
+            var nextIndex = 0
+            let limit = min(4, urls.count)
+            while nextIndex < limit {
+                let url = urls[nextIndex]
+                nextIndex += 1
+                group.addTask {
+                    guard !Task.isCancelled else { return }
+                    try? await store.cacheCover(from: url, session: session)
+                }
+            }
+            for await _ in group {
+                guard !Task.isCancelled else {
+                    group.cancelAll()
+                    break
+                }
+                if nextIndex < urls.count {
+                    let url = urls[nextIndex]
+                    nextIndex += 1
+                    group.addTask {
+                        guard !Task.isCancelled else { return }
+                        try? await store.cacheCover(from: url, session: session)
+                    }
+                }
             }
         }
     }
@@ -194,14 +215,16 @@ public final class LibraryMetadataService {
 
     private func search(params: [String: JSONValue], store: GameMetadataStore) throws -> JSONValue {
         let session = self.session
-        let query = try params.text("query").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { throw BridgeFailure("invalid_params", "Search text is required") }
+        let rawQuery = try params.text("query").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !rawQuery.isEmpty else { throw BridgeFailure("invalid_params", "Search text is required") }
+        let cleaned = FolderGameMatching.query(rawQuery)
+        let searchQuery = cleaned.isEmpty ? rawQuery : cleaned
         let sources = try enabledSources(params)
         let providers = sources.filter { $0 != .hikarinagi }
             .map { PublicGameMetadataProvider(source: $0, session: session, networkAccess: networkAccess) }
         return try jobs.start(name: "metadata.search") { progress in
             progress(.object(["stage": .string("searching")]))
-            let results = await GameMetadataSearch.search(query, providers: providers)
+            let results = await GameMetadataSearch.search(searchQuery, providers: providers)
             return try await .object([
                 "results": .array(results.concurrentMap { result in
                     try await .object([
@@ -211,7 +234,7 @@ public final class LibraryMetadataService {
                         // frontend can render picture rows without a
                         // second round-trip; failures leave the field
                         // empty and the row renders a placeholder.
-                        "games": .array(result.games
+                        "games": .array(FolderGameMatching.ranked(query: searchQuery, games: result.games)
                             .prefix(Self.searchThumbnailLimit)
                             .concurrentMap { game in
                                 var object = try JSONValue.encoded(game).object ?? [:]
@@ -233,14 +256,15 @@ public final class LibraryMetadataService {
     /// parameter is absent or names no known source.
     static func requestedSources(_ params: [String: JSONValue]) -> [GameMetadataSource] {
         if case let .array(items)? = params["sources"] {
-            let chosen = items.compactMap { $0.string.flatMap(GameMetadataSource.init(rawValue:)) }
-            return chosen
+            return items.compactMap { $0.string.flatMap(GameMetadataSource.init(rawValue:)) }
         }
         return GameMetadataSource.allCases
     }
 
     func enabledSources(_ params: [String: JSONValue]) throws -> [GameMetadataSource] {
-        if params["sources"] != nil { return Self.requestedSources(params) }
+        if params["sources"] != nil {
+            return Self.requestedSources(params)
+        }
         guard let text = try preferences?.call("preferences.read", params: [:])
             .object?["libraryMetadataEnabledSources"]?.string
         else {

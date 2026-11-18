@@ -96,8 +96,14 @@ import FoundationNetworking
 }
 
 private class MetadataHydrationProtocol: URLProtocol, @unchecked Sendable {
-    override class func canInit(with request: URLRequest) -> Bool { true }
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override class func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
     override func startLoading() {
         guard let url = request.url,
               url.host == "store.steampowered.com", url.path == "/api/appdetails",
@@ -229,4 +235,81 @@ private class MetadataHydrationProtocol: URLProtocol, @unchecked Sendable {
     #expect(try await waitForMetadataJob(explicit, jobs: jobs).object?["results"] == .array([]))
 }
 
-/// A complete 4 × 2 PNG with an opaque orange fill.
+@Test @MainActor func metadataSearchCleansQueryAndRanksResults() async throws {
+    let fixture = try MetadataFixture()
+    defer { fixture.remove() }
+    RankedSearchProtocol.reset()
+    defer { RankedSearchProtocol.reset() }
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [RankedSearchProtocol.self]
+    let session = URLSession(configuration: configuration)
+    defer { session.invalidateAndCancel() }
+    let jobs = BridgeJobStore()
+    let service = LibraryMetadataService(jobs: jobs, session: session, networkAccess: {})
+    var params = fixture.params
+    params["query"] = .string("[ゆずソフト] 千恋＊万花 汉化版 v1.2")
+    params["sources"] = .array([.string("steam")])
+    let started = try await service.call("metadata.search", params: params, workspace: fixture.workspace)
+    let result = try await waitForMetadataJob(started, jobs: jobs)
+    #expect(RankedSearchProtocol.terms == ["千恋＊万花"])
+
+    let groups = try #require(result.object?["results"]).decoded([JSONValue].self)
+    #expect(groups.first?.object?["error"] == .null)
+    let games = try #require(groups.first?.object?["games"]).decoded([JSONValue].self)
+    #expect(games.count == 8)
+    let top = try #require(games.first?.object)
+    #expect(top["sourceID"] == .string("200"))
+    #expect(top["title"] == .string("Senren＊Banka / 千恋＊万花"))
+    #expect(top["alternateTitles"] == .array([.string("Senren＊Banka"), .string("千恋＊万花")]))
+}
+
+private class RankedSearchProtocol: URLProtocol, @unchecked Sendable {
+    private static let lock = NSLock()
+    private nonisolated(unsafe) static var recordedTerms: [String] = []
+    static var terms: [String] {
+        lock.withLock { recordedTerms }
+    }
+
+    static func reset() {
+        lock.withLock { recordedTerms = [] }
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let url = request.url else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+        if url.host == "store.steampowered.com", url.path.hasPrefix("/api/storesearch"),
+           let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil) {
+            let term = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first { $0.name == "term" }?.value ?? ""
+            Self.lock.withLock { Self.recordedTerms.append(term) }
+            let filler = (101 ... 108).map {
+                #"{"id":\#($0),"name":"千恋＊万花 Original Soundtrack Vol.\#($0)"}"#
+            }
+            let exact = #"{"id":200,"name":"Senren＊Banka / 千恋＊万花"}"#
+            let body = #"{"items":[\#(filler.joined(separator: ",")),\#(exact)]}"#
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: Data(body.utf8))
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
+        if let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil) {
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: pngPixel)
+            client?.urlProtocolDidFinishLoading(self)
+        }
+    }
+
+    override func stopLoading() {}
+}
+
+// A complete 4 × 2 PNG with an opaque orange fill.
