@@ -225,6 +225,61 @@ struct FolderGameLibraryTests {
         }
     }
 
+    @Test func galgameCleanupAndMatchingHandlesPrefixesBilingualTyposAndSubtitles() {
+        #expect(FolderGameMatching.query("[ゆずソフト] 千恋＊万花") == "千恋＊万花")
+        #expect(
+            FolderGameMatching.query("[2023.05.26][心愿屋] 夏日口袋 官中去码版 Full Voice") == "夏日口袋"
+        )
+        #expect(FolderGameMatching.query("[RJ123456][C101] 天使☆騒々 RE-BOOT! [Kirikiri2]") == "天使☆騒々 RE-BOOT!")
+        #expect(FolderGameMatching.query("夏之雨 精翻汉化硬盘版 R18+") == "夏之雨")
+        #expect(
+            FolderGameMatching.searchQueries("樱之诗（サクラノ詩）") == [
+                "樱之诗（サクラノ詩）", "樱之诗", "サクラノ詩"
+            ]
+        )
+
+        let summerPockets = GameMetadata(
+            source: .vndb, sourceID: "v20424", title: "Summer Pockets", developer: "Key"
+        )
+        #expect(FolderGameMatching.candidate(
+            query: "夏日口袋 (Summer Pockets)",
+            results: [GameMetadataSearchResult(source: .vndb, games: [summerPockets], error: nil)],
+            sources: [.vndb]
+        ) == summerPockets)
+        #expect(FolderGameMatching.candidate(
+            query: "[Key Visual] Summer Pockets",
+            results: [GameMetadataSearchResult(source: .vndb, games: [summerPockets], error: nil)],
+            sources: [.vndb]
+        ) == summerPockets)
+
+        let aokana = GameMetadata(source: .bangumi, sourceID: "1", title: "苍之彼方的四重奏")
+        #expect(FolderGameMatching.candidate(
+            query: "苍之彼方四重奏",
+            results: [GameMetadataSearchResult(source: .bangumi, games: [aokana], error: nil)],
+            sources: [.bangumi]
+        ) == aokana)
+        #expect(FolderGameMatching.candidate(
+            query: "苍之彼重奏",
+            results: [GameMetadataSearchResult(source: .bangumi, games: [aokana], error: nil)],
+            sources: [.bangumi]
+        ) == nil)
+
+        let sakura = GameMetadata(source: .vndb, sourceID: "v1", title: "サクラノ詩 -櫻の森の上を舞う-")
+        #expect(FolderGameMatching.candidate(
+            query: "サクラノ詩",
+            results: [GameMetadataSearchResult(source: .vndb, games: [sakura], error: nil)],
+            sources: [.vndb]
+        ) == sakura)
+
+        let nineEp1 = GameMetadata(source: .vndb, sourceID: "v10", title: "9-nine-ここのつここのかここのいろ")
+        let nineEp2 = GameMetadata(source: .vndb, sourceID: "v11", title: "9-nine-そらいろそらうたそらのおと")
+        #expect(FolderGameMatching.candidate(
+            query: "9-nine-",
+            results: [GameMetadataSearchResult(source: .vndb, games: [nineEp1, nineEp2], error: nil)],
+            sources: [.vndb]
+        ) == nil)
+    }
+
     @Test func manualUnlinkPreventsAutomaticRelinking() async throws {
         let root = try fixture()
         defer { try? FileManager.default.removeItem(at: root) }

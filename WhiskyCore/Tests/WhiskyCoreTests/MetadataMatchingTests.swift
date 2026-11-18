@@ -104,4 +104,203 @@ struct MetadataMatchingTests {
             ) == exact)
         }
     }
+
+    @Test func galgamePrefixAndSuffixCleanup() {
+        #expect(FolderGameMatching.query("[ゆずソフト] 千恋＊万花") == "千恋＊万花")
+        #expect(
+            FolderGameMatching.query("[2023.05.26][心愿屋] 夏日口袋 官中去码版 Full Voice") == "夏日口袋"
+        )
+        #expect(
+            FolderGameMatching.query("[RJ123456][C101] 天使☆騒々 RE-BOOT! [Kirikiri2]") == "天使☆騒々 RE-BOOT!"
+        )
+        #expect(FolderGameMatching.query("(18禁ゲーム) サクラノ詩 [All-Ages][v1.02]") == "サクラノ詩")
+        #expect(FolderGameMatching.query("夏之雨 精翻汉化硬盘版 R18+") == "夏之雨")
+        // Edition-bearing suffixes must be preserved so editions stay distinct.
+        #expect(FolderGameMatching.query("夏日口袋 完全版") == "夏日口袋 完全版")
+        #expect(FolderGameMatching.query("Summer Story 完整版") == "Summer Story 完整版")
+        #expect(FolderGameMatching.query("Summer Story 重制版") == "Summer Story 重制版")
+        #expect(FolderGameMatching.query("Summer Story Remake") == "Summer Story Remake")
+        #expect(FolderGameMatching.query("Summer Story Remaster") == "Summer Story Remaster")
+        #expect(FolderGameMatching.query("千恋＊万花 FD") == "千恋＊万花 FD")
+        #expect(FolderGameMatching.query("千恋＊万花 Fandisc") == "千恋＊万花 Fandisc")
+    }
+
+    @Test func searchQueriesDecomposeBilingualAndSubtitleTitles() {
+        #expect(
+            FolderGameMatching.searchQueries("樱之诗（サクラノ詩）") == [
+                "樱之诗（サクラノ詩）", "樱之诗", "サクラノ詩"
+            ]
+        )
+        #expect(
+            FolderGameMatching.searchQueries("夏日口袋 (Summer Pockets)") == [
+                "夏日口袋 (Summer Pockets)", "夏日口袋", "Summer Pockets"
+            ]
+        )
+        #expect(
+            FolderGameMatching.searchQueries("Senren＊Banka / 千恋＊万花") == [
+                "Senren＊Banka / 千恋＊万花", "Senren＊Banka", "千恋＊万花"
+            ]
+        )
+        #expect(
+            FolderGameMatching.searchQueries("[Unknown] Game Name") == [
+                "[Unknown] Game Name", "Game Name"
+            ]
+        )
+        #expect(
+            FolderGameMatching.searchQueries("サクラノ詩 -櫻の森の上を舞う-") == [
+                "サクラノ詩 -櫻の森の上を舞う-", "サクラノ詩"
+            ]
+        )
+        #expect(FolderGameMatching.searchQueries("Game (Another Story)") == ["Game (Another Story)"])
+        #expect(FolderGameMatching.searchQueries("Re:Zero") == ["Re:Zero"])
+        #expect(FolderGameMatching.searchQueries("   ") == [])
+    }
+
+    @Test func shinjitaiIterationKanaParticlesRomanNumeralsAndSteamSplits() {
+        #expect(FolderGameMatching.normalized("処対実辺郷嬢") == "处对实边乡娘")
+        #expect(FolderGameMatching.normalized("天使☆騒々") == "天使骚骚")
+        #expect(FolderGameMatching.normalized("ダ・カーポII") == "ダカーポ2")
+        #expect(FolderGameMatching.normalized("D.C.Ⅱ ～ダ・カーポⅡ～") == "dc2ダカーポ2")
+        #expect(FolderGameMatching.normalized("白色相簿Ⅲ") == "白色相簿3")
+
+        let tenshi = GameMetadata(source: .vndb, sourceID: "v1", title: "天使骚骚")
+        let yoru = GameMetadata(source: .bangumi, sourceID: "2", title: "魔女的夜宴")
+        let sakura = GameMetadata(source: .vndb, sourceID: "v3", title: "さくらの詩")
+        let dc2 = GameMetadata(
+            source: .vndb, sourceID: "v4", title: "D.C.II",
+            originalTitle: "D.C.II ～ダ・カーポII～", alternateTitles: ["ダ・カーポII"]
+        )
+        let senren = GameMetadata(source: .steam, sourceID: "1144400", title: "Senren＊Banka / 千恋＊万花")
+
+        func match(_ query: String, in game: GameMetadata) -> GameMetadata? {
+            FolderGameMatching.candidate(
+                query: query,
+                results: [GameMetadataSearchResult(source: game.source, games: [game], error: nil)],
+                sources: [game.source]
+            )
+        }
+
+        #expect(match("天使☆騒々", in: tenshi) == tenshi)
+        #expect(match("魔女の夜宴", in: yoru) == yoru)
+        #expect(match("サクラノ詩", in: sakura) == sakura)
+        #expect(match("D.C.Ⅱ ～ダ・カーポⅡ～", in: dc2) == dc2)
+        #expect(match("ダ・カーポⅡ", in: dc2) == dc2)
+        #expect(match("D.C.II", in: dc2) == dc2)
+        #expect(match("千恋＊万花", in: senren) == senren)
+        #expect(match("Senren＊Banka", in: senren) == senren)
+
+        // Repeated edition tokens in D.C.II ～ダ・カーポII～ deduplicate so edition penalty is not applied.
+        let dc2FullOnly = GameMetadata(source: .vndb, sourceID: "v5", title: "D.C.II ～ダ・カーポII～")
+        let dc1 = GameMetadata(source: .vndb, sourceID: "v6", title: "D.C. ～ダ・カーポ～")
+        #expect(FolderGameMatching.ranked(query: "D.C.II", games: [dc1, dc2FullOnly]).first == dc2FullOnly)
+    }
+
+    @Test func mainSubtitleMatchingAndSeriesAmbiguityRejection() {
+        let sakura = GameMetadata(source: .vndb, sourceID: "v1", title: "サクラノ詩 -櫻の森の上を舞う-")
+        #expect(FolderGameMatching.candidate(
+            query: "サクラノ詩",
+            results: [GameMetadataSearchResult(source: .vndb, games: [sakura], error: nil)],
+            sources: [.vndb]
+        ) == sakura)
+
+        let nineEp1 = GameMetadata(source: .vndb, sourceID: "v10", title: "9-nine-ここのつここのかここのいろ")
+        let nineEp2 = GameMetadata(source: .vndb, sourceID: "v11", title: "9-nine-そらいろそらうたそらのおと")
+        #expect(FolderGameMatching.candidate(
+            query: "9-nine-",
+            results: [GameMetadataSearchResult(source: .vndb, games: [nineEp1, nineEp2], error: nil)],
+            sources: [.vndb]
+        ) == nil)
+
+        let wa2Intro = GameMetadata(source: .bangumi, sourceID: "20", title: "WHITE ALBUM 2 -introductory chapter-")
+        #expect(FolderGameMatching.candidate(
+            query: "WHITE ALBUM 2 -closing chapter-",
+            results: [GameMetadataSearchResult(source: .bangumi, games: [wa2Intro], error: nil)],
+            sources: [.bangumi]
+        ) == nil)
+    }
+
+    @Test func cjkWeightedSimilarityToleratesSingleTypoAndRejectsShortOrTwoCharDiffs() {
+        let aokana = GameMetadata(source: .bangumi, sourceID: "1", title: "苍之彼方的四重奏")
+        #expect(FolderGameMatching.candidate(
+            query: "苍之彼方四重奏",
+            results: [GameMetadataSearchResult(source: .bangumi, games: [aokana], error: nil)],
+            sources: [.bangumi]
+        ) == aokana)
+
+        // Two-character difference in a 8-char CJK title stays below 0.92 threshold.
+        #expect(FolderGameMatching.candidate(
+            query: "苍之彼重奏",
+            results: [GameMetadataSearchResult(source: .bangumi, games: [aokana], error: nil)],
+            sources: [.bangumi]
+        ) == nil)
+
+        // Short CJK titles (< 5 chars) never fuzzy-match.
+        let yosuga = GameMetadata(source: .bangumi, sourceID: "2", title: "夜之空")
+        #expect(FolderGameMatching.candidate(
+            query: "缘之空",
+            results: [GameMetadataSearchResult(source: .bangumi, games: [yosuga], error: nil)],
+            sources: [.bangumi]
+        ) == nil)
+    }
+
+    @Test func developerCorroborationAndBilingualPartialMatch() {
+        let game = GameMetadata(
+            source: .vndb, sourceID: "v100", title: "Summer Pockets", developer: "Key"
+        )
+        let exactByDev = FolderGameMatching.exactMatches(query: "[Key Visual] Summer Pockets", in: [game])
+        #expect(exactByDev == [game])
+
+        let bilingualCandidate = FolderGameMatching.candidate(
+            query: "夏日口袋 (Summer Pockets)",
+            results: [GameMetadataSearchResult(source: .vndb, games: [game], error: nil)],
+            sources: [.vndb]
+        )
+        #expect(bilingualCandidate == game)
+
+        let localClean = GameMetadata(
+            source: .vndb, sourceID: "v101", title: "Sakura no Uta",
+            originalTitle: "サクラノ詩", titleLanguage: "en"
+        ).usingLibraryTitle("[UnknownGroup] 樱之诗（サクラノ詩） 汉化版")
+        #expect(localClean.title == "樱之诗")
+    }
+
+    @Test func automaticMatchUsesSingleFallbackQueryPerProvider() async {
+        let game = GameMetadata(
+            source: .bangumi, sourceID: "123", title: "樱之诗", originalTitle: "サクラノ詩"
+        )
+        let provider = MockMetadataProvider(source: .bangumi, responses: [
+            "樱之诗（サクラノ詩）": [],
+            "樱之诗": [game]
+        ])
+        let second = MockMetadataProvider(source: .vndb, responses: [:])
+        let outcome = await GameMetadataSearch.automaticMatch(
+            "樱之诗（サクラノ詩）",
+            providers: [provider, second]
+        )
+        #expect(outcome.candidate == game)
+        #expect(await provider.queries == ["樱之诗（サクラノ詩）", "樱之诗"])
+        #expect(await second.queries.isEmpty)
+
+        // Single-query clean names do not trigger a second call even when empty.
+        let single = MockMetadataProvider(source: .vndb, responses: [:])
+        let emptyOutcome = await GameMetadataSearch.automaticMatch("CLANNAD", providers: [single])
+        #expect(emptyOutcome.candidate == nil)
+        #expect(await single.queries == ["CLANNAD"])
+    }
+}
+
+private actor MockMetadataProvider: GameMetadataProvider {
+    let source: GameMetadataSource
+    private let responses: [String: [GameMetadata]]
+    private(set) var queries: [String] = []
+
+    init(source: GameMetadataSource, responses: [String: [GameMetadata]]) {
+        self.source = source
+        self.responses = responses
+    }
+
+    func search(_ query: String) async throws -> [GameMetadata] {
+        queries.append(query)
+        return responses[query] ?? []
+    }
 }
