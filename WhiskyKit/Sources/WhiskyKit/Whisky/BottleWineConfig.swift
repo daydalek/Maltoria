@@ -75,7 +75,9 @@ public struct BottleWineConfig: Codable, Equatable {
             .defaultWineVersion
         self.windowsVersion = container.decodeLenientIfPresent(WinVersion.self, forKey: .windowsVersion) ?? .win10
         self.enhancedSync = try container.decodeIfPresent(EnhancedSync.self, forKey: .enhancedSync) ?? .msync
-        self.asfTimestampBase = container.decodeLenientIfPresent(ASFTimestampBase.self, forKey: .asfTimestampBase) ?? .auto
+        self.asfTimestampBase = container.decodeLenientIfPresent(
+            ASFTimestampBase.self, forKey: .asfTimestampBase
+        ) ?? .auto
         self.avxEnabled = try container.decodeIfPresent(Bool.self, forKey: .avxEnabled) ?? false
         self.engineID = try container.decodeIfPresent(String.self, forKey: .engineID) ?? WineEngine.managedID
         // A malformed overrides map must not take the whole config down;
