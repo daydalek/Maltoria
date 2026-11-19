@@ -66,6 +66,9 @@ public enum ContainerConfiguration {
                 defaultValue: .text("msync"),
                 taggedEnum: true
             ),
+            choice("asfTimestampBase", "ASF/WMV Timestamp Sync", "wineConfig.asfTimestampBase", "auto", [
+                ("auto", "Auto"), ("first", "First"), ("legacy", "Legacy")
+            ]),
             toggle("avxEnabled", "AVX 支持", "wineConfig.avxEnabled", false)
         ]),
         .init(id: "launcher", title: "启动器兼容性", fields: [

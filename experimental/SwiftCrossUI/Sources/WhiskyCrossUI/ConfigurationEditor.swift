@@ -108,7 +108,13 @@ private struct ConfigurationControl: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            Text(field.title).frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(field.title)
+                if field.id == "asfTimestampBase" {
+                    Text("Fixes video playback sync/stutter for ASF/WMV opening movies.")
+                        .foregroundColor(WhiskyStyle.secondary)
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading)
             switch field.input {
             case .toggle:
                 Toggle("", isOn: Binding(get: { value == .boolean(true) }, set: { save(.boolean($0)) }))

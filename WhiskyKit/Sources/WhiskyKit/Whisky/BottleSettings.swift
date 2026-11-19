@@ -345,6 +345,11 @@ public struct BottleSettings: Codable, Equatable {
         set { wineConfig.enhancedSync = newValue }
     }
 
+    public var asfTimestampBase: ASFTimestampBase {
+        get { wineConfig.asfTimestampBase }
+        set { wineConfig.asfTimestampBase = newValue }
+    }
+
     /// The Wine engine this bottle runs under.
     ///
     /// `"managed"` is the installed Whisky Wine runtime; any other value is a
@@ -1112,6 +1117,10 @@ public struct BottleSettings: Codable, Equatable {
             builder.set("WINE_METALFX", gdiUpscaler == .metalfx ? "spatial" : "off", layer: .bottleManaged)
             builder.set("WINE_GDI_UPSCALER_EXCLUDE", gdiUpscalerExcludedRegions, layer: .bottleManaged)
             builder.set("WINE_GDI_CACHE_MODE", gdiUpscalerCache.rawValue, layer: .bottleManaged)
+        }
+
+        if asfTimestampBase != .auto {
+            builder.set("WINE_DMO_ASF_TIMESTAMP_BASE", asfTimestampBase.rawValue, layer: .bottleManaged)
         }
 
         // Enhanced sync mode. "none" removes both variables unconditionally —

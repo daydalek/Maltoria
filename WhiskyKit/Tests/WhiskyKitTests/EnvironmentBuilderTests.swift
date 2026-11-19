@@ -20,6 +20,20 @@
 import XCTest
 
 final class EnvironmentBuilderTests: XCTestCase {
+    func testASFTimestampBaseBottleManagedEnvironment() {
+        for mode in ASFTimestampBase.allCases {
+            var settings = BottleSettings()
+            settings.asfTimestampBase = mode
+            var builder = EnvironmentBuilder()
+            _ = settings.populateBottleManagedLayer(builder: &builder)
+            let result = builder.resolve()
+            XCTAssertEqual(result.environment["WINE_DMO_ASF_TIMESTAMP_BASE"], mode == .auto ? nil : mode.rawValue)
+            if mode != .auto {
+                XCTAssertEqual(result.provenance.entries["WINE_DMO_ASF_TIMESTAMP_BASE"]?.layer, .bottleManaged)
+            }
+        }
+    }
+
     // MARK: - Layer Resolution
 
     func testEmptyBuilderResolvesToEmptyEnvironment() {

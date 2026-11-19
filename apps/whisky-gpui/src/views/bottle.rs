@@ -626,6 +626,9 @@ impl WhiskyApp {
                     .gap(px(16.))
                     .child(
                         col().flex_1().min_w_0().gap(px(4.)).child(field.title.clone())
+                            .when(field.id == "asfTimestampBase", |d| {
+                                d.child(muted("Fixes video playback sync/stutter for ASF/WMV opening movies."))
+                            })
                             .when(field.id == "gdiUpscaler", |d| {
                                 d.child(muted("GDI / WineD3D OpenGL · Retina 超分；重启游戏后生效。"))
                                     .when(value.as_str() == Some("adaptive"), |d| {
