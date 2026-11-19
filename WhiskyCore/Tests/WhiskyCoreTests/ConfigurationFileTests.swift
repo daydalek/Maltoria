@@ -34,6 +34,26 @@ private let gdiUpscalerChoices = [
 
 @Suite("Portable configuration transactions")
 struct ConfigurationFileTests {
+    @Test func asfTimestampBaseRoundTripsAsPlainText() async throws {
+        let root = temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("Metadata.plist")
+        let store = ConfigurationFile(url: url, locking: Lock())
+        let field = try #require(ContainerConfiguration.fields.first { $0.id == "asfTimestampBase" })
+        #expect(try await store.values(for: [field])[field.id] == .text("auto"))
+        for mode in ["first", "legacy", "auto"] {
+            try await store.update(field, to: .text(mode))
+            #expect(try await store.values(for: [field])[field.id] == .text(mode))
+            let saved = try document(url)
+            #expect((saved["wineConfig"] as? [String: Any])?[field.id] as? String == mode)
+        }
+        #expect(throws: (any Error).self) { try field.validate(.text("unknown")) }
+        #expect(throws: (any Error).self) { try field.validate(.text("")) }
+        for platform in [ConfigurationPlatform.linux, .macOS] {
+            #expect(ContainerConfiguration.fields(for: platform).contains { $0.id == field.id })
+        }
+    }
+
     final class Lock: ActivityFileLocking, @unchecked Sendable {
         private let lock = NSLock()
         func withExclusiveLock<Result>(at url: URL, operation: () throws -> Result) throws -> Result {

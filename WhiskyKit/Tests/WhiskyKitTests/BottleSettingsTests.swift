@@ -25,6 +25,20 @@ import XCTest
 
 // swiftlint:disable:next type_body_length
 final class BottleSettingsTests: XCTestCase {
+    func testASFTimestampBasePersistenceAndDefaults() throws {
+        XCTAssertEqual(BottleSettings().asfTimestampBase, .auto)
+        for json in ["{}", "{\"asfTimestampBase\":\"unknown\"}", "{\"asfTimestampBase\":42}"] {
+            let config = try JSONDecoder().decode(BottleWineConfig.self, from: Data(json.utf8))
+            XCTAssertEqual(config.asfTimestampBase, .auto)
+        }
+        for mode in ASFTimestampBase.allCases {
+            var settings = BottleSettings()
+            settings.asfTimestampBase = mode
+            let data = try PropertyListEncoder().encode(settings)
+            XCTAssertEqual(try PropertyListDecoder().decode(BottleSettings.self, from: data).asfTimestampBase, mode)
+        }
+    }
+
     // MARK: - BottleSettings Default Values
 
     func testBottleSettingsDefaultValues() {

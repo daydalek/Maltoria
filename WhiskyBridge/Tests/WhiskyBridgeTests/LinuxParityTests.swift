@@ -22,6 +22,23 @@ import Testing
 import WhiskyBridgeProtocol
 import WhiskyCore
 
+@Test func asfTimestampBaseEnvironment() {
+    for mode in [nil, "auto", "first", "legacy", "unknown"] as [String?] {
+        let values: [String: ConfigurationValue] = mode.map { ["asfTimestampBase": .text($0)] } ?? [:]
+        let config = LinuxLaunchConfiguration.compose(
+            values: values, bottleEnvironment: [:], bottleDLLOverrides: [], program: [:]
+        )
+        let expected = mode == "first" || mode == "legacy" ? mode : nil
+        #expect(config.environment["WINE_DMO_ASF_TIMESTAMP_BASE"] == expected)
+    }
+    let config = LinuxLaunchConfiguration.compose(
+        values: ["asfTimestampBase": .text("first")],
+        bottleEnvironment: ["WINE_DMO_ASF_TIMESTAMP_BASE": "legacy"],
+        bottleDLLOverrides: [], program: [:]
+    )
+    #expect(config.environment["WINE_DMO_ASF_TIMESTAMP_BASE"] == "legacy")
+}
+
 private struct ParityFixture {
     let root: URL
     let runtime: URL

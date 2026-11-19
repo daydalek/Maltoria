@@ -143,6 +143,10 @@ public struct LinuxLaunchConfiguration: Sendable, Equatable {
             programOverrides[key] as? Bool
         }
 
+        if let timestampBase = text("asfTimestampBase"), ["first", "legacy"].contains(timestampBase) {
+            environment["WINE_DMO_ASF_TIMESTAMP_BASE"] = timestampBase
+        }
+
         // Synchronization. MSync is the macOS Mach-port primitive; on Linux
         // the supported primitives are ESync and FSync. An imported `msync`
         // value degrades to ESync, the closest Linux equivalent.

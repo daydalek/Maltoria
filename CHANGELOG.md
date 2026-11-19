@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Bottle setting "ASF/WMV Timestamp Sync" (Auto, First, Legacy) sets `WINE_DMO_ASF_TIMESTAMP_BASE` to fix playback sync and stutter in ASF/WMV opening movies; Auto leaves the variable unset.
+
+### Fixed
+- WhiskyBridge builds on Linux again: `LibraryMetadataService+Sync.swift` now imports `FoundationNetworking` for `URLSession`.
+
 ## [0.6.1] - 2026-11-16
 
 ### Added

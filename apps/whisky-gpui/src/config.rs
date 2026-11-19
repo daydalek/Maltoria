@@ -388,7 +388,7 @@ const OTHER: &SectionSpec = &SECTIONS[SECTIONS.len() - 1];
 /// The section a field id belongs to, as `ContainerConfiguration` groups it.
 pub(crate) fn section_for(field_id: &str) -> &'static SectionSpec {
     let id = match field_id {
-        "windowsVersion" | "enhancedSync" | "avxEnabled" => "wine",
+        "windowsVersion" | "enhancedSync" | "asfTimestampBase" | "avxEnabled" => "wine",
         "launcherCompatibilityMode" | "launcherMode" | "detectedLauncher" | "launcherLocale"
         | "gpuSpoofing" | "gpuVendor" | "autoEnableDXVK" => "launcher",
         "controllerCompatibilityMode" | "disableHIDAPI" | "allowBackgroundEvents"
@@ -447,6 +447,25 @@ pub(crate) fn kind_histogram(fields: &[ConfigField]) -> BTreeMap<&'static str, u
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn asf_timestamp_base_is_a_wine_choice() {
+        let fields = decode_schema(&json!([{
+            "id": "asfTimestampBase", "title": "ASF/WMV Timestamp Sync",
+            "input": "choice", "default": "auto", "options": [
+                {"id": "auto", "title": "Auto"},
+                {"id": "first", "title": "First"},
+                {"id": "legacy", "title": "Legacy"}
+            ]
+        }]), "linux").unwrap();
+        assert_eq!(group_sections(&fields)[0].spec.id, "wine");
+        assert_eq!(fields[0].default, json!("auto"));
+        assert_eq!(fields[0].kind.options().iter().map(|option| option.id.as_str()).collect::<Vec<_>>(),
+            vec!["auto", "first", "legacy"]);
+        assert_eq!(set_payload("/bottle", &fields[0].id, &json!("first")), json!({
+            "container": "/bottle", "field": "asfTimestampBase", "value": "first"
+        }));
+    }
 
     #[test]
     fn gdi_upscaler_choice_is_grouped_and_macos_only() {
