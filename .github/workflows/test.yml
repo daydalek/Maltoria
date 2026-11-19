@@ -189,7 +189,7 @@ jobs:
         run: |
           set -euo pipefail
           ./build.sh run whisky-linux-amd64 --version 0.1.0 --formats tar --jobs 4 \
-            --output build/reliability/linux-release
+            --without-lunahook --output build/reliability/linux-release
 
       - name: Extract and validate the produced bundle
         run: |

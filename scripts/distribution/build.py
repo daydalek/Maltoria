@@ -29,8 +29,62 @@ TARGETS = {
     'wine-linux-amd64': ('Linux', 'x86_64', 'Ubuntu 24.04 · new WoW64 · tar.gz', ('cc', 'make', 'patchelf', 'pkg-config', 'git')),
 }
 LINUX_APP_TARGETS = ('whisky-linux-amd64', 'whisky-linux-arm64')
+APP_TARGETS = ('whisky-macos-gpui-arm64',) + LINUX_APP_TARGETS
 LINUX_DOCKER_ARCH = {'x86_64': 'amd64', 'arm64': 'arm64'}
 LINUX_RELEASE_ARCH = {'x86_64': 'x86_64', 'arm64': 'aarch64'}
+
+
+def is_valid_lunahook_dir(path):
+    path = Path(path)
+    return (path.is_dir()
+            and (path / 'x86').is_dir()
+            and (path / 'x64').is_dir()
+            and (path / 'sources/Maltoria/SOURCE-COMMIT.txt').is_file())
+
+
+def resolve_lunahook_dir(raw):
+    path = Path(raw).expanduser().resolve()
+    nested = path / 'Contents/Resources/LunaHook'
+    if not is_valid_lunahook_dir(path) and is_valid_lunahook_dir(nested):
+        path = nested
+    if not path.is_dir():
+        raise ValueError(f'LunaHook 载荷目录不存在：{path}')
+    missing = [rel for rel in ('x86', 'x64', 'sources/Maltoria/SOURCE-COMMIT.txt') if not (path / rel).exists()]
+    if missing:
+        raise ValueError(
+            f'LunaHook 载荷目录不完整（{path}），缺少：{", ".join(missing)}。'
+            '请指定包含 x86/、x64/ 与 sources/Maltoria/ 的 NativeLunaHook 产物目录或已打包的 LunaHook 目录。'
+        )
+    return path
+
+
+def discover_local_lunahook():
+    candidates = []
+    if env_path := os.environ.get('MALTORIA_LUNAHOOK_ARTIFACTS', '').strip():
+        candidates.append(Path(env_path))
+    candidates.extend([
+        ROOT / 'dist/Maltoria.app/Contents/Resources/LunaHook',
+        Path('/Applications/Maltoria.app/Contents/Resources/LunaHook'),
+    ])
+    for candidate in candidates:
+        try:
+            return resolve_lunahook_dir(candidate)
+        except ValueError:
+            continue
+    return None
+
+
+def missing_lunahook_message(target):
+    lines = [
+        '未指定 LunaHook 文本捕获载荷目录，直接构建的应用将无法使用游戏内文本捕获（capture_payload_unavailable）。',
+        '请使用以下方式之一继续：',
+        f'  1. 指定 LunaHook 目录：./build.sh run {target} --lunahook /path/to/LunaHook',
+        '     （也支持直接传入已包含 LunaHook 的 Maltoria.app，或设置环境变量 MALTORIA_LUNAHOOK_ARTIFACTS）',
+        f'  2. 显式跳过 LunaHook（仅本地调试非捕获功能）：./build.sh run {target} --without-lunahook',
+    ]
+    if detected := discover_local_lunahook():
+        lines.append(f'提示：检测到本机现成 LunaHook 载荷，可直接复用：\n  ./build.sh run {target} --lunahook {shlex.quote(str(detected))}')
+    return '\n'.join(lines)
 
 
 def positive(value):
@@ -57,6 +111,10 @@ def parser():
     result.add_argument('--work-dir', type=Path, help='Linux Wine 增量构建目录；macOS Wine 使用全新目录')
     result.add_argument('--archive-cache', type=Path, help='Wine 已校验下载的缓存目录')
     result.add_argument('--compile-only', action='store_true', help='Linux Wine 编译/静态校验；产物记录 compile-only')
+    result.add_argument('--lunahook', type=Path,
+                        help='LunaHook 载荷目录（含 x86/、x64/、sources/，或已包含它的 Maltoria.app）；默认回退读取 MALTORIA_LUNAHOOK_ARTIFACTS')
+    result.add_argument('--without-lunahook', action='store_true',
+                        help='显式跳过 LunaHook 捕获载荷（应用内无法使用游戏文本捕获）')
     result.add_argument('--executor', choices=('native', 'docker'), default='native')
     result.add_argument('--json', action='store_true', help='计划或环境检查输出 JSON')
     return result
@@ -96,6 +154,17 @@ def plan(args):
     if args.formats and args.target not in LINUX_APP_TARGETS:
         raise ValueError('--formats 适用于 whisky-linux-amd64 / whisky-linux-arm64')
     is_wine = args.target.startswith('wine-')
+    is_app = args.target in APP_TARGETS
+    if args.lunahook and args.without_lunahook:
+        raise ValueError('--lunahook 与 --without-lunahook 不能同时使用')
+    if (args.lunahook or args.without_lunahook) and not is_app:
+        raise ValueError('--lunahook 与 --without-lunahook 仅适用于应用构建目标')
+    raw_lunahook = args.lunahook
+    if raw_lunahook is None and is_app and not args.without_lunahook:
+        env_lunahook = os.environ.get('MALTORIA_LUNAHOOK_ARTIFACTS', '').strip()
+        if env_lunahook:
+            raw_lunahook = Path(env_lunahook)
+    lunahook_dir = resolve_lunahook_dir(raw_lunahook) if raw_lunahook is not None else None
     if args.compile_only and args.target != 'wine-linux-amd64':
         raise ValueError('--compile-only 适用于 wine-linux-amd64')
     if (args.work_dir or args.archive_cache) and not is_wine:
@@ -109,6 +178,12 @@ def plan(args):
     output = (args.output or ROOT / 'build/distribution' / args.target /
               (datetime.now().strftime('%Y%m%d-%H%M%S') + '-' + uuid.uuid4().hex[:6])).expanduser().resolve()
     env = {'WHISKY_BUILD_JOBS': str(args.jobs), 'POC_JOBS': str(args.jobs)}
+    if is_app and lunahook_dir is not None:
+        env['MALTORIA_LUNAHOOK_ARTIFACTS'] = str(lunahook_dir)
+        env['MALTORIA_REQUIRE_LUNAHOOK'] = '1'
+    elif is_app and args.without_lunahook:
+        env['MALTORIA_LUNAHOOK_ARTIFACTS'] = ''
+        env['MALTORIA_REQUIRE_LUNAHOOK'] = '0'
     steps = []
 
     def step(name, command):
@@ -172,7 +247,10 @@ def plan(args):
                  repo / 'scripts/linux/verify.py', '--work-dir', work, '--runtime', output / 'artifacts/wine-linux-amd64'])
     result = dict(formatVersion=1, target=args.target, description=TARGETS[args.target][2],
                   executor=args.executor, source=str(repo), commit=revision(repo), output=str(output),
-                  workDirectory=str(work) if work else None, environment=env, steps=steps,
+                  workDirectory=str(work) if work else None,
+                  lunahook=str(lunahook_dir) if lunahook_dir else None,
+                  withoutLunahook=bool(args.without_lunahook) if is_app else None,
+                  environment=env, steps=steps,
                   acceptance='compile-only' if args.compile_only else 'recipe-defined', publishes=False)
     if args.executor == 'docker':
         if TARGETS[args.target][0] != 'Linux':
@@ -195,6 +273,10 @@ def plan(args):
             inner += ['--version', args.version]
         if args.formats:
             inner += ['--formats', *args.formats]
+        if is_app and lunahook_dir is not None:
+            inner += ['--lunahook', '/lunahook']
+        elif is_app and args.without_lunahook:
+            inner += ['--without-lunahook']
         if is_wine:
             inner += ['--work-dir', '/cache/work/' + recipe_key(repo)]
         container_name = 'whisky-build-' + uuid.uuid4().hex[:12]
@@ -212,6 +294,8 @@ def plan(args):
                '--env', 'GIT_CONFIG_VALUE_1=/wine']
         if is_wine:
             run += ['--mount', mount(repo, '/wine', readonly=True)]
+        if is_app and lunahook_dir is not None:
+            run += ['--mount', mount(lunahook_dir, '/lunahook', readonly=True)]
         run += [image] + inner
         context = output / 'docker-context'
         result.update(cacheDirectory=str(cache), containerName=container_name,
@@ -249,6 +333,23 @@ def doctor(args):
                     checks.append(dict(name=tool, passed=bool(shutil.which(tool))))
         if args.target == 'wine-linux-amd64' and not args.compile_only:
             checks.append(dict(name='xvfb-run', passed=bool(shutil.which('xvfb-run'))))
+    if args.target in APP_TARGETS:
+        if args.without_lunahook:
+            checks.append(dict(name='LunaHook 捕获载荷（已通过 --without-lunahook 显式跳过）', passed=True))
+        else:
+            raw = args.lunahook or (Path(os.environ['MALTORIA_LUNAHOOK_ARTIFACTS'])
+                                    if os.environ.get('MALTORIA_LUNAHOOK_ARTIFACTS', '').strip() else None)
+            if raw is None:
+                checks.append(dict(
+                    name='LunaHook 捕获载荷（需指定 --lunahook PATH 或 MALTORIA_LUNAHOOK_ARTIFACTS，或 --without-lunahook）',
+                    passed=False,
+                ))
+            else:
+                try:
+                    resolved = resolve_lunahook_dir(raw)
+                    checks.append(dict(name=f'LunaHook 捕获载荷（{resolved}）', passed=True))
+                except ValueError as err:
+                    checks.append(dict(name=f'LunaHook 捕获载荷（{err}）', passed=False))
     if args.target.startswith('wine-'):
         checks.append(dict(name='Wine 仓库配方', passed=(args.wine_repo / 'configs/crossover-source-lock.json').is_file()))
     if args.target == 'wine-macos-arm64' and platform.system() == 'Darwin':
@@ -276,6 +377,13 @@ def show(value, as_json=False):
     print('输出：', value['output'])
     if value.get('workDirectory'):
         print('Wine 工作目录：', value['workDirectory'])
+    if value.get('target') in APP_TARGETS:
+        if value.get('lunahook'):
+            print('LunaHook 载荷：', value['lunahook'])
+        elif value.get('withoutLunahook'):
+            print('LunaHook 载荷：已显式跳过（--without-lunahook，游戏内文本捕获将不可用）')
+        else:
+            print('⚠️  LunaHook 载荷：未指定（执行 run 时需提供 --lunahook PATH、MALTORIA_LUNAHOOK_ARTIFACTS 或 --without-lunahook）')
     for index, step in enumerate(value['steps'], 1):
         print(f"  {index}. {step['name']}\n     {shlex.join(step['command'])}")
     print('环境：', json.dumps(value['environment'], ensure_ascii=False))
@@ -385,6 +493,23 @@ def menu(args):
         if format_choice not in choices:
             raise ValueError('请选择 1 至 5')
         args.formats = choices[format_choice]
+    if args.target in APP_TARGETS and not args.lunahook and not args.without_lunahook:
+        detected = discover_local_lunahook()
+        if detected:
+            prompt = f'LunaHook 载荷目录（输入 skip 跳过）[{detected}]：'
+        else:
+            prompt = 'LunaHook 载荷目录（留空或输入 skip 跳过，留空将无法使用文本捕获）：'
+        entered = input(prompt).strip()
+        if entered.lower() == 'skip':
+            args.without_lunahook = True
+            print('提示：已跳过 LunaHook，打包后的应用无法使用游戏内文本捕获。')
+        elif entered:
+            args.lunahook = resolve_lunahook_dir(entered)
+        elif detected:
+            args.lunahook = detected
+        else:
+            args.without_lunahook = True
+            print('提示：未提供 LunaHook 目录，将跳过打包（应用内文本捕获会提示 capture_payload_unavailable）。')
     if args.target == 'wine-linux-amd64':
         mode = input('验证：1. 运行回归  2. compile-only [1]：').strip() or '1'
         if mode not in ('1', '2'):
@@ -434,6 +559,8 @@ def main(argv=None):
             return 0 if value['passed'] else 1
         else:
             value = plan(args)
+            if args.action == 'run' and args.target in APP_TARGETS and not value.get('lunahook') and not args.without_lunahook:
+                raise ValueError(missing_lunahook_message(args.target))
             show(value, args.json)
             if args.action == 'run':
                 checks = doctor(args)

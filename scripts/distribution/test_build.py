@@ -183,6 +183,52 @@ class BuildTests(unittest.TestCase):
         self.assertEqual('failed', report['status'])
         self.assertEqual([], report['results'])
 
+    def test_lunahook_flag_env_app_resolution_docker_mount_and_run_guard(self):
+        # Build a valid LunaHook directory fixture nested inside a fake .app bundle.
+        app_bundle = self.root / 'Existing.app'
+        payload = app_bundle / 'Contents/Resources/LunaHook'
+        (payload / 'x86').mkdir(parents=True)
+        (payload / 'x64').mkdir(parents=True)
+        (payload / 'sources/Maltoria').mkdir(parents=True)
+        (payload / 'sources/Maltoria/SOURCE-COMMIT.txt').write_text('abc123\n')
+
+        # Passing an .app bundle resolves to Contents/Resources/LunaHook and enforces MALTORIA_REQUIRE_LUNAHOOK=1.
+        mac_plan = build.plan(self.args('whisky-macos-gpui-arm64', '--lunahook', str(app_bundle)))
+        self.assertEqual(str(payload), mac_plan['lunahook'])
+        self.assertEqual(str(payload), mac_plan['environment']['MALTORIA_LUNAHOOK_ARTIFACTS'])
+        self.assertEqual('1', mac_plan['environment']['MALTORIA_REQUIRE_LUNAHOOK'])
+
+        # Docker Linux build mounts the LunaHook directory read-only and forwards --lunahook /lunahook.
+        docker_plan = build.plan(self.args(
+            'whisky-linux-amd64', '--executor', 'docker', '--lunahook', str(payload)))
+        run_cmd = docker_plan['steps'][1]['command']
+        self.assertIn(f'type=bind,src={payload},dst=/lunahook,readonly', run_cmd)
+        self.assertIn('/lunahook', run_cmd)
+
+        # --without-lunahook explicitly clears MALTORIA_REQUIRE_LUNAHOOK.
+        skipped = build.plan(self.args('whisky-macos-gpui-arm64', '--without-lunahook'))
+        self.assertTrue(skipped['withoutLunahook'])
+        self.assertEqual('0', skipped['environment']['MALTORIA_REQUIRE_LUNAHOOK'])
+
+        # Invalid combinations fail fast.
+        with self.assertRaises(ValueError):
+            build.plan(self.args('whisky-macos-gpui-arm64', '--lunahook', str(payload), '--without-lunahook'))
+        with self.assertRaises(ValueError):
+            build.plan(self.args('wine-linux-amd64', '--without-lunahook'))
+        with self.assertRaises(ValueError):
+            build.plan(self.args('whisky-macos-gpui-arm64', '--lunahook', str(self.root / 'missing')))
+
+        # Running without --lunahook / env / --without-lunahook exits 1 with a helpful prompt.
+        env_clean = {k: v for k, v in os.environ.items() if k != 'MALTORIA_LUNAHOOK_ARTIFACTS'}
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), 'run', 'whisky-macos-gpui-arm64',
+             '--output', str(self.root / 'blocked-out')],
+            env=env_clean, capture_output=True, text=True)
+        self.assertEqual(1, result.returncode)
+        self.assertIn('--lunahook', result.stderr)
+        self.assertIn('--without-lunahook', result.stderr)
+        self.assertFalse((self.root / 'blocked-out').exists())
+
     def test_cancellation_terminates_child_and_keeps_report(self):
         marker = self.root / 'child.pid'
         job = self.job([[sys.executable, '-c',
