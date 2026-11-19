@@ -637,4 +637,76 @@ struct ProviderAdapterTests {
             #expect(json["think"] as? Bool == expectedThink)
         }
     }
+
+    @Test func localBuiltInBuildsPFML3PromptAndStripsStopTokens() async throws {
+        let sse = "data: {\"choices\":[{\"text\":\"你好，\"}]}\n\ndata: {\"choices\":[{\"text\":\"世界！<|plamo:tag|>ignored\"}]}\n\ndata: [DONE]\n\n"
+        let transport = QueueHTTPTransport([makeHTTPResponse(sse)])
+        let service = TranslationService(transport: transport, credentialStore: SessionOnlyCredentialStore())
+        let config = ProviderConfiguration(
+            kind: .localBuiltIn,
+            baseURL: URL(string: "http://127.0.0.1:18080")!,
+            modelID: "plamo-3-translate-2b-q4_k_m"
+        )
+        let req = TranslationRequest(
+            gameID: "game-local",
+            sessionID: UUID(),
+            eventID: UUID(),
+            generation: 1,
+            sourceText: "こんにちは<|plamo:tag|>世界",
+            speaker: "アリス",
+            sourceLanguage: "ja",
+            targetLanguage: "zh-Hans",
+            context: [
+                TranslationContextTurn(sourceText: "おはよう", translatedText: "早上好", speaker: "アリス"),
+                TranslationContextTurn(sourceText: "学校へ行く", translatedText: nil, speaker: "ボブ")
+            ],
+            customPrompt: "奇幻冒险视觉小说",
+            outputTokenLimit: 256,
+            contextWindowTokens: 32_768,
+            contextWindowProvenance: .detected
+        )
+        let events = try await collectEvents(service.translate(req, using: config))
+        #expect(events.last == TranslationEvent.completed("你好，世界！"))
+
+        let captured = try #require(await transport.capturedRequests().first)
+        #expect(captured.url?.path == "/v1/completions")
+        let body = try #require(captured.body)
+        let json = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        #expect(json["temperature"] as? Int == 0)
+        #expect(json["cache_prompt"] as? Bool == true)
+        #expect(json["stop"] as? [String] == ["<|plamo:tag|>", "<|plamo:bos|>"])
+
+        let prompt = try #require(json["prompt"] as? String)
+        #expect(prompt.hasPrefix("<|plamo:tag|>dataset<|plamo:msg|>translation"))
+        #expect(prompt.contains("<|plamo:tag|>context<|plamo:msg|>奇幻冒险视觉小说\n\nボブ: 学校へ行く\n\nSpeaker: アリス"))
+        #expect(prompt.contains("<|plamo:tag|>input<|plamo:key|>lang<|plamo:val|>ja<|plamo:msg|>おはよう"))
+        #expect(prompt.contains("<|plamo:tag|>output<|plamo:key|>lang<|plamo:val|>zh-hans<|plamo:msg|>早上好"))
+        #expect(prompt.contains("こんにちは< |plamo:tag|>世界"))
+        #expect(prompt.hasSuffix("<|plamo:tag|>output<|plamo:key|>lang<|plamo:val|>zh-hans<|plamo:msg|>"))
+    }
+
+    @Test func localBuiltInOmitsAutoSourceLanguageAndNormalizesTraditionalChinese() {
+        let req = TranslationRequest(
+            gameID: "game-local",
+            sessionID: UUID(),
+            eventID: UUID(),
+            generation: 1,
+            sourceText: "テスト",
+            speaker: nil,
+            sourceLanguage: "auto",
+            targetLanguage: "zh-Hant",
+            context: [],
+            customPrompt: "",
+            outputTokenLimit: 256,
+            contextWindowTokens: 32_768,
+            contextWindowProvenance: .detected
+        )
+        let prompt = TranslationPrompt.pfml3Prompt(for: req)
+        let expected = "<|plamo:tag|>dataset<|plamo:msg|>translation"
+            + "<|plamo:tag|>input<|plamo:msg|>テスト"
+            + "<|plamo:tag|>output<|plamo:key|>lang<|plamo:val|>zh-hant<|plamo:msg|>"
+        #expect(prompt == expected)
+        #expect(TranslationPrompt.promptVersion(for: .localBuiltIn) == "pfml3-v1")
+        #expect(TranslationPrompt.promptVersion(for: .openAIChat) == "translation-prompt-v2")
+    }
 }

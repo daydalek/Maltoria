@@ -20,6 +20,11 @@ import Foundation
 
 enum TranslationPrompt {
     static let version = "translation-prompt-v2"
+    static let pfml3Version = "pfml3-v1"
+
+    static func promptVersion(for kind: ProviderKind) -> String {
+        kind == .localBuiltIn ? pfml3Version : version
+    }
 
     static func systemInstructions(for request: TranslationRequest) -> String {
         var lines = [
@@ -89,7 +94,107 @@ enum TranslationPrompt {
         (try? serializedPromptBytes(request, kind: kind)) ?? Int.max
     }
 
+    static func pfml3Prompt(for request: TranslationRequest) -> String {
+        let sourceLang = normalizePFML3Language(request.sourceLanguage, allowAuto: true)
+        let targetLang = normalizePFML3Language(request.targetLanguage, allowAuto: false) ?? "en"
+
+        var prompt = "<|plamo:tag|>dataset<|plamo:msg|>translation"
+
+        var contextSections: [String] = []
+        let trimmedCustom = sanitizePFML3Text(request.customPrompt)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedCustom.isEmpty {
+            contextSections.append(trimmedCustom)
+        }
+
+        // Collect incomplete turns (only source or only translation) as reference context,
+        // and complete (source + translation) turns as native PFML3 few-shot/history pairs.
+        var historyPairs: [(source: String, target: String)] = []
+        var strayContextLines: [String] = []
+        for turn in request.context {
+            let src = turn.sourceText.map(sanitizePFML3Text)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let dst = turn.translatedText.map(sanitizePFML3Text)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let hasSrc = src.map { !$0.isEmpty } ?? false
+            let hasDst = dst.map { !$0.isEmpty } ?? false
+            if hasSrc, hasDst, let src, let dst {
+                historyPairs.append((src, dst))
+            } else if hasSrc, let src {
+                let prefix = turn.speaker.map(sanitizePFML3Text)
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .flatMap { $0.isEmpty ? nil : "\($0): " } ?? ""
+                strayContextLines.append(prefix + src)
+            } else if hasDst, let dst {
+                strayContextLines.append(dst)
+            }
+        }
+        if !strayContextLines.isEmpty {
+            contextSections.append(strayContextLines.joined(separator: "\n"))
+        }
+        if let speaker = request.speaker.map(sanitizePFML3Text)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !speaker.isEmpty {
+            contextSections.append("Speaker: \(speaker)")
+        }
+        if !contextSections.isEmpty {
+            prompt += "<|plamo:tag|>context<|plamo:msg|>" + contextSections.joined(separator: "\n\n")
+        }
+
+        for pair in historyPairs {
+            prompt += "<|plamo:tag|>input"
+            if let sourceLang {
+                prompt += "<|plamo:key|>lang<|plamo:val|>\(sourceLang)"
+            }
+            prompt += "<|plamo:msg|>\(pair.source)"
+            prompt += "<|plamo:tag|>output<|plamo:key|>lang<|plamo:val|>\(targetLang)<|plamo:msg|>\(pair.target)"
+        }
+
+        prompt += "<|plamo:tag|>input"
+        if let sourceLang {
+            prompt += "<|plamo:key|>lang<|plamo:val|>\(sourceLang)"
+        }
+        prompt += "<|plamo:msg|>\(sanitizePFML3Text(request.sourceText))"
+        prompt += "<|plamo:tag|>output<|plamo:key|>lang<|plamo:val|>\(targetLang)<|plamo:msg|>"
+        return prompt
+    }
+
+    static func normalizePFML3Language(_ raw: String, allowAuto: Bool) -> String? {
+        let trimmed = raw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: "-")
+            .lowercased()
+        if trimmed.isEmpty || (allowAuto && trimmed == "auto") {
+            return nil
+        }
+        switch trimmed {
+        case "ja(easy)", "ja-easy":
+            return "ja-easy"
+        case "zh", "zh-cn", "zh-sg", "zh-hans", "zh-hans-cn":
+            return "zh-hans"
+        case "zh-tw", "zh-hk", "zh-mo", "zh-hant", "zh-hant-tw":
+            return "zh-hant"
+        default:
+            let parts = trimmed.split(separator: "-")
+            if parts.count == 1, (2 ... 3).contains(parts[0].count) {
+                return String(parts[0])
+            }
+            if parts.count >= 2, (2 ... 3).contains(parts[0].count), parts[1].count == 4 {
+                return "\(parts[0])-\(parts[1])"
+            }
+            if let first = parts.first, (2 ... 3).contains(first.count) {
+                return String(first)
+            }
+            return trimmed
+        }
+    }
+
+    static func sanitizePFML3Text(_ text: String) -> String {
+        text.replacingOccurrences(of: "<|plamo:", with: "< |plamo:")
+    }
+
     private static func serializedPromptBytes(_ request: TranslationRequest, kind: ProviderKind) throws -> Int {
+        if kind == .localBuiltIn { return pfml3Prompt(for: request).utf8.count }
         if kind == .openAICompletions { return try legacyPrompt(for: request).utf8.count }
         return try systemInstructions(for: request).utf8.count + userMessage(for: request).utf8.count
     }

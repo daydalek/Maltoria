@@ -27,9 +27,14 @@ public final class ApplicationTranslationService {
         "translation.credential.set", "translation.credential.delete",
         "translation.models", "translation.modelInfo", "translation.testConnection",
         "translation.settings/get", "translation.settings/save",
-        "translation.cache/list", "translation.cache/delete"
+        "translation.cache/list", "translation.cache/delete",
+        "translation.local.status", "translation.local.setConfig",
+        "translation.local.download", "translation.local.cancelDownload",
+        "translation.local.delete", "translation.local.unload"
     ]
-    public static let capabilities = ["translation.providers", "translation.models", "translation.settings"]
+    public static let capabilities = [
+        "translation.providers", "translation.models", "translation.settings", "translation.local"
+    ]
 
     private let catalog: TranslationApplicationCatalog
     private let credentials: any CredentialStore
@@ -37,13 +42,22 @@ public final class ApplicationTranslationService {
     private let translator: TranslationService
     private let sentenceCache: PersistentSentenceCache
     private let directory: URL
+    private let jobs: BridgeJobStore
+    public let localStore: LocalTranslationStore
+    public let localRuntime: LocalTranslationRuntime
+    private var localDownloadJobs: [String: String] = [:]
     var storageDirectory: URL { directory }
     public var networkAccess: () async throws -> Void = {}
 
     public init(
         directory: URL = FileTranslationRepository.defaultDirectory(),
         transport: any HTTPTransport = URLSessionStreamTransport(),
-        credentials: (any CredentialStore)? = nil
+        credentials: (any CredentialStore)? = nil,
+        jobs: BridgeJobStore? = nil,
+        localCatalog: LocalTranslationCatalog = .default(),
+        localModelsDirectory: URL? = nil,
+        localRuntimeDirectory: URL? = nil,
+        localURLSessionConfiguration: URLSessionConfiguration = .ephemeral
     ) {
         let catalog = TranslationApplicationCatalog(directory: directory)
         let switchable: SwitchableCredentialStore?
@@ -64,14 +78,30 @@ public final class ApplicationTranslationService {
             switchable = store
             resolvedCredentials = store
         }
+        let localStore = LocalTranslationStore(
+            stateDirectory: directory,
+            modelsDirectory: localModelsDirectory,
+            runtimeDirectory: localRuntimeDirectory,
+            catalog: localCatalog,
+            sessionConfiguration: localURLSessionConfiguration
+        )
+        let localRuntime = LocalTranslationRuntime(store: localStore)
         self.catalog = catalog
         self.directory = directory
+        self.jobs = jobs ?? BridgeJobStore()
+        self.localStore = localStore
+        self.localRuntime = localRuntime
         self.switchableCredentials = switchable
         self.credentials = resolvedCredentials
         self.sentenceCache = PersistentSentenceCache(
             fileURL: directory.appendingPathComponent("bridge-translation-cache.json")
         )
-        translator = TranslationService(transport: transport, credentialStore: resolvedCredentials)
+        translator = Self.makeTranslationService(
+            transport: transport,
+            credentials: resolvedCredentials,
+            localStore: localStore,
+            localRuntime: localRuntime
+        )
     }
 
     init(
@@ -89,52 +119,111 @@ public final class ApplicationTranslationService {
             ),
             sessionOnly: SessionOnlyCredentialStore()
         )
+        let localStore = LocalTranslationStore(stateDirectory: directory)
+        let localRuntime = LocalTranslationRuntime(store: localStore)
         self.catalog = catalog
         self.directory = directory
+        self.jobs = BridgeJobStore()
+        self.localStore = localStore
+        self.localRuntime = localRuntime
         self.switchableCredentials = store
         self.credentials = store
         self.sentenceCache = PersistentSentenceCache(
             fileURL: directory.appendingPathComponent("bridge-translation-cache.json")
         )
-        translator = TranslationService(transport: transport, credentialStore: store)
+        translator = Self.makeTranslationService(
+            transport: transport,
+            credentials: store,
+            localStore: localStore,
+            localRuntime: localRuntime
+        )
+    }
+
+    private static func makeTranslationService(
+        transport: any HTTPTransport,
+        credentials: any CredentialStore,
+        localStore: LocalTranslationStore,
+        localRuntime: LocalTranslationRuntime
+    ) -> TranslationService {
+        var providers: [ProviderKind: any TranslationProvider] = Dictionary(
+            uniqueKeysWithValues: ProviderKind.allCases.map { kind in
+                (kind, HTTPTranslationProvider(kind: kind, transport: transport))
+            }
+        )
+        providers[.localBuiltIn] = LocalManagedTranslationProvider(
+            store: localStore,
+            runtime: localRuntime,
+            transport: transport
+        )
+        return TranslationService(providers: providers, credentialStore: credentials)
+    }
+
+    public func shutdown() async {
+        await localRuntime.shutdown()
     }
 
     public func call(_ method: String, params: [String: JSONValue]) async throws -> JSONValue {
         do {
-            switch method {
-            case "translation.providers/list":
-                return try await listProviders()
-            case "translation.providers/save":
-                return try await saveProvider(params)
-            case "translation.providers/delete":
-                return try await deleteProvider(params)
-            case "translation.credential.set":
-                return try await setCredential(params)
-            case "translation.credential.delete":
-                return try await deleteCredential(params)
-            case "translation.models":
-                return try await discoverModels(params)
-            case "translation.modelInfo":
-                return try await modelInfo(params)
-            case "translation.testConnection":
-                return try await testConnection(params)
-            case "translation.settings/get":
-                return try await getSettings()
-            case "translation.settings/save":
-                return try await saveSettings(params)
-            case "translation.cache/list":
-                return try await listSentenceCache(params)
-            case "translation.cache/delete":
-                return try await deleteSentenceCache(params)
-            default:
-                throw BridgeFailure("method_unavailable", "Translation method is unavailable")
+            if method.hasPrefix("translation.local.") {
+                return try await localCall(method, params: params)
             }
+            return try await coreCall(method, params: params)
         } catch let failure as BridgeFailure {
             throw failure
         } catch let error as TranslationError {
             throw BridgeFailure("translation_error", error.localizedDescription)
         } catch {
             throw BridgeFailure("translation_operation_failed", "Translation operation failed")
+        }
+    }
+
+    private func coreCall(_ method: String, params: [String: JSONValue]) async throws -> JSONValue {
+        switch method {
+        case "translation.providers/list":
+            return try await listProviders()
+        case "translation.providers/save":
+            return try await saveProvider(params)
+        case "translation.providers/delete":
+            return try await deleteProvider(params)
+        case "translation.credential.set":
+            return try await setCredential(params)
+        case "translation.credential.delete":
+            return try await deleteCredential(params)
+        case "translation.models":
+            return try await discoverModels(params)
+        case "translation.modelInfo":
+            return try await modelInfo(params)
+        case "translation.testConnection":
+            return try await testConnection(params)
+        case "translation.settings/get":
+            return try await getSettings()
+        case "translation.settings/save":
+            return try await saveSettings(params)
+        case "translation.cache/list":
+            return try await listSentenceCache(params)
+        case "translation.cache/delete":
+            return try await deleteSentenceCache(params)
+        default:
+            throw BridgeFailure("method_unavailable", "Translation method is unavailable")
+        }
+    }
+
+    private func localCall(_ method: String, params: [String: JSONValue]) async throws -> JSONValue {
+        switch method {
+        case "translation.local.status":
+            return await localStatus()
+        case "translation.local.setConfig":
+            return try await setLocalConfig(params)
+        case "translation.local.download":
+            return try await startLocalDownload(params)
+        case "translation.local.cancelDownload":
+            return try await cancelLocalDownload(params)
+        case "translation.local.delete":
+            return try await deleteLocalModel(params)
+        case "translation.local.unload":
+            return await unloadLocalRuntime()
+        default:
+            throw BridgeFailure("method_unavailable", "Translation method is unavailable")
         }
     }
 
@@ -240,7 +329,20 @@ public final class ApplicationTranslationService {
     private func testConnection(_ params: [String: JSONValue]) async throws -> JSONValue {
         let profile = try await provider(providerID(params))
         try await requireRemoteAccess(for: profile)
-        let translation = try await translator.testConnection(configuration: profile)
+        let translation: String
+        if profile.kind == .localBuiltIn {
+            let sourceLang = profile.defaultSourceLanguage.lowercased() == "auto" ? "ja" : profile.defaultSourceLanguage
+            let targetLang = profile.defaultTargetLanguage
+            let sample = sourceLang.lowercased().hasPrefix("ja") ? "こんにちは、世界。" : "Hello, world."
+            translation = try await translator.testConnection(
+                configuration: profile,
+                sourceText: sample,
+                sourceLanguage: sourceLang,
+                targetLanguage: targetLang
+            )
+        } else {
+            translation = try await translator.testConnection(configuration: profile)
+        }
         return .object(["translation": .string(translation)])
     }
 
@@ -337,6 +439,159 @@ public final class ApplicationTranslationService {
             "totalCount": .integer(Int64(stats.totalCount)),
             "totalBytes": .integer(Int64(stats.totalBytes))
         ])
+    }
+
+    private func localStatus() async -> JSONValue {
+        let runtimeSnap = await localRuntime.snapshot()
+        let prefs = await localStore.preferences()
+        let envOverride = LocalTranslationCatalog.environmentOverrideHFEndpoint()
+        let hfEndpoint = LocalTranslationCatalog.resolvedHuggingFaceBase(useChinaMirror: prefs.useChinaMirror)
+
+        var modelRecords: [JSONValue] = []
+        for entry in localStore.catalog.models {
+            let installed = await localStore.isModelInstalled(entry)
+            let installedSize = await localStore.installedModelSize(entry)
+            let progress = await localStore.activeDownload(for: entry.id)
+            let lastErr = await localStore.lastError(for: entry.id)
+            let activeJobID = localDownloadJobs[entry.id]
+            let downloadJSON: JSONValue
+            if let progress {
+                var obj = progress.jsonValue.object ?? [:]
+                if let activeJobID, !activeJobID.isEmpty {
+                    obj["jobID"] = .string(activeJobID)
+                }
+                downloadJSON = .object(obj)
+            } else {
+                downloadJSON = .null
+            }
+            modelRecords.append(.object([
+                "id": .string(entry.id),
+                "displayName": .string(entry.displayName),
+                "subtitle": .string(entry.subtitle),
+                "recommended": .bool(entry.recommended),
+                "sizeBytes": .integer(entry.sizeBytes),
+                "installed": .bool(installed),
+                "installedSizeBytes": installedSize.map(JSONValue.integer) ?? .null,
+                "contextWindow": .integer(Int64(entry.contextWindow)),
+                "recommendedRamGB": .integer(Int64(entry.recommendedRamGB)),
+                "licenseName": .string(entry.licenseName),
+                "licenseURL": .string(entry.licenseURL),
+                "loaded": .bool(runtimeSnap.running && runtimeSnap.loadedModelID == entry.id),
+                "download": downloadJSON,
+                "lastError": lastErr.map(JSONValue.string) ?? .null
+            ]))
+        }
+
+        return .object([
+            "useChinaMirror": .bool(prefs.useChinaMirror),
+            "hfEndpoint": .string(hfEndpoint),
+            "hfEndpointOverride": envOverride.map(JSONValue.string) ?? .null,
+            "runtime": .object([
+                "installed": .bool(runtimeSnap.runtimeInstalled),
+                "version": runtimeSnap.runtimeVersion.map(JSONValue.string) ?? .null,
+                "pinnedVersion": .string(localStore.catalog.runtimeAsset.version),
+                "sizeBytes": .integer(localStore.catalog.runtimeAsset.sizeBytes),
+                "gpuAcceleration": (runtimeSnap.gpuAcceleration ?? localStore.catalog.runtimeAsset.gpuAcceleration)
+                    .isEmpty ? .null :
+                    .string(runtimeSnap.gpuAcceleration ?? localStore.catalog.runtimeAsset.gpuAcceleration),
+                "running": .bool(runtimeSnap.running),
+                "loadedModelID": runtimeSnap.loadedModelID.map(JSONValue.string) ?? .null,
+                "lastError": runtimeSnap.lastError.map(JSONValue.string) ?? .null
+            ]),
+            "models": .array(modelRecords)
+        ])
+    }
+
+    private func setLocalConfig(_ params: [String: JSONValue]) async throws -> JSONValue {
+        var prefs = await localStore.preferences()
+        if let value = params["useChinaMirror"] {
+            guard let flag = value.bool else {
+                throw BridgeFailure("invalid_params", "Expected boolean: useChinaMirror")
+            }
+            prefs.useChinaMirror = flag
+        }
+        try await localStore.savePreferences(prefs)
+        return await localStatus()
+    }
+
+    private func startLocalDownload(_ params: [String: JSONValue]) async throws -> JSONValue {
+        let modelID = try params.text("modelID")
+        guard localStore.catalog.model(id: modelID) != nil else {
+            throw BridgeFailure("model_not_found", "Unknown local model: \(modelID)")
+        }
+        try await networkAccess()
+        if let existingJob = localDownloadJobs[modelID] {
+            return .object(["jobID": .string(existingJob), "modelID": .string(modelID), "alreadyRunning": .bool(true)])
+        }
+        let mirrorOverride: Bool?
+        if let raw = params["useChinaMirror"] {
+            guard let flag = raw.bool else {
+                throw BridgeFailure("invalid_params", "Expected boolean: useChinaMirror")
+            }
+            var prefs = await localStore.preferences()
+            prefs.useChinaMirror = flag
+            try await localStore.savePreferences(prefs)
+            mirrorOverride = flag
+        } else {
+            mirrorOverride = nil
+        }
+
+        let store = self.localStore
+        let startResult = try jobs.start(
+            name: "translation.local.download",
+            extra: ["modelID": .string(modelID)]
+        ) { [weak self] reportProgress in
+            do {
+                let jobID = self?.localDownloadJobs[modelID] ?? ""
+                _ = try await store.downloadModel(
+                    id: modelID,
+                    useChinaMirror: mirrorOverride,
+                    jobID: jobID
+                ) { progress in
+                    await MainActor.run { reportProgress(progress.jsonValue) }
+                }
+                await store.finishDownload(for: modelID, error: nil)
+                self?.localDownloadJobs.removeValue(forKey: modelID)
+                return .object(["modelID": .string(modelID), "installed": .bool(true)])
+            } catch is CancellationError {
+                await store.finishDownload(for: modelID, error: nil)
+                self?.localDownloadJobs.removeValue(forKey: modelID)
+                throw CancellationError()
+            } catch {
+                await store.finishDownload(for: modelID, error: error.localizedDescription)
+                self?.localDownloadJobs.removeValue(forKey: modelID)
+                throw error
+            }
+        }
+        if let id = startResult.object?["jobID"]?.string {
+            localDownloadJobs[modelID] = id
+        }
+        return startResult
+    }
+
+    private func cancelLocalDownload(_ params: [String: JSONValue]) async throws -> JSONValue {
+        let modelID = try params.text("modelID")
+        if let jobID = localDownloadJobs[modelID] {
+            _ = try? jobs.call("jobs.cancel", params: ["jobID": .string(jobID)])
+            localDownloadJobs.removeValue(forKey: modelID)
+        }
+        await localStore.finishDownload(for: modelID, error: nil)
+        return await localStatus()
+    }
+
+    private func deleteLocalModel(_ params: [String: JSONValue]) async throws -> JSONValue {
+        let modelID = try params.text("modelID")
+        let snap = await localRuntime.snapshot()
+        if snap.running, snap.loadedModelID == modelID {
+            await localRuntime.unload()
+        }
+        _ = try await localStore.deleteModel(id: modelID)
+        return await localStatus()
+    }
+
+    private func unloadLocalRuntime() async -> JSONValue {
+        await localRuntime.unload()
+        return await localStatus()
     }
 
     private func provider(_ id: UUID) async throws -> ProviderConfiguration {

@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 use gpui_kit::component::input::{InputEvent, InputState, TextareaState};
 use gpui_kit::{AppContext, Context, Entity, Window};
@@ -290,6 +291,83 @@ struct CachePendingMeta {
     cleared_game_id: Option<String>,
 }
 
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LocalDownloadProgressDto {
+    #[serde(default)]
+    pub(crate) stage: String,
+    #[serde(default)]
+    pub(crate) downloaded_bytes: u64,
+    #[serde(default)]
+    pub(crate) total_bytes: u64,
+    #[serde(default)]
+    pub(crate) bytes_per_second: u64,
+    pub(crate) eta_seconds: Option<u64>,
+    #[serde(rename = "jobID", default)]
+    pub(crate) job_id: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LocalRuntimeDto {
+    #[serde(default)]
+    pub(crate) installed: bool,
+    pub(crate) version: Option<String>,
+    #[serde(default)]
+    pub(crate) pinned_version: String,
+    #[serde(default)]
+    pub(crate) size_bytes: u64,
+    pub(crate) gpu_acceleration: Option<String>,
+    #[serde(default)]
+    pub(crate) running: bool,
+    #[serde(rename = "loadedModelID")]
+    pub(crate) loaded_model_id: Option<String>,
+    pub(crate) last_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LocalModelDto {
+    pub(crate) id: String,
+    #[serde(default)]
+    pub(crate) display_name: String,
+    #[serde(default)]
+    pub(crate) subtitle: String,
+    #[serde(default)]
+    pub(crate) recommended: bool,
+    #[serde(default)]
+    pub(crate) size_bytes: u64,
+    #[serde(default)]
+    pub(crate) installed: bool,
+    pub(crate) installed_size_bytes: Option<u64>,
+    #[serde(default)]
+    pub(crate) context_window: u64,
+    #[serde(default)]
+    pub(crate) recommended_ram_gb: u64,
+    #[serde(default)]
+    pub(crate) license_name: String,
+    #[serde(default)]
+    pub(crate) license_url: String,
+    #[serde(default)]
+    pub(crate) loaded: bool,
+    pub(crate) download: Option<LocalDownloadProgressDto>,
+    pub(crate) last_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LocalTranslationStatusDto {
+    #[serde(default)]
+    pub(crate) use_china_mirror: bool,
+    #[serde(default)]
+    pub(crate) hf_endpoint: String,
+    pub(crate) hf_endpoint_override: Option<String>,
+    #[serde(default)]
+    pub(crate) runtime: LocalRuntimeDto,
+    #[serde(default)]
+    pub(crate) models: Vec<LocalModelDto>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SettingsEnvelopeDto {
@@ -399,6 +477,8 @@ pub(crate) struct TranslationPage {
     pub(crate) prompt_input: Option<Entity<TextareaState>>,
     pub(crate) pending: BTreeMap<u64, PendingTranslationRequest>,
     pub(crate) cache: TranslationCacheState,
+    pub(crate) local_status: Option<LocalTranslationStatusDto>,
+    pub(crate) local_poll_scheduled: bool,
     cache_generation: u64,
     cache_pending: BTreeMap<u64, CachePendingMeta>,
     selection_generation: u64,
@@ -431,6 +511,8 @@ impl Default for TranslationPage {
             prompt_input: None,
             pending: BTreeMap::new(),
             cache: TranslationCacheState::default(),
+            local_status: None,
+            local_poll_scheduled: false,
             cache_generation: 0,
             cache_pending: BTreeMap::new(),
             selection_generation: 0,
@@ -453,7 +535,21 @@ pub(crate) struct PendingTranslationRequest {
 
 impl TranslationPage {
     pub(crate) fn is_pending(&self, method: &str) -> bool {
-        self.pending.values().any(|request| request.method == method)
+        self.pending
+            .values()
+            .any(|request| request.method == method)
+    }
+
+    pub(crate) fn has_visible_pending(&self) -> bool {
+        self.pending
+            .values()
+            .any(|request| request.method != "translation.local.status")
+    }
+
+    pub(crate) fn has_active_local_download(&self) -> bool {
+        self.local_status
+            .as_ref()
+            .is_some_and(|status| status.models.iter().any(|model| model.download.is_some()))
     }
 
     pub(crate) fn provider_probe_pending(&self) -> bool {
@@ -485,6 +581,7 @@ impl TranslationPage {
         }
         self.request(bridge, "translation.providers/list", json!({}));
         self.request(bridge, "translation.settings/get", json!({}));
+        self.refresh_local_status_silent(bridge);
         let cache_game_id = self.cache.effective_game_id();
         self.refresh_cache(bridge, cache_game_id);
     }
@@ -494,6 +591,7 @@ impl TranslationPage {
         self.pending.clear();
         self.cache_pending.clear();
         self.cache.loading = false;
+        self.local_poll_scheduled = false;
         self.pending_credential.clear();
         if had_pending {
             let msg = match reason {
@@ -555,6 +653,12 @@ impl TranslationPage {
                     "translation.providers/save" => selection_current && draft_current,
                     "translation.providers/list" => true,
                     "translation.settings/get" | "translation.settings/save" => settings_current,
+                    "translation.local.status" => false,
+                    "translation.local.setConfig"
+                    | "translation.local.download"
+                    | "translation.local.cancelDownload"
+                    | "translation.local.delete"
+                    | "translation.local.unload" => true,
                     _ => selection_current && draft_current && provider_current,
                 };
                 if show_error {
@@ -704,6 +808,49 @@ impl TranslationPage {
                             .and_then(Value::as_str)
                             .map(|s| format!("连接测试成功：{s}"));
                     }
+                    if self.draft.kind == "localBuiltIn" {
+                        self.refresh_local_status_silent(bridge);
+                    }
+                }
+                "translation.local.status"
+                | "translation.local.setConfig"
+                | "translation.local.cancelDownload"
+                | "translation.local.delete"
+                | "translation.local.unload" => {
+                    match serde_json::from_value::<LocalTranslationStatusDto>(value) {
+                        Ok(status) => {
+                            self.local_status = Some(status);
+                            if method == "translation.local.setConfig" {
+                                let mirror = self
+                                    .local_status
+                                    .as_ref()
+                                    .is_some_and(|s| s.use_china_mirror);
+                                self.message = Some(if mirror {
+                                    "已切换至国内镜像源（hf-mirror.com）".into()
+                                } else {
+                                    "已切换至官方源（huggingface.co）".into()
+                                });
+                            } else if method == "translation.local.cancelDownload" {
+                                self.message = Some("已取消本地模型下载".into());
+                            } else if method == "translation.local.delete" {
+                                self.message = Some("已删除本地模型文件".into());
+                            } else if method == "translation.local.unload" {
+                                self.message = Some("已释放本地推理模型内存".into());
+                            }
+                            if self.active && self.has_active_local_download() {
+                                self.schedule_local_poll(cx);
+                            }
+                        }
+                        Err(error) if method != "translation.local.status" => {
+                            self.error = Some(format!("无效的本地模型状态：{error}"));
+                        }
+                        Err(_) => {}
+                    }
+                }
+                "translation.local.download" => {
+                    self.message = Some("已开始后台下载本地推理引擎与模型，请查看实时进度条。".into());
+                    self.refresh_local_status_silent(bridge);
+                    self.schedule_local_poll(cx);
                 }
                 "translation.cache/list" => {
                     self.cache.loading = self.is_pending("translation.cache/list");
@@ -835,6 +982,119 @@ impl TranslationPage {
             profile.has_credential = has_credential;
         }
     }
+    pub(crate) fn refresh_local_status_silent(&mut self, bridge: &BridgeSupervisor) {
+        if self.is_pending("translation.local.status") {
+            return;
+        }
+        let request = next_request_id();
+        let pending = PendingTranslationRequest {
+            method: "translation.local.status".to_owned(),
+            provider_id: None,
+            selection_generation: self.selection_generation,
+            draft_generation: self.draft_generation,
+            settings_edit_generation: self.settings_edit_generation,
+        };
+        if bridge
+            .translation_request(request, "translation.local.status", json!({}))
+            .is_ok()
+        {
+            self.pending.insert(request, pending);
+        }
+    }
+
+    pub(crate) fn set_local_china_mirror(&mut self, bridge: &BridgeSupervisor, enabled: bool) {
+        self.request(
+            bridge,
+            "translation.local.setConfig",
+            json!({ "useChinaMirror": enabled }),
+        );
+    }
+
+    pub(crate) fn download_local_model(
+        &mut self,
+        bridge: &BridgeSupervisor,
+        model_id: &str,
+        cx: &mut Context<WhiskyApp>,
+    ) {
+        let mirror = self
+            .local_status
+            .as_ref()
+            .is_some_and(|status| status.use_china_mirror);
+        self.request(
+            bridge,
+            "translation.local.download",
+            json!({ "modelID": model_id, "useChinaMirror": mirror }),
+        );
+        self.schedule_local_poll(cx);
+    }
+
+    pub(crate) fn cancel_local_download(&mut self, bridge: &BridgeSupervisor, model_id: &str) {
+        self.request(
+            bridge,
+            "translation.local.cancelDownload",
+            json!({ "modelID": model_id }),
+        );
+    }
+
+    pub(crate) fn delete_local_model(&mut self, bridge: &BridgeSupervisor, model_id: &str) {
+        self.request(
+            bridge,
+            "translation.local.delete",
+            json!({ "modelID": model_id }),
+        );
+    }
+
+    pub(crate) fn unload_local_runtime(&mut self, bridge: &BridgeSupervisor) {
+        self.request(bridge, "translation.local.unload", json!({}));
+    }
+
+    pub(crate) fn choose_local_model(
+        &mut self,
+        model: &LocalModelDto,
+        window: &mut Window,
+        cx: &mut Context<WhiskyApp>,
+    ) {
+        let descriptor = ModelDescriptorDto {
+            id: model.id.clone(),
+            display_name: model.display_name.clone(),
+            context_window: (model.context_window > 0).then_some(model.context_window),
+            context_window_provenance: "detected".into(),
+            capabilities: vec!["textCompletion".into(), "streaming".into()],
+        };
+        if let Some(input) = self.inputs.get("model").cloned() {
+            let value = model.id.clone();
+            input.update(cx, |state, cx| state.set_value(value, window, cx));
+        }
+        self.choose_model(&descriptor);
+    }
+
+    pub(crate) fn schedule_local_poll(&mut self, cx: &mut Context<WhiskyApp>) {
+        if self.local_poll_scheduled {
+            return;
+        }
+        self.local_poll_scheduled = true;
+        cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(Duration::from_millis(400))
+                .await;
+            let _ = this.update(cx, |app, cx| {
+                app.translation_page.local_poll_scheduled = false;
+                if app.translation_page.active
+                    && (app.translation_page.has_active_local_download()
+                        || app
+                            .translation_page
+                            .is_pending("translation.local.download"))
+                {
+                    app.translation_page
+                        .refresh_local_status_silent(&app.bridge);
+                    app.translation_page.schedule_local_poll(cx);
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
     pub(crate) fn test_connection(&mut self, bridge: &BridgeSupervisor) {
         if let Some(id) = &self.selected_id {
             self.request(
@@ -1390,18 +1650,38 @@ impl TranslationPage {
         window: &mut Window,
         cx: &mut Context<WhiskyApp>,
     ) {
+        let is_local = self.draft.kind == "localBuiltIn";
         let model_id = if self.draft.kind == "deepL" {
             String::new()
+        } else if is_local {
+            let typed = self.field("model", cx);
+            if !typed.trim().is_empty() {
+                typed
+            } else {
+                self.draft.model_id.clone()
+            }
         } else {
             self.field("model", cx)
         };
         let name = self.field("name", cx);
-        let endpoint = self.field("endpoint", cx);
+        let endpoint = if is_local {
+            default_endpoint("localBuiltIn").to_owned()
+        } else {
+            self.field("endpoint", cx)
+        };
         if name.trim().is_empty() || endpoint.trim().is_empty() {
             self.error = Some("提供商名称和 API 端点不能为空。".into());
             return;
         }
-        let credential = self.field("credential", cx);
+        if is_local && model_id.trim().is_empty() {
+            self.error = Some("请先在下方选择一个本地模型（如 PLaMo 3 Translate 2B 或 0.8B）。".into());
+            return;
+        }
+        let credential = if is_local {
+            String::new()
+        } else {
+            self.field("credential", cx)
+        };
         if !credential.is_empty() {
             self.pending_credential.set(credential);
             if let Some(input) = self.inputs.remove("credential") {
@@ -1466,11 +1746,37 @@ impl TranslationPage {
     pub(crate) fn new_provider(&mut self, kind: &str) {
         self.select(None);
         self.pending_credential.clear();
+        let is_local = kind == "localBuiltIn";
+        let default_local_model = if is_local {
+            self.local_status
+                .as_ref()
+                .and_then(|status| {
+                    status
+                        .models
+                        .iter()
+                        .find(|m| m.installed)
+                        .or_else(|| status.models.first())
+                        .map(|m| m.id.clone())
+                })
+                .unwrap_or_else(|| "plamo-3-translate-2b-q4_k_m".into())
+        } else {
+            String::new()
+        };
         self.draft = ProviderDraft {
+            name: if is_local {
+                "内置 PLaMo 3 本地翻译".into()
+            } else {
+                String::new()
+            },
             kind: kind.to_owned(),
             base_url: default_endpoint(kind).into(),
-            source_language: "auto".into(),
-            target_language: "en".into(),
+            model_id: default_local_model,
+            source_language: if is_local { "ja".into() } else { "auto".into() },
+            target_language: if is_local {
+                "zh-Hans".into()
+            } else {
+                "en".into()
+            },
             token_limit_field: "max_completion_tokens".into(),
             thinking_level: default_thinking_level(),
             ..ProviderDraft::default()
@@ -2765,6 +3071,72 @@ mod tests {
             .unwrap();
     }
 
+    #[test]
+    fn local_built_in_dto_and_progress_formatters() {
+        assert_eq!(default_endpoint("localBuiltIn"), "http://127.0.0.1:18080");
+        assert_eq!(
+            provider_kind_label("localBuiltIn"),
+            "内置本地模型 (PLaMo 3)"
+        );
+        assert_eq!(format_bytes_human(573_126_848), "546.6 MB");
+        assert_eq!(format_bytes_human(1_807_203_040), "1.68 GB");
+        assert_eq!(format_speed_human(0), "计算中…");
+        assert_eq!(format_speed_human(10 * 1024 * 1024), "10.0 MB/s");
+        assert_eq!(format_eta_human(None), "预计剩余：计算中…");
+        assert_eq!(format_eta_human(Some(0)), "即将完成");
+        assert_eq!(format_eta_human(Some(42)), "预计剩余约 42 秒");
+        assert_eq!(format_eta_human(Some(125)), "预计剩余约 2 分 5 秒");
+        assert_eq!(
+            local_download_stage_label("downloadingModel"),
+            "正在下载模型权重"
+        );
+
+        let status: LocalTranslationStatusDto = serde_json::from_value(serde_json::json!({
+            "useChinaMirror": true,
+            "hfEndpoint": "https://hf-mirror.com",
+            "hfEndpointOverride": null,
+            "runtime": {
+                "installed": true,
+                "version": "b12540",
+                "pinnedVersion": "b12540",
+                "sizeBytes": 16443903,
+                "gpuAcceleration": "metal",
+                "running": false,
+                "loadedModelID": null,
+                "lastError": null
+            },
+            "models": [{
+                "id": "plamo-3-translate-2b-q4_k_m",
+                "displayName": "PLaMo 3 Translate 2B (Q4_K_M)",
+                "subtitle": "推荐主力",
+                "recommended": true,
+                "sizeBytes": 1807203040,
+                "installed": false,
+                "installedSizeBytes": null,
+                "contextWindow": 32768,
+                "recommendedRamGB": 8,
+                "licenseName": "PLaMo Community License",
+                "licenseURL": "https://plamo.preferredai.jp/info/plamo-community-license-en",
+                "loaded": false,
+                "download": {
+                    "stage": "downloadingModel",
+                    "downloadedBytes": 500000000,
+                    "totalBytes": 1807203040,
+                    "bytesPerSecond": 12000000,
+                    "etaSeconds": 109,
+                    "jobID": "job-42"
+                },
+                "lastError": null
+            }]
+        }))
+        .unwrap();
+        assert!(status.use_china_mirror);
+        assert_eq!(status.models.len(), 1);
+        let mut page = TranslationPage::default();
+        page.local_status = Some(status);
+        assert!(page.has_active_local_download());
+    }
+
     fn test_provider(id: &str) -> ProviderDto {
         ProviderDto {
             id: id.into(),
@@ -2795,6 +3167,7 @@ pub(crate) fn default_endpoint(kind: &str) -> &'static str {
         "anthropic" => "https://api.anthropic.com/v1",
         "gemini" => "https://generativelanguage.googleapis.com/v1beta",
         "deepL" => "https://api.deepl.com",
+        "localBuiltIn" => "http://127.0.0.1:18080",
         _ => "https://api.openai.com/v1",
     }
 }
@@ -2807,8 +3180,65 @@ pub(crate) fn provider_kind_label(kind: &str) -> &str {
         "deepL" => "DeepL",
         "anthropic" => "Anthropic",
         "gemini" => "Gemini",
+        "localBuiltIn" => "内置本地模型 (PLaMo 3)",
         "" => "未选择",
         other => other,
+    }
+}
+
+pub(crate) fn local_download_stage_label(stage: &str) -> &'static str {
+    match stage {
+        "downloadingRuntime" => "正在下载推理引擎 (llama.cpp)",
+        "verifyingRuntime" => "正在校验推理引擎 SHA-256",
+        "extractingRuntime" => "正在解压安装推理引擎",
+        "downloadingModel" => "正在下载模型权重",
+        "verifyingModel" => "正在校验模型 SHA-256",
+        _ => "正在准备下载",
+    }
+}
+
+pub(crate) fn format_bytes_human(bytes: u64) -> String {
+    const KB: f64 = 1024.0;
+    const MB: f64 = 1024.0 * 1024.0;
+    const GB: f64 = 1024.0 * 1024.0 * 1024.0;
+    let b = bytes as f64;
+    if b >= GB {
+        format!("{:.2} GB", b / GB)
+    } else if b >= MB {
+        format!("{:.1} MB", b / MB)
+    } else if b >= KB {
+        format!("{:.0} KB", b / KB)
+    } else {
+        format!("{bytes} B")
+    }
+}
+
+pub(crate) fn format_speed_human(bytes_per_sec: u64) -> String {
+    if bytes_per_sec == 0 {
+        return "计算中…".into();
+    }
+    format!("{}/s", format_bytes_human(bytes_per_sec))
+}
+
+pub(crate) fn format_eta_human(eta_seconds: Option<u64>) -> String {
+    match eta_seconds {
+        None => "预计剩余：计算中…".into(),
+        Some(0) => "即将完成".into(),
+        Some(secs) if secs < 60 => format!("预计剩余约 {secs} 秒"),
+        Some(secs) if secs < 3600 => {
+            let mins = secs / 60;
+            let rem = secs % 60;
+            if rem == 0 {
+                format!("预计剩余约 {mins} 分钟")
+            } else {
+                format!("预计剩余约 {mins} 分 {rem} 秒")
+            }
+        }
+        Some(secs) => {
+            let hours = secs / 3600;
+            let mins = (secs % 3600) / 60;
+            format!("预计剩余约 {hours} 小时 {mins} 分")
+        }
     }
 }
 

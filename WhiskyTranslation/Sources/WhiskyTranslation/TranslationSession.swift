@@ -53,7 +53,7 @@ public struct TranslationCacheKey: Hashable, Sendable {
         openAIChatTokenLimitField = configuration.openAIChatTokenLimitField
         thinkingLevel = configuration.thinkingLevel
         contextWindowTokens = request.contextWindowTokens
-        promptVersion = TranslationPrompt.version
+        promptVersion = TranslationPrompt.promptVersion(for: configuration.kind)
         normalizerVersion = "raw-utf8-v1"
     }
 }

@@ -51,7 +51,7 @@ public struct HTTPTranslationProvider: TranslationProvider, Sendable {
         try validate(configuration, credential: credential, needsModel: false)
         guard kind.supportsModelDiscovery else { throw TranslationError.modelDiscoveryUnsupported }
         switch kind {
-        case .openAIChat, .openAICompletions:
+        case .openAIChat, .openAICompletions, .localBuiltIn:
             let response = try await get(configuration, path: "models", version: "v1", credential: credential)
             defer { response.cancel() }
             let root = try await jsonDictionary(collect(response.body))
@@ -84,7 +84,7 @@ public struct HTTPTranslationProvider: TranslationProvider, Sendable {
         try validate(configuration, credential: credential, needsModel: false)
         guard !id.isEmpty, id.utf8.count <= 512 else { throw TranslationError.invalidModel }
         switch kind {
-        case .openAIChat, .openAICompletions:
+        case .openAIChat, .openAICompletions, .localBuiltIn:
             let response = try await get(
                 configuration,
                 path: "models/\(pathSegment(id))",
@@ -213,6 +213,65 @@ public struct HTTPTranslationProvider: TranslationProvider, Sendable {
                 credential: credential,
                 continuation: continuation
             )
+        case .localBuiltIn:
+            try await translateLocalBuiltIn(
+                request,
+                configuration: configuration,
+                credential: credential,
+                continuation: continuation
+            )
+        }
+    }
+
+    private func translateLocalBuiltIn(
+        _ request: TranslationRequest,
+        configuration: ProviderConfiguration,
+        credential: String?,
+        continuation: AsyncThrowingStream<TranslationEvent, any Error>.Continuation
+    ) async throws {
+        guard let model = configuration.modelID, !model.isEmpty else { throw TranslationError.missingModel }
+        let body: [String: Any] = [
+            "model": model,
+            "prompt": TranslationPrompt.pfml3Prompt(for: request),
+            "max_tokens": request.outputTokenLimit,
+            "temperature": 0,
+            "stop": ["<|plamo:tag|>", "<|plamo:bos|>"],
+            "stream": true,
+            "cache_prompt": true
+        ]
+        let response = try await post(
+            configuration,
+            path: "completions",
+            version: "v1",
+            credential: credential,
+            body: jsonData(body),
+            accept: "text/event-stream"
+        )
+        defer { response.cancel() }
+        try await consumeSSE(response.body, continuation: continuation) { frame, aggregate in
+            if frame.data == "[DONE]" { return .done }
+            let root = try jsonDictionary(Data(frame.data.utf8))
+            if frame.event == "error" || root["error"] != nil { throw TranslationError.providerRejected }
+            var stopHit = false
+            if let choices = root["choices"] as? [[String: Any]] {
+                for choice in choices {
+                    if let raw = choice["text"] as? String, !raw.isEmpty {
+                        let cleaned = stripPFML3StopTokens(raw)
+                        if cleaned.stopped { stopHit = true }
+                        if !cleaned.text.isEmpty {
+                            aggregate.append(cleaned.text)
+                            try yield(.delta(cleaned.text), to: continuation)
+                        }
+                    }
+                }
+            }
+            if let usage = root["usage"] as? [String: Any] {
+                try yield(.usage(TranslationUsage(
+                    inputTokens: positiveInteger(usage["prompt_tokens"]),
+                    outputTokens: positiveInteger(usage["completion_tokens"])
+                )), to: continuation)
+            }
+            return stopHit ? .done : .continue
         }
     }
 
@@ -667,7 +726,7 @@ public struct HTTPTranslationProvider: TranslationProvider, Sendable {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
         switch kind {
-        case .openAIChat, .openAICompletions:
+        case .openAIChat, .openAICompletions, .localBuiltIn:
             if let credential { request.setValue("Bearer \(credential)", forHTTPHeaderField: "Authorization") }
         case .anthropic:
             if let credential { request.setValue(credential, forHTTPHeaderField: "x-api-key") }
@@ -839,4 +898,20 @@ private func ollamaThinkFlag(for level: ThinkingLevel) -> Bool? {
     case .off: false
     case .low, .medium, .high, .xhigh, .max, .ultra: true
     }
+}
+
+private func stripPFML3StopTokens(_ text: String) -> (text: String, stopped: Bool) {
+    let markers = ["<|plamo:tag|>", "<|plamo:bos|>", "<|plamo:eos|>"]
+    var earliest: String.Index?
+    for marker in markers {
+        if let range = text.range(of: marker) {
+            if let current = earliest {
+                if range.lowerBound < current { earliest = range.lowerBound }
+            } else {
+                earliest = range.lowerBound
+            }
+        }
+    }
+    guard let earliest else { return (text, false) }
+    return (String(text[..<earliest]), true)
 }

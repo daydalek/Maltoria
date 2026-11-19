@@ -155,13 +155,13 @@ public final class ApplicationService {
         self.runtime = runtime
         self.processes = processes
         self.preferences = preferences
-        translation = translationService ?? ApplicationTranslationService()
+        let jobStore = jobs ?? BridgeJobStore()
+        self.jobs = jobStore
+        translation = translationService ?? ApplicationTranslationService(jobs: jobStore)
         translation.networkAccess = { [weak preferences] in
             let values = try preferences?.call("preferences.read", params: [:])
             if values?.object?["offlineMode"] == .bool(true) { throw hookFailure("offline") }
         }
-        let jobStore = jobs ?? BridgeJobStore()
-        self.jobs = jobStore
         diagnosticsService = FileDiagnosticsService(jobs: jobStore)
         lifecycleService = ContainerLifecycleService(jobs: jobStore)
         metadataService = LibraryMetadataService(
@@ -244,6 +244,7 @@ public final class ApplicationService {
         repairStores = [:]
         runtime?.stopTracking()
         await capture.stop()
+        await translation.shutdown()
         await jobs.shutdown()
         await native?.shutdown(applyExitPolicy: applyExitPolicy)
     }

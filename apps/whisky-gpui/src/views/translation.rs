@@ -12,13 +12,16 @@ use crate::controls::{col, icon, muted, row};
 use crate::state::WhiskyApp;
 use crate::theme::*;
 use crate::translation::{
-    CacheEntryDto, ModelDescriptorDto, ProviderDto, THINKING_LEVELS, TranslationTab,
-    credential_storage_label, default_endpoint, default_sentence_cache_enabled,
-    default_translation_debounce_ms, normalize_credential_storage_mode, normalize_thinking_level,
-    provider_kind_label, supports_thinking_level,
+    CacheEntryDto, LocalModelDto, ModelDescriptorDto, ProviderDto,
+    THINKING_LEVELS, TranslationTab, credential_storage_label, default_endpoint,
+    default_sentence_cache_enabled, default_translation_debounce_ms, format_bytes_human,
+    format_eta_human, format_speed_human, local_download_stage_label,
+    normalize_credential_storage_mode, normalize_thinking_level, provider_kind_label,
+    supports_thinking_level,
 };
 
-const PROVIDER_KINDS: [(&str, &str); 6] = [
+const PROVIDER_KINDS: [(&str, &str); 7] = [
+    ("内置本地模型 (PLaMo 3)", "localBuiltIn"),
     ("OpenAI Chat Completions", "openAIChat"),
     ("OpenAI Legacy Completions", "openAICompletions"),
     ("Ollama（本地）", "ollama"),
@@ -142,7 +145,7 @@ impl WhiskyApp {
 
     fn translation_status_banner(&self) -> Option<AnyElement> {
         let page = &self.translation_page;
-        let loading = !page.pending.is_empty();
+        let loading = page.has_visible_pending();
         if !loading && page.error.is_none() && page.message.is_none() {
             return None;
         }
@@ -244,6 +247,10 @@ impl WhiskyApp {
                     menu = menu.item(PopupMenuItem::new(label).on_click(move |_, _, cx| {
                         let _ = view.update(cx, |this, cx| {
                             this.translation_page.new_provider(kind);
+                            if kind == "localBuiltIn" {
+                                this.translation_page
+                                    .refresh_local_status_silent(&this.bridge);
+                            }
                             cx.notify();
                         });
                     }));
@@ -354,6 +361,7 @@ impl WhiskyApp {
         let kind = self.translation_page.draft.kind.clone();
         let kind_label = provider_kind_label(&kind).to_owned();
         let deep_l = kind == "deepL";
+        let local_built_in = kind == "localBuiltIn";
         let capture_active = self.capture.active_game.is_some();
         let probes_blocked = capture_active || self.translation_page.provider_probe_pending();
         let capabilities = self
@@ -518,6 +526,10 @@ impl WhiskyApp {
                     active,
                     cx.listener(move |this, _, window, cx| {
                         this.translation_page.switch_kind(&k_owned, window, cx);
+                        if k_owned == "localBuiltIn" {
+                            this.translation_page
+                                .refresh_local_status_silent(&this.bridge);
+                        }
                         cx.notify();
                     }),
                 )
@@ -599,69 +611,86 @@ impl WhiskyApp {
         };
 
         // Card 1 — 基本信息与接口（包含 API 端点与 API 密钥）
-        let basic_card = section_card(
-            "基本信息与接口",
-            Some("选择提供商协议类型，并填写名称、API 端点与访问密钥。"),
-            col()
-                .gap(px(10.))
-                .child(labeled_field(
-                    "提供商类型",
-                    row().gap(px(6.)).flex_wrap().children(kind_chips),
-                ))
-                .child(labeled_field("名称", name_input))
-                .child(labeled_field(
-                    "API 端点",
-                    col()
-                        .gap(px(4.))
-                        .child(endpoint_input)
-                        .child(
-                            muted(format!("默认端点：{}", default_endpoint(&kind)))
-                                .text_size(px(11.)),
-                        ),
-                ))
-                .child(divider_line())
-                .child(labeled_field(
-                    "API 密钥",
-                    col()
-                        .gap(px(6.))
-                        .child(
-                            row()
-                                .gap(px(8.))
-                                .flex_wrap()
-                                .child(cred_status)
-                                .child(storage_badge),
-                        )
-                        .child(
-                            row()
-                                .gap(px(8.))
-                                .child(div().flex_1().min_w_0().child(credential_input))
-                                .when(selected && has_credential, |d| {
-                                    d.child(
-                                        Button::new("translation-credential-remove")
-                                            .danger()
-                                            .label("移除密钥")
-                                            .on_click(cx.listener(|this, _, _, cx| {
-                                                this.translation_page.remove_credential(&this.bridge);
-                                                cx.notify();
-                                            })),
-                                    )
-                                }),
-                        )
-                        .child(muted(cred_hint).text_size(px(11.)))
-                        .when(is_plaintext_storage, |d| {
-                            d.child(
-                                div()
-                                    .text_size(px(11.))
-                                    .line_height(relative(1.4))
-                                    .text_color(rgb(warning_fg()))
-                                    .child("当前为本地明文文件存储（0600 权限，免弹窗）；切换存储模式后需在此重新保存密钥。"),
+        let basic_card = if local_built_in {
+            section_card(
+                "基本信息与本地托管",
+                Some("由 Maltoria 自动管理本地 llama.cpp 推理进程（Metal / Vulkan），免配置端点与 API 密钥，完全支持离线翻译。"),
+                col()
+                    .gap(px(10.))
+                    .child(labeled_field(
+                        "提供商类型",
+                        row().gap(px(6.)).flex_wrap().children(kind_chips),
+                    ))
+                    .child(labeled_field("名称", name_input)),
+            )
+        } else {
+            section_card(
+                "基本信息与接口",
+                Some("选择提供商协议类型，并填写名称、API 端点与访问密钥。"),
+                col()
+                    .gap(px(10.))
+                    .child(labeled_field(
+                        "提供商类型",
+                        row().gap(px(6.)).flex_wrap().children(kind_chips),
+                    ))
+                    .child(labeled_field("名称", name_input))
+                    .child(labeled_field(
+                        "API 端点",
+                        col()
+                            .gap(px(4.))
+                            .child(endpoint_input)
+                            .child(
+                                muted(format!("默认端点：{}", default_endpoint(&kind)))
+                                    .text_size(px(11.)),
+                            ),
+                    ))
+                    .child(divider_line())
+                    .child(labeled_field(
+                        "API 密钥",
+                        col()
+                            .gap(px(6.))
+                            .child(
+                                row()
+                                    .gap(px(8.))
+                                    .flex_wrap()
+                                    .child(cred_status)
+                                    .child(storage_badge),
                             )
-                        }),
-                )),
-        );
+                            .child(
+                                row()
+                                    .gap(px(8.))
+                                    .child(div().flex_1().min_w_0().child(credential_input))
+                                    .when(selected && has_credential, |d| {
+                                        d.child(
+                                            Button::new("translation-credential-remove")
+                                                .danger()
+                                                .label("移除密钥")
+                                                .on_click(cx.listener(|this, _, _, cx| {
+                                                    this.translation_page
+                                                        .remove_credential(&this.bridge);
+                                                    cx.notify();
+                                                })),
+                                        )
+                                    }),
+                            )
+                            .child(muted(cred_hint).text_size(px(11.)))
+                            .when(is_plaintext_storage, |d| {
+                                d.child(
+                                    div()
+                                        .text_size(px(11.))
+                                        .line_height(relative(1.4))
+                                        .text_color(rgb(warning_fg()))
+                                        .child("当前为本地明文文件存储（0600 权限，免弹窗）；切换存储模式后需在此重新保存密钥。"),
+                                )
+                            }),
+                    )),
+            )
+        };
 
         // Card 2 — 模型配置
-        let model_card_body = if deep_l {
+        let model_card_body = if local_built_in {
+            self.local_models_panel(&active_model_id, cx)
+        } else if deep_l {
             row()
                 .gap(px(8.))
                 .p(px(10.))
@@ -875,7 +904,19 @@ impl WhiskyApp {
                 })
                 .into_any_element()
         };
-        let model_card = section_card("模型配置", None, model_card_body);
+        let model_card = section_card(
+            if local_built_in {
+                "本地模型与下载管理"
+            } else {
+                "模型配置"
+            },
+            if local_built_in {
+                Some("下载官方 GGUF 权重（首次下载自动安装 llama.cpp 引擎并校验 SHA-256），空闲 5 分钟自动释放内存。")
+            } else {
+                None
+            },
+            model_card_body,
+        );
 
         // Card 3 — 默认语言
         let lang_card = section_card(
@@ -930,6 +971,452 @@ impl WhiskyApp {
             .into_any_element()
     }
 
+    fn local_models_panel(&self, active_model_id: &str, cx: &Context<Self>) -> AnyElement {
+        let Some(status) = self.translation_page.local_status.as_ref() else {
+            return row()
+                .gap(px(8.))
+                .p(px(12.))
+                .rounded(px(8.))
+                .bg(rgba(card_bg()))
+                .border_1()
+                .border_color(rgba(card_border()))
+                .child(Spinner::new().with_size(px(13.)))
+                .child(muted("正在读取本地推理引擎与模型状态…"))
+                .child(
+                    Button::new("translation-local-refresh")
+                        .label("刷新")
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.translation_page
+                                .refresh_local_status_silent(&this.bridge);
+                            cx.notify();
+                        })),
+                )
+                .into_any_element();
+        };
+
+        let status = status.clone();
+        let runtime = &status.runtime;
+        let gpu_tag = runtime
+            .gpu_acceleration
+            .as_deref()
+            .map(|g| match g {
+                "metal" => "Apple Metal GPU",
+                "vulkan" => "Vulkan GPU",
+                "cpu" => "CPU",
+                other => other,
+            })
+            .unwrap_or("自动");
+
+        let runtime_badge = if runtime.running {
+            let loaded_name = runtime
+                .loaded_model_id
+                .as_deref()
+                .and_then(|id| status.models.iter().find(|m| m.id == id))
+                .map(|m| m.display_name.as_str())
+                .or(runtime.loaded_model_id.as_deref())
+                .unwrap_or("本地模型");
+            pill_badge(
+                format!("● 运行中：{loaded_name}"),
+                installed_bg(),
+                installed_fg(),
+                None,
+            )
+        } else if runtime.installed {
+            let ver = runtime
+                .version
+                .as_deref()
+                .unwrap_or(&runtime.pinned_version);
+            pill_badge(
+                format!("✓ 引擎已就绪（llama.cpp {ver} · {gpu_tag}）"),
+                installed_bg(),
+                installed_fg(),
+                None,
+            )
+        } else {
+            pill_badge(
+                format!(
+                    "未安装引擎（首次下载模型时自动获取 · {} · {gpu_tag}）",
+                    format_bytes_human(runtime.size_bytes)
+                ),
+                badge_bg(),
+                badge_text(),
+                None,
+            )
+        };
+
+        let runtime_bar = row()
+            .justify_between()
+            .gap(px(8.))
+            .flex_wrap()
+            .p(px(10.))
+            .rounded(px(8.))
+            .bg(rgba(card_bg()))
+            .border_1()
+            .border_color(rgba(card_border()))
+            .child(
+                row()
+                    .gap(px(8.))
+                    .flex_wrap()
+                    .child(runtime_badge)
+                    .when_some(runtime.last_error.clone(), |d, err| {
+                        d.child(
+                            div()
+                                .text_size(px(11.))
+                                .text_color(rgb(danger_fg()))
+                                .child(err),
+                        )
+                    }),
+            )
+            .child(
+                row()
+                    .gap(px(6.))
+                    .when(runtime.running, |d| {
+                        d.child(
+                            Button::new("translation-local-unload")
+                                .label("释放内存")
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.translation_page.unload_local_runtime(&this.bridge);
+                                    cx.notify();
+                                })),
+                        )
+                    })
+                    .child(
+                        Button::new("translation-local-refresh-bar")
+                            .ghost()
+                            .label("刷新状态")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.translation_page
+                                    .refresh_local_status_silent(&this.bridge);
+                                cx.notify();
+                            })),
+                    ),
+            );
+
+        let mirror_row = if let Some(override_url) = status.hf_endpoint_override.as_deref() {
+            row()
+                .gap(px(8.))
+                .p(px(10.))
+                .rounded(px(8.))
+                .bg(rgba(card_bg()))
+                .border_1()
+                .border_color(rgba(card_border()))
+                .child(icon("info", 13.).text_color(rgb(accent_fg())))
+                .child(
+                    muted(format!(
+                        "当前下载源已由环境变量覆盖为：{override_url}"
+                    ))
+                    .text_size(px(11.)),
+                )
+                .into_any_element()
+        } else {
+            let mirror_desc = if status.use_china_mirror {
+                "当前使用国内镜像源（hf-mirror.com）下载模型权重，适合中国大陆网络环境。"
+            } else {
+                "当前使用 Hugging Face 官方源（huggingface.co）；国内网络下载缓慢或失败时建议开启镜像。"
+            };
+            div()
+                .p(px(10.))
+                .rounded(px(8.))
+                .bg(rgba(card_bg()))
+                .border_1()
+                .border_color(rgba(card_border()))
+                .child(switch_row(
+                    "translation-local-china-mirror",
+                    "使用国内镜像源加速下载（hf-mirror.com）",
+                    mirror_desc,
+                    status.use_china_mirror,
+                    cx.listener(|this, checked: &bool, _, cx| {
+                        this.translation_page
+                            .set_local_china_mirror(&this.bridge, *checked);
+                        cx.notify();
+                    }),
+                ))
+                .into_any_element()
+        };
+
+        let cards: Vec<AnyElement> = status
+            .models
+            .iter()
+            .map(|model| self.local_model_card(model, model.id == active_model_id, cx))
+            .collect();
+
+        let license_note = row()
+            .gap(px(6.))
+            .child(icon("info", 12.).text_color(rgb(muted_color())))
+            .child(
+                muted(
+                    "模型权重遵循 PLaMo Community License（个人与非商用免费），由用户按需下载至本地目录，不随 Maltoria 安装包分发；支持断点续传与 SHA-256 完整性校验。",
+                )
+                .text_size(px(11.))
+                .line_height(relative(1.4)),
+            );
+
+        col()
+            .gap(px(10.))
+            .child(runtime_bar)
+            .child(mirror_row)
+            .child(col().gap(px(8.)).children(cards))
+            .child(license_note)
+            .into_any_element()
+    }
+
+    fn local_model_card(
+        &self,
+        model: &LocalModelDto,
+        is_selected: bool,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let model_id = model.id.clone();
+        let model_clone = model.clone();
+        let size_label = format_bytes_human(model.installed_size_bytes.unwrap_or(model.size_bytes));
+        let ctx_label = format_context_window(model.context_window);
+
+        let mut badges: Vec<Div> = Vec::new();
+        if model.recommended {
+            badges.push(pill_badge("推荐", accent_subtle_bg(), accent_fg(), None));
+        }
+        if model.loaded {
+            badges.push(pill_badge("● 已加载", installed_bg(), installed_fg(), None));
+        } else if model.installed {
+            badges.push(pill_badge("✓ 已下载", installed_bg(), installed_fg(), None));
+        } else {
+            badges.push(pill_badge("未下载", badge_bg(), badge_text(), None));
+        }
+        if is_selected {
+            badges.push(pill_badge(
+                "当前已选",
+                accent_subtle_bg(),
+                accent_fg(),
+                Some(accent_subtle_border()),
+            ));
+        }
+        badges.push(pill_badge(size_label, badge_bg(), badge_text(), None));
+        badges.push(pill_badge(
+            format!("上下文 {ctx_label}"),
+            badge_bg(),
+            badge_text(),
+            None,
+        ));
+
+        let progress_block = model.download.as_ref().map(|dl| {
+            let total = dl.total_bytes.max(1);
+            let clamped = dl.downloaded_bytes.min(total);
+            let ratio = (clamped as f32 / total as f32).clamp(0.0, 1.0);
+            let pct = ratio * 100.0;
+            let stage_label = local_download_stage_label(&dl.stage);
+            let is_verifying_or_extracting = matches!(
+                dl.stage.as_str(),
+                "verifyingRuntime" | "extractingRuntime" | "verifyingModel"
+            );
+            let detail_text = if is_verifying_or_extracting {
+                "正在本地校验与准备文件，请稍候…".to_owned()
+            } else {
+                format!(
+                    "已下载 {} / {} · 速度 {} · {}",
+                    format_bytes_human(clamped),
+                    format_bytes_human(total),
+                    format_speed_human(dl.bytes_per_second),
+                    format_eta_human(dl.eta_seconds)
+                )
+            };
+            let cancel_id = model_id.clone();
+
+            col()
+                .gap(px(6.))
+                .p(px(10.))
+                .rounded(px(7.))
+                .bg(rgba(card_bg_subtle()))
+                .border_1()
+                .border_color(rgba(accent_subtle_border()))
+                .child(
+                    row()
+                        .justify_between()
+                        .gap(px(8.))
+                        .child(
+                            row()
+                                .gap(px(6.))
+                                .child(Spinner::new().with_size(px(12.)))
+                                .child(
+                                    div()
+                                        .text_size(px(12.))
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .text_color(rgb(text()))
+                                        .child(stage_label),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(12.))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(rgb(accent_fg()))
+                                .child(if is_verifying_or_extracting {
+                                    "校验中…".to_owned()
+                                } else {
+                                    format!("{pct:.1}%")
+                                }),
+                        ),
+                )
+                .child(
+                    div()
+                        .w_full()
+                        .h(px(7.))
+                        .rounded(px(4.))
+                        .bg(rgba(badge_bg()))
+                        .overflow_hidden()
+                        .child(
+                            div()
+                                .h_full()
+                                .w(relative(if is_verifying_or_extracting {
+                                    1.0
+                                } else {
+                                    ratio.max(0.01)
+                                }))
+                                .rounded(px(4.))
+                                .bg(rgb(if is_verifying_or_extracting {
+                                    installed_fg()
+                                } else {
+                                    accent_fg()
+                                })),
+                        ),
+                )
+                .child(
+                    row()
+                        .justify_between()
+                        .gap(px(8.))
+                        .flex_wrap()
+                        .child(muted(detail_text).text_size(px(11.)))
+                        .child(
+                            Button::new(format!("translation-local-cancel:{cancel_id}"))
+                                .danger()
+                                .label("取消下载")
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.translation_page
+                                        .cancel_local_download(&this.bridge, &cancel_id);
+                                    cx.notify();
+                                })),
+                        ),
+                )
+                .into_any_element()
+        });
+
+        let error_block = model.last_error.as_ref().map(|err| {
+            row()
+                .gap(px(6.))
+                .p(px(8.))
+                .rounded(px(6.))
+                .bg(rgba(0xff5f571a))
+                .border_1()
+                .border_color(rgba(0xff5f574d))
+                .child(icon("triangle-alert", 12.).text_color(rgb(danger_fg())))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .text_size(px(11.))
+                        .text_color(rgb(danger_fg()))
+                        .child(format!("上次下载失败：{err}")),
+                )
+                .into_any_element()
+        });
+
+        let downloading = model.download.is_some();
+        let select_model = model_clone.clone();
+        let download_id = model_id.clone();
+        let delete_id = model_id.clone();
+
+        let actions = row()
+            .gap(px(8.))
+            .flex_wrap()
+            .when(!downloading && !model.installed, |d| {
+                let model_for_pick = select_model.clone();
+                let dl_id = download_id.clone();
+                d.child(
+                    Button::new(format!("translation-local-dl:{dl_id}"))
+                        .primary()
+                        .label(if model.last_error.is_some() {
+                            "重试下载（断点续传）"
+                        } else {
+                            "下载模型"
+                        })
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.translation_page
+                                .choose_local_model(&model_for_pick, window, cx);
+                            this.translation_page
+                                .download_local_model(&this.bridge, &dl_id, cx);
+                            cx.notify();
+                        })),
+                )
+            })
+            .when(!downloading && model.installed, |d| {
+                let model_for_pick = select_model.clone();
+                let del_id = delete_id.clone();
+                let select_btn = if is_selected {
+                    Button::new(format!("translation-local-use:{model_id}"))
+                        .label("✓ 当前已选")
+                        .disabled(true)
+                } else {
+                    Button::new(format!("translation-local-use:{model_id}"))
+                        .primary()
+                        .label("选用此模型")
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.translation_page
+                                .choose_local_model(&model_for_pick, window, cx);
+                            cx.notify();
+                        }))
+                };
+                d.child(select_btn).child(
+                    Button::new(format!("translation-local-del:{del_id}"))
+                        .danger()
+                        .label("删除模型")
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.translation_page
+                                .delete_local_model(&this.bridge, &del_id);
+                            cx.notify();
+                        })),
+                )
+            });
+
+        col()
+            .id(format!("translation-local-card:{}", model.id))
+            .gap(px(8.))
+            .p(px(12.))
+            .rounded(px(9.))
+            .bg(rgba(if is_selected {
+                accent_subtle_bg()
+            } else {
+                card_bg()
+            }))
+            .border_1()
+            .border_color(rgba(if is_selected {
+                accent_subtle_border()
+            } else {
+                card_border()
+            }))
+            .child(
+                row()
+                    .justify_between()
+                    .gap(px(8.))
+                    .flex_wrap()
+                    .child(
+                        div()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_size(px(13.))
+                            .text_color(rgb(text()))
+                            .child(model.display_name.clone()),
+                    )
+                    .child(row().gap(px(5.)).flex_wrap().children(badges)),
+            )
+            .child(
+                muted(model.subtitle.clone())
+                    .text_size(px(11.))
+                    .line_height(relative(1.4)),
+            )
+            .when_some(progress_block, |d, block| d.child(block))
+            .when_some(error_block, |d, block| d.child(block))
+            .child(actions)
+            .into_any_element()
+    }
+
     fn translation_empty_editor(&self, cx: &Context<Self>) -> AnyElement {
         let quick_buttons: Vec<AnyElement> = PROVIDER_KINDS
             .into_iter()
@@ -938,6 +1425,10 @@ impl WhiskyApp {
                     .label(format!("+ {label}"))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.translation_page.new_provider(kind);
+                        if kind == "localBuiltIn" {
+                            this.translation_page
+                                .refresh_local_status_silent(&this.bridge);
+                        }
                         cx.notify();
                     }))
                     .into_any_element()
@@ -1490,7 +1981,9 @@ fn provider_sidebar_card(
 ) -> AnyElement {
     let id = provider.id.clone();
     let kind_label = provider_kind_label(&provider.kind).to_owned();
-    let cred_pill = if provider.has_credential {
+    let cred_pill = if provider.kind == "localBuiltIn" {
+        pill_badge("内置本地", installed_bg(), installed_fg(), None)
+    } else if provider.has_credential {
         pill_badge("已存密钥", installed_bg(), installed_fg(), None)
     } else if provider.kind == "ollama" {
         pill_badge("本地免密钥", badge_bg(), badge_text(), None)

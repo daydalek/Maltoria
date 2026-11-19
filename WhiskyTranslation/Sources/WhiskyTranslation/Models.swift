@@ -25,6 +25,7 @@ public enum ProviderKind: String, Codable, CaseIterable, Hashable, Sendable {
     case deepL
     case anthropic
     case gemini
+    case localBuiltIn
 
     public var supportsModelDiscovery: Bool { self != .deepL }
 
@@ -40,6 +41,8 @@ public enum ProviderKind: String, Codable, CaseIterable, Hashable, Sendable {
             "https://api.anthropic.com/v1"
         case .gemini:
             "https://generativelanguage.googleapis.com/v1beta"
+        case .localBuiltIn:
+            "http://127.0.0.1:18080"
         }
         return URL(string: value)!
     }
@@ -94,13 +97,21 @@ public enum ProviderKind: String, Codable, CaseIterable, Hashable, Sendable {
                 customPrompt: true,
                 context: true
             )
+        case .localBuiltIn:
+            ProviderCapabilities(
+                modelDiscovery: true,
+                contextDiscovery: true,
+                streaming: true,
+                customPrompt: true,
+                context: true
+            )
         }
     }
 
     public func requiresCredential(at baseURL: URL) -> Bool {
         switch self {
         case .deepL, .anthropic, .gemini: return true
-        case .ollama: return false
+        case .ollama, .localBuiltIn: return false
         case .openAIChat, .openAICompletions:
             guard let host = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)?.host?.lowercased()
             else { return true }
@@ -303,6 +314,7 @@ public struct ProviderConfiguration: Codable, Equatable, Identifiable, Sendable 
         case .deepL: "DeepL"
         case .anthropic: "Anthropic Messages"
         case .gemini: "Gemini"
+        case .localBuiltIn: "Built-in Local Model"
         }
     }
 

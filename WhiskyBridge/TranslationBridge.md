@@ -16,6 +16,12 @@ The portable `translation.*` service is available on macOS and Linux. It manages
 | `translation.testConnection` | `{ "providerID": UUID }` | `{ "translation": string }` |
 | `translation.settings/get` | none | Settings envelope |
 | `translation.settings/save` | `{ "settings": TranslationSettings, "remoteProvidersEnabled"?: boolean }` | Settings envelope |
+| `translation.local.status` | none | Local runtime state, mirror config, and catalog models (with live download progress/speed/ETA) |
+| `translation.local.setConfig` | `{ "useChinaMirror": boolean }` | Updated local status envelope |
+| `translation.local.download` | `{ "modelID": string, "useChinaMirror"?: boolean }` | `{ "jobID": string, "modelID": string }` |
+| `translation.local.cancelDownload` | `{ "modelID": string }` | Updated local status envelope |
+| `translation.local.delete` | `{ "modelID": string }` | Updated local status envelope |
+| `translation.local.unload` | none | Updated local status envelope after terminating idle/active `llama-server` |
 
 Provider DTOs contain `id`, `name`, `kind`, `baseURL`, `modelID`, default languages, optional `modelMetadata`, `openAIChatTokenLimitField`, explicit provider `capabilities`, and `hasCredential`. They never contain a credential or credential reference. Provider save accepts the core `ProviderConfiguration` shape; a newly supplied credential reference is ignored, and an existing profile's reference is preserved. Set and delete credentials by provider ID.
 
