@@ -358,19 +358,26 @@ impl WhiskyApp {
             }))
             .context_menu(self.game_menu(index, cx))
             .child(
-                div()
-                    .id(("staggered-art", index))
-                    .w(px(layout.cover_width))
-                    .h(px((rect.height - 26.).max(20.)))
-                    .flex_shrink_0()
-                    .rounded(px(8.))
-                    .overflow_hidden()
-                    .cursor_pointer()
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.select_staggered(index, cx);
-                        this.open_detail(index, cx);
-                        cx.stop_propagation();
-                    }))
+                track_key_focus(
+                    div()
+                        .id(("staggered-art", index))
+                        .w(px(layout.cover_width))
+                        .h(px((rect.height - 26.).max(20.)))
+                        .flex_shrink_0()
+                        .rounded(px(8.))
+                        .overflow_hidden()
+                        .cursor_pointer()
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.select_staggered(index, cx);
+                            this.open_detail_from(index, window, cx);
+                            cx.stop_propagation();
+                        })),
+                    ("staggered-art", index),
+                    0,
+                    ACCENT,
+                    window,
+                    cx,
+                )
                     .child(match self.artwork(index) {
                         Some(path) => self
                             .artwork_image(path)

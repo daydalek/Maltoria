@@ -852,6 +852,8 @@ pub(crate) struct WhiskyApp {
     pub(crate) immersive_row_scrolls: std::cell::RefCell<HashMap<String, ScrollHandle>>,
     pub(crate) detail: Option<usize>,
     pub(crate) detail_open: bool,
+    pub(crate) detail_open_generation: u64,
+    pub(crate) detail_return_focus: Option<gpui_kit::FocusHandle>,
     pub(crate) detail_character: Option<String>,
     pub(crate) appearance: crate::theme::AppearanceMode,
     /// The message on the existing toast; `None` hides it. Runtime and entry
@@ -1090,6 +1092,8 @@ impl WhiskyApp {
             immersive_row_scrolls: Default::default(),
             detail: None,
             detail_open: false,
+            detail_open_generation: 0,
+            detail_return_focus: None,
             detail_character: None,
             appearance,
             notice: None,
@@ -3273,6 +3277,16 @@ impl WhiskyApp {
     pub(crate) fn timing(&self, ms: u64) -> Transition {
         Transition::new(Duration::from_millis(if self.motion { ms } else { 0 }))
     }
+    pub(crate) fn open_detail_from(
+        &mut self,
+        index: usize,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.detail_return_focus = window.focused(cx);
+        self.open_detail(index, cx);
+    }
+
     pub(crate) fn open_detail(&mut self, index: usize, cx: &mut Context<Self>) {
         self.preview.sheet = None;
         if self.detail != Some(index) {
@@ -3281,8 +3295,19 @@ impl WhiskyApp {
         }
         self.detail = Some(index);
         self.detail_open = true;
+        self.detail_open_generation = self.detail_open_generation.wrapping_add(1);
         self.hovered = None;
         self.notice = None;
+        cx.notify();
+    }
+
+    pub(crate) fn close_detail(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.detail_open = false;
+        if let Some(handle) = self.detail_return_focus.take() {
+            handle.focus(window, cx);
+        } else {
+            self.focus_handle.focus(window, cx);
+        }
         cx.notify();
     }
     pub(crate) fn show_notice(&mut self, message: impl Into<SharedString>, cx: &mut Context<Self>) {

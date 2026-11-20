@@ -47,7 +47,7 @@ impl WhiskyApp {
     pub(crate) fn gallery(
         &self,
         width: f32,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let games = self.games();
@@ -58,7 +58,7 @@ impl WhiskyApp {
             return self.library_viewport(4, self.library_empty_surface(cx));
         };
         let layout = GalleryLayout::new(width);
-        let wall = self.gallery_wall(&indices, selected, layout, cx);
+        let wall = self.gallery_wall(&indices, selected, layout, window, cx);
         let summary =
             detail_pane(self.gallery_summary(selected, layout.detail_width, !layout.stacked, cx));
         if layout.stacked {
@@ -98,6 +98,7 @@ impl WhiskyApp {
         indices: &[usize],
         selected: usize,
         layout: GalleryLayout,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let heading: SharedString = if self.selected_bottle.is_some() {
@@ -114,6 +115,7 @@ impl WhiskyApp {
                     index == selected,
                     layout.card_width,
                     layout.card_height,
+                    window,
                     cx,
                 ));
             }
@@ -148,6 +150,7 @@ impl WhiskyApp {
         selected: bool,
         width: f32,
         height: f32,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let Some(game) = self.game(index) else {
@@ -156,32 +159,39 @@ impl WhiskyApp {
         let title = game.title.clone();
         let artwork = self.artwork(index);
         let (ph_start, ph_end) = placeholder_gradient();
-        div()
-            .id(("gallery-card", index))
-            .relative()
-            .w(px(width))
-            .h(px(height))
-            .flex_shrink_0()
-            .rounded(px(10.))
-            .overflow_hidden()
-            .border_2()
-            .border_color(if selected {
-                rgb(ACCENT).into()
-            } else {
-                rgba(surface_border())
-            })
-            .cursor_pointer()
-            .on_hover(cx.listener(move |this, active, _, cx| {
-                if *active {
-                    this.hovered = Some(index);
-                } else if this.hovered == Some(index) {
-                    this.hovered = None;
-                }
-                cx.notify();
-            }))
-            .on_click(cx.listener(move |this, _, _, cx| {
-                this.select_gallery_game(index, cx);
-            }))
+        track_key_focus(
+            div()
+                .id(("gallery-card", index))
+                .relative()
+                .w(px(width))
+                .h(px(height))
+                .flex_shrink_0()
+                .rounded(px(10.))
+                .overflow_hidden()
+                .border_2()
+                .border_color(if selected {
+                    rgb(ACCENT).into()
+                } else {
+                    rgba(surface_border())
+                })
+                .cursor_pointer()
+                .on_hover(cx.listener(move |this, active, _, cx| {
+                    if *active {
+                        this.hovered = Some(index);
+                    } else if this.hovered == Some(index) {
+                        this.hovered = None;
+                    }
+                    cx.notify();
+                }))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.select_gallery_game(index, cx);
+                })),
+            ("gallery-card", index),
+            0,
+            ACCENT,
+            window,
+            cx,
+        )
             .child(match artwork {
                 Some(path) => self.cover_image(path, cx)
                     .absolute()
@@ -507,10 +517,11 @@ impl WhiskyApp {
                     .rounded_full()
                     .cursor_pointer()
                     .hover(|s| s.bg(rgba(hover())))
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.open_detail(index, cx);
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.open_detail_from(index, window, cx);
                     }))
-                    .child(muted("查看完整详情")),
+                    .child(muted("查看完整详情"))
+                    .key_focus(("gallery-details-link", index)),
             )
             .into_any_element()
     }
@@ -521,9 +532,10 @@ fn gallery_action_pill(
     icon_name: &str,
     label: &'static str,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-) -> Stateful<Div> {
+) -> FocusableControl {
+    let id = id.into();
     row()
-        .id(id)
+        .id(id.clone())
         .w_full()
         .h(px(44.))
         .flex_shrink_0()
@@ -542,4 +554,5 @@ fn gallery_action_pill(
                 .font_weight(FontWeight::BOLD)
                 .child(label),
         )
+        .key_focus(id)
 }

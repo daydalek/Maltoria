@@ -68,7 +68,7 @@ impl WhiskyApp {
         let body = match self.preview.page {
             PreviewPage::Bottle => match self.visible_load_error() {
                 Some(error) => self.library_error_surface(error, cx),
-                None => self.bottle_home(cx),
+                None => self.bottle_home(window, cx),
             },
             PreviewPage::ConfigureBottle => self.bottle_config(window, cx),
             PreviewPage::Programs => self.programs(cx),
@@ -78,7 +78,7 @@ impl WhiskyApp {
             // if state desyncs and we land here, degrade to the bottle home
             // rather than panic — a transient wrong page is recoverable.
             PreviewPage::Library | PreviewPage::Statistics | PreviewPage::Launchers => {
-                self.bottle_home(cx)
+                self.bottle_home(window, cx)
             }
         };
         col()
@@ -131,7 +131,7 @@ impl WhiskyApp {
             })
             .into_any_element()
     }
-    fn bottle_home(&self, cx: &Context<Self>) -> AnyElement {
+    fn bottle_home(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let slot = self.bottle_slot();
         let bottle_games: Vec<_> = self
             .games()
@@ -151,17 +151,26 @@ impl WhiskyApp {
                     .child(
                         // Explicit clipped frame: the artwork can never grow
                         // into the label strip below.
-                        div()
-                            .id(("pin", i))
-                            .cursor_pointer()
-                            .w(px(80.))
-                            .h(px(108.))
-                            .rounded(px(9.))
-                            .overflow_hidden()
-                            .border_1()
-                            .border_color(rgba(theme::surface_border()))
-                            .hover(|d| d.border_color(rgb(theme::ACCENT)))
-                            .on_click(cx.listener(move |this, _, _, cx| this.open_detail(i, cx)))
+        track_key_focus(
+            div()
+                .id(("pin", i))
+                .cursor_pointer()
+                .w(px(80.))
+                .h(px(108.))
+                .rounded(px(9.))
+                .overflow_hidden()
+                .border_1()
+                .border_color(rgba(theme::surface_border()))
+                .hover(|d| d.border_color(rgb(theme::ACCENT)))
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    this.open_detail_from(i, window, cx)
+                })),
+            ("bottle-pin", i),
+            0,
+            theme::ACCENT,
+            window,
+            cx,
+        )
                             .child(match self.artwork(i) {
                                 Some(path) => self.artwork_image(path)
                                     .size_full()

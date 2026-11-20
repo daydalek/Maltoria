@@ -7,7 +7,7 @@ use gpui_kit::component::{
 use gpui_kit::{prelude::*, *};
 use serde_json::json;
 
-use crate::controls::{col, muted, row};
+use crate::controls::{AutoFocusButton, col, muted, row};
 use crate::onboarding::{CATEGORIES, COMPLETED, Onboarding, SOURCES};
 use crate::state::WhiskyApp;
 use crate::theme::{surface, surface_border};
@@ -234,24 +234,29 @@ impl WhiskyApp {
                     .label("取消")
                     .ghost()
                     .disabled(state.saving)
-                    .on_click(cx.listener(|this, _, _, cx| {
+                    .on_click(cx.listener(|this, _, window, cx| {
                         this.onboarding = None;
+                        this.focus_handle.focus(window, cx);
                         cx.notify();
                     })),
             );
         }
         if introduction {
             footer = footer.child(
-                Button::new("onboarding-next")
-                    .label("选择资料来源")
-                    .primary()
-                    .disabled(state.saving)
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        if let Some(state) = &mut this.onboarding {
-                            state.step = 1;
-                        }
-                        cx.notify();
-                    })),
+                AutoFocusButton::new(
+                    "onboarding-next",
+                    Button::new("onboarding-next")
+                        .label("选择资料来源")
+                        .primary()
+                        .disabled(state.saving)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            if let Some(state) = &mut this.onboarding {
+                                state.step = 1;
+                            }
+                            cx.notify();
+                        })),
+                )
+                .when_focusable(!state.saving),
             );
         } else {
             if state.welcome {
@@ -269,17 +274,24 @@ impl WhiskyApp {
                 );
             }
             footer = footer.child(
-                Button::new("onboarding-save")
-                    .label(if state.saving {
-                        "正在保存…"
-                    } else if state.welcome {
-                        "开始使用"
-                    } else {
-                        "保存"
-                    })
-                    .primary()
-                    .disabled(state.saving)
-                    .on_click(cx.listener(|this, _, _, cx| this.save_onboarding(false, cx))),
+                AutoFocusButton::new(
+                    "onboarding-save",
+                    Button::new("onboarding-save")
+                        .label(if state.saving {
+                            "正在保存…"
+                        } else if state.welcome {
+                            "开始使用"
+                        } else {
+                            "保存"
+                        })
+                        .primary()
+                        .disabled(state.saving)
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.save_onboarding(false, cx);
+                            this.focus_handle.focus(window, cx);
+                        })),
+                )
+                .when_focusable(!state.saving),
             );
         }
         div()

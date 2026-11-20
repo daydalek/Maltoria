@@ -168,6 +168,9 @@ impl Render for WhiskyApp {
                 if this.onboarding.is_some()
                     || this.bridge_dialog
                     || this.bottle_dialog.is_some()
+                    || this.engine_dialog.is_some()
+                    || this.clipboard_prompt.is_some()
+                    || this.legacy_fullscreen_prompt.is_some()
                     || this.import_bottles.is_some()
                 {
                     return;
@@ -228,10 +231,14 @@ impl Render for WhiskyApp {
                     if !this.import_bottles.as_ref().is_some_and(|state| state.importing) {
                         this.import_bottles = None;
                     }
+                } else if this.engine_dialog.is_some() {
+                    this.dismiss_engine_dialog(cx);
                 } else if this.bottle_dialog.is_some() {
                     this.dismiss_bottle_dialog(cx);
                 } else if this.legacy_fullscreen_prompt.is_some() {
-                    this.legacy_fullscreen_prompt = None;
+                    this.dismiss_legacy_fullscreen(cx);
+                } else if this.clipboard_prompt.is_some() {
+                    this.dismiss_clipboard(cx);
                 } else if this.setup_dialog && !this.setup_installing {
                     this.dismiss_setup(cx);
                 } else if this.about {
@@ -239,7 +246,9 @@ impl Render for WhiskyApp {
                 } else if this.preview.sheet.is_some() {
                     this.preview_dismiss(cx);
                 } else if this.detail_open {
-                    this.detail_open = false;
+                    this.close_detail(window, cx);
+                    return;
+                } else if this.staggered_selection.is_some() {
                 } else if this.staggered_selection.is_some() {
                     this.staggered_selection = None;
                 } else if this.settings {
@@ -254,7 +263,11 @@ impl Render for WhiskyApp {
             .child(
                 div()
                     .relative()
-                    .child(self.toolbar(platform::traffic_light_padding(0., 18., fullscreen), cx)),
+                    .child(self.toolbar(
+                        platform::traffic_light_padding(0., 18., fullscreen),
+                        window,
+                        cx,
+                    )),
             )
             .child(
                 row()
@@ -272,7 +285,9 @@ impl Render for WhiskyApp {
                                 div()
                                     .w(px(self.sidebar.layout_width()))
                                     .h_full()
-                                    .child(self.sidebar(cx)),
+                                    .tab_group()
+                                    .tab_index(1)
+                                    .child(self.sidebar(window, cx)),
                             ),
                     )
                     .child(
@@ -287,7 +302,7 @@ impl Render for WhiskyApp {
             );
         if presence.should_render() {
             if let Some(index) = self.detail {
-                root = root.child(self.detail_panel(index, presence.progress, ww, wh, cx));
+                root = root.child(self.detail_panel(index, presence.progress, ww, wh, window, cx));
             }
         }
         if let Some(sheet) = self.preview.sheet {

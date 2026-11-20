@@ -4025,7 +4025,10 @@ impl WhiskyApp {
                     .id("clipboard-dismiss")
                     .absolute()
                     .inset_0()
-                    .on_click(cx.listener(|this, _, _, cx| this.dismiss_clipboard(cx))),
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.dismiss_clipboard(cx);
+                        this.focus_handle.focus(window, cx);
+                    })),
             )
             .child(
                 col()
@@ -4061,8 +4064,9 @@ impl WhiskyApp {
                                 Button::new("clipboard-close")
                                     .label("×")
                                     .ghost()
-                                    .on_click(cx.listener(|this, _, _, cx| {
+                                    .on_click(cx.listener(|this, _, window, cx| {
                                         this.dismiss_clipboard(cx);
+                                        this.focus_handle.focus(window, cx);
                                     })),
                             ),
                     )
@@ -4099,23 +4103,29 @@ impl WhiskyApp {
                             .border_t_1()
                             .border_color(rgba(crate::theme::surface_border()))
                             .child(Button::new("clipboard-cancel").label("取消").ghost().on_click(
-                                cx.listener(|this, _, _, cx| this.dismiss_clipboard(cx)),
+                                cx.listener(|this, _, window, cx| {
+                                    this.dismiss_clipboard(cx);
+                                    this.focus_handle.focus(window, cx);
+                                }),
                             ))
                             .child(
                                 Button::new("clipboard-keep")
                                     .label("保留并启动")
-                                    .on_click(cx.listener(|this, _, _, cx| {
+                                    .on_click(cx.listener(|this, _, window, cx| {
                                         this.resolve_clipboard(ClipboardDecision::Keep, cx);
+                                        this.focus_handle.focus(window, cx);
                                     })),
                             )
-                            .child(
+                            .child(AutoFocusButton::new(
+                                "clipboard-clear",
                                 Button::new("clipboard-clear")
                                     .label("清空并启动")
                                     .primary()
-                                    .on_click(cx.listener(|this, _, _, cx| {
+                                    .on_click(cx.listener(|this, _, window, cx| {
                                         this.resolve_clipboard(ClipboardDecision::Clear, cx);
+                                        this.focus_handle.focus(window, cx);
                                     })),
-                            ),
+                            )),
                     ),
             )
             .into_any_element()
@@ -4152,8 +4162,9 @@ impl WhiskyApp {
                     .id("legacy-fullscreen-dismiss")
                     .absolute()
                     .inset_0()
-                    .on_click(cx.listener(|this, _, _, cx| {
+                    .on_click(cx.listener(|this, _, window, cx| {
                         this.dismiss_legacy_fullscreen(cx);
+                        this.focus_handle.focus(window, cx);
                     })),
             )
             .child(
@@ -4190,8 +4201,9 @@ impl WhiskyApp {
                                 Button::new("legacy-fullscreen-close")
                                     .label("×")
                                     .ghost()
-                                    .on_click(cx.listener(|this, _, _, cx| {
+                                    .on_click(cx.listener(|this, _, window, cx| {
                                         this.dismiss_legacy_fullscreen(cx);
+                                        this.focus_handle.focus(window, cx);
                                     })),
                             ),
                     )
@@ -4225,25 +4237,29 @@ impl WhiskyApp {
                                 Button::new("legacy-fullscreen-never")
                                     .label("不再建议")
                                     .ghost()
-                                    .on_click(cx.listener(|this, _, _, cx| {
+                                    .on_click(cx.listener(|this, _, window, cx| {
                                         this.legacy_fullscreen_dismiss_forever(cx);
+                                        this.focus_handle.focus(window, cx);
                                     })),
                             )
                             .child(
                                 Button::new("legacy-fullscreen-apply")
                                     .label("应用")
-                                    .on_click(cx.listener(|this, _, _, cx| {
+                                    .on_click(cx.listener(|this, _, window, cx| {
                                         this.legacy_fullscreen_apply(false, cx);
+                                        this.focus_handle.focus(window, cx);
                                     })),
                             )
-                            .child(
+                            .child(AutoFocusButton::new(
+                                "legacy-fullscreen-restart",
                                 Button::new("legacy-fullscreen-restart")
                                     .label("应用并重启")
                                     .primary()
-                                    .on_click(cx.listener(|this, _, _, cx| {
+                                    .on_click(cx.listener(|this, _, window, cx| {
                                         this.legacy_fullscreen_apply(true, cx);
+                                        this.focus_handle.focus(window, cx);
                                     })),
-                            ),
+                            )),
                     ),
             )
             .into_any_element()
@@ -4616,25 +4632,29 @@ impl WhiskyApp {
             .when(
                 !self.setup_installing && (installed || version.is_some()),
                 |d| {
-                    d.child(
+                    d.child(AutoFocusButton::new(
+                        "setup-done",
                         Button::new("setup-done")
                             .label("完成")
                             .primary()
-                            .on_click(cx.listener(|this, _, _, cx| {
+                            .on_click(cx.listener(|this, _, window, cx| {
                                 this.command(Command::DismissSetup, cx);
+                                this.focus_handle.focus(window, cx);
                             })),
-                    )
+                    ))
                 },
             )
             .when(!self.setup_installing && !installed, |d| {
                 d.child(
                     Button::new("setup-later")
                         .label("稍后")
-                        .on_click(cx.listener(|this, _, _, cx| {
+                        .on_click(cx.listener(|this, _, window, cx| {
                             this.command(Command::DismissSetup, cx);
+                            this.focus_handle.focus(window, cx);
                         })),
                 )
-                .child(
+                .child(AutoFocusButton::new(
+                    "setup-install",
                     Button::new("setup-install")
                         .label(if self.setup_error.is_some() {
                             "重试安装"
@@ -4645,7 +4665,7 @@ impl WhiskyApp {
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.command(Command::InstallWineRuntime, cx);
                         })),
-                )
+                ))
             });
         let pw = 480_f32.min(width - 48.);
         let ph = 320_f32.min(height - 48.);
@@ -4748,8 +4768,9 @@ impl WhiskyApp {
                     .id("about-dismiss")
                     .absolute()
                     .inset_0()
-                    .on_click(cx.listener(|this, _, _, cx| {
+                    .on_click(cx.listener(|this, _, window, cx| {
                         this.dismiss_about();
+                        this.focus_handle.focus(window, cx);
                         cx.notify();
                     })),
             )
@@ -4787,8 +4808,9 @@ impl WhiskyApp {
                                 Button::new("about-close")
                                     .label("×")
                                     .ghost()
-                                    .on_click(cx.listener(|this, _, _, cx| {
+                                    .on_click(cx.listener(|this, _, window, cx| {
                                         this.dismiss_about();
+                                        this.focus_handle.focus(window, cx);
                                         cx.notify();
                                     })),
                             ),
@@ -4806,15 +4828,17 @@ impl WhiskyApp {
                             .border_t_1()
                             .border_color(rgba(crate::theme::surface_border()))
                             .child(muted("GNU GPL v3 · 自由软件").text_size(px(11.)))
-                            .child(
+                            .child(AutoFocusButton::new(
+                                "about-done",
                                 Button::new("about-done")
                                     .label("关闭")
                                     .primary()
-                                    .on_click(cx.listener(|this, _, _, cx| {
+                                    .on_click(cx.listener(|this, _, window, cx| {
                                         this.dismiss_about();
+                                        this.focus_handle.focus(window, cx);
                                         cx.notify();
                                     })),
-                            ),
+                            )),
                     ),
             )
             .into_any_element()
@@ -5010,8 +5034,9 @@ impl WhiskyApp {
                     .id("bridge-dialog-dismiss")
                     .absolute()
                     .inset_0()
-                    .on_click(cx.listener(|this, _, _, cx| {
+                    .on_click(cx.listener(|this, _, window, cx| {
                         this.bridge_dialog = false;
+                        this.focus_handle.focus(window, cx);
                         cx.notify();
                     })),
             )
@@ -5044,8 +5069,9 @@ impl WhiskyApp {
                                 Button::new("bridge-dialog-close")
                                     .label("×")
                                     .ghost()
-                                    .on_click(cx.listener(|this, _, _, cx| {
+                                    .on_click(cx.listener(|this, _, window, cx| {
                                         this.bridge_dialog = false;
+                                        this.focus_handle.focus(window, cx);
                                         cx.notify();
                                     })),
                             ),
@@ -5072,24 +5098,27 @@ impl WhiskyApp {
                             .py(px(12.))
                             .border_t_1()
                             .border_color(rgba(crate::theme::surface_border()))
-                            .child(
+                            .child(AutoFocusButton::new(
+                                "bridge-dialog-done",
                                 Button::new("bridge-dialog-done")
                                     .label("关闭")
                                     .ghost()
-                                    .on_click(cx.listener(|this, _, _, cx| {
+                                    .on_click(cx.listener(|this, _, window, cx| {
                                         this.bridge_dialog = false;
+                                        this.focus_handle.focus(window, cx);
                                         cx.notify();
                                     })),
-                            )
+                            ).when_focusable(!retry))
                             .when(retry, |d| {
-                                d.child(
+                                d.child(AutoFocusButton::new(
+                                    "bridge-retry",
                                     Button::new("bridge-retry")
                                         .label("重试")
                                         .primary()
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.bridge_retry(cx);
                                         })),
-                                )
+                                ))
                             })
                             .when(self.quit_error.is_some(), |row| {
                                 row.child(Button::new("quit-without-cleanup")
@@ -5569,7 +5598,8 @@ impl WhiskyApp {
                         this.focus_handle.focus(window, cx);
                     })),
             )
-            .child(
+            .child(AutoFocusButton::new(
+                "engine-dialog-confirm",
                 Button::new("engine-dialog-confirm")
                     .label("确认")
                     .primary()
@@ -5577,7 +5607,7 @@ impl WhiskyApp {
                         this.confirm_engine_dialog(cx);
                         this.focus_handle.focus(window, cx);
                     })),
-            );
+            ));
         let pw = 460_f32.min(width - 48.);
         let ph = 280_f32.min(height - 48.);
         div()

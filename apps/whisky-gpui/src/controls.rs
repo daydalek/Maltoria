@@ -2,10 +2,171 @@
 
 use gpui_kit::component::Icon;
 use gpui_kit::component::Sizable;
+use gpui_kit::component::button::Button;
 use gpui_kit::component::spinner::Spinner;
 use gpui_kit::{prelude::*, *};
 
 use crate::theme;
+
+/// Wraps a `Button` so it receives focus once on mount without stealing focus
+/// back on subsequent re-renders, allowing keyboard Tab navigation afterward.
+#[derive(gpui_kit::IntoElement)]
+pub(crate) struct AutoFocusButton {
+    id: ElementId,
+    button: Button,
+    active: bool,
+}
+
+impl AutoFocusButton {
+    pub(crate) fn new(id: impl Into<ElementId>, button: Button) -> Self {
+        Self {
+            id: id.into(),
+            button,
+            active: true,
+        }
+    }
+
+    pub(crate) fn when_focusable(mut self, active: bool) -> Self {
+        self.active = active;
+        self
+    }
+}
+
+impl RenderOnce for AutoFocusButton {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        if self.active {
+            let focused_once = window.use_keyed_state(
+                (self.id.clone(), "auto-focused"),
+                cx,
+                |_, _| std::cell::Cell::new(false),
+            );
+            if !focused_once.read(cx).replace(true) {
+                let button_id = self.id.clone();
+                // Match `gpui-fast`'s stateless `ViewElement<Button>` ID scope so
+                // `AutoFocusButton` focuses the exact `FocusHandle` created by `Button`.
+                let focus_handle = window.with_id(
+                    ElementId::Name(std::any::type_name::<Button>().into()),
+                    |window| {
+                        window
+                            .use_keyed_state(button_id, cx, |_, cx| cx.focus_handle())
+                            .read(cx)
+                            .clone()
+                    },
+                );
+                window.focus(&focus_handle, cx);
+            }
+        }
+        self.button
+    }
+}
+
+/// Wires a persisted `FocusHandle` and focus ring directly onto a `Stateful<Div>`,
+/// preserving builder chaining (such as `.context_menu(...)`) while making the
+/// element join `Tab` navigation and activate `on_click` on `Enter` / `Space`.
+pub(crate) fn track_key_focus(
+    el: Stateful<Div>,
+    id: impl Into<ElementId>,
+    tab_index: isize,
+    ring_color: u32,
+    window: &mut Window,
+    cx: &mut App,
+) -> Stateful<Div> {
+    let focus_handle = window
+        .use_keyed_state((id.into(), "focus-handle"), cx, |_, cx| {
+            cx.focus_handle().tab_stop(true).tab_index(tab_index)
+        })
+        .read(cx)
+        .clone();
+    el.track_focus(&focus_handle)
+        .focus(move |s| s.border_2().border_color(rgb(ring_color)))
+}
+
+/// Wraps any `Stateful<Div>` with a persisted `FocusHandle`, Tab order, and an
+/// accessible focus border for keyboard navigation and `Enter`/`Space` activation.
+#[derive(gpui_kit::IntoElement)]
+pub(crate) struct FocusableControl {
+    id: ElementId,
+    inner: Stateful<Div>,
+    tab_index: isize,
+    tab_stop: bool,
+    ring_color: u32,
+    auto_focus_key: Option<ElementId>,
+}
+
+impl FocusableControl {
+    pub(crate) fn new(id: impl Into<ElementId>, inner: Stateful<Div>) -> Self {
+        Self {
+            id: id.into(),
+            inner,
+            tab_index: 0,
+            tab_stop: true,
+            ring_color: theme::ACCENT,
+            auto_focus_key: None,
+        }
+    }
+
+    pub(crate) fn tab_index(mut self, tab_index: isize) -> Self {
+        self.tab_index = tab_index;
+        self
+    }
+
+    pub(crate) fn tab_stop(mut self, tab_stop: bool) -> Self {
+        self.tab_stop = tab_stop;
+        self
+    }
+
+    /// Uses a translucent white ring suitable for solid orange primary buttons.
+    pub(crate) fn light_ring(mut self) -> Self {
+        self.ring_color = 0xffffff;
+        self
+    }
+
+    /// Requests focus once per distinct `key` mount (e.g. a dialog or detail generation).
+    pub(crate) fn auto_focus_key(mut self, key: impl Into<ElementId>) -> Self {
+        self.auto_focus_key = Some(key.into());
+        self
+    }
+}
+
+impl Styled for FocusableControl {
+    fn style(&mut self) -> &mut StyleRefinement {
+        self.inner.style()
+    }
+}
+
+impl RenderOnce for FocusableControl {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let focus_handle = window
+            .use_keyed_state((self.id.clone(), "focus-handle"), cx, |_, cx| {
+                cx.focus_handle()
+                    .tab_stop(self.tab_stop)
+                    .tab_index(self.tab_index)
+            })
+            .read(cx)
+            .clone();
+        if let Some(auto_key) = self.auto_focus_key {
+            let focused_once =
+                window.use_keyed_state(auto_key, cx, |_, _| std::cell::Cell::new(false));
+            if !focused_once.read(cx).replace(true) {
+                window.focus(&focus_handle, cx);
+            }
+        }
+        let ring_color = self.ring_color;
+        self.inner
+            .track_focus(&focus_handle)
+            .focus(move |s| s.border_2().border_color(rgb(ring_color)))
+    }
+}
+
+pub(crate) trait FocusableExt {
+    fn key_focus(self, id: impl Into<ElementId>) -> FocusableControl;
+}
+
+impl FocusableExt for Stateful<Div> {
+    fn key_focus(self, id: impl Into<ElementId>) -> FocusableControl {
+        FocusableControl::new(id, self)
+    }
+}
 
 pub(crate) fn row() -> Div {
     div().flex().items_center()
@@ -103,8 +264,9 @@ pub(crate) fn selectable_pill(
     disabled: bool,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> AnyElement {
-    let mut pill = row()
-        .id(id)
+    let id = id.into();
+    let pill = row()
+        .id(id.clone())
         .gap(px(5.))
         .px(px(10.))
         .py(px(5.))
@@ -139,12 +301,12 @@ pub(crate) fn selectable_pill(
                 .child(label.into()),
         );
     if disabled {
-        pill = pill.opacity(0.5);
+        pill.opacity(0.5).into_any_element()
     } else {
-        pill = pill
-            .cursor_pointer()
+        pill.cursor_pointer()
             .hover(|s| if active { s } else { s.bg(rgba(theme::hover())) })
-            .on_click(on_click);
+            .on_click(on_click)
+            .key_focus(id)
+            .into_any_element()
     }
-    pill.into_any_element()
 }

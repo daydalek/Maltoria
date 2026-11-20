@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use gpui_kit::base::{Spring, spring, transition};
+use gpui_kit::base::{FocusTrapElement as _, Spring, spring, transition};
 use gpui_kit::component::{
     Disableable, Sizable,
     button::{Button, ButtonVariants},
@@ -484,12 +484,12 @@ impl WhiskyApp {
             .into_any_element()
     }
 
-    pub(crate) fn sidebar(&self, cx: &mut Context<Self>) -> AnyElement {
+    pub(crate) fn sidebar(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         if self.sidebar == SidebarMode::Icons {
-            self.sidebar_rail(cx)
+            self.sidebar_rail(window, cx)
         } else {
             // `Hidden` keeps the expanded rows: they slide out under the clip.
-            self.sidebar_expanded(cx)
+            self.sidebar_expanded(window, cx)
         }
     }
 
@@ -570,16 +570,23 @@ impl WhiskyApp {
 
     /// The collapsed rail: every expanded entry mapped to its icon, with the
     /// name and count carried by the row's tooltip.
-    fn sidebar_rail(&self, cx: &mut Context<Self>) -> AnyElement {
+    fn sidebar_rail(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let games = self.games();
         let mut entries = col().items_center().gap(px(1.)).px(px(10.));
         entries = entries.child(
-            sidebar_icon("sidebar-expand", "panel-left-open", false)
-                .tooltip(text_tip("展开侧边栏 · 右键选择显示方式"))
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.set_sidebar(SidebarMode::Expanded, cx);
-                }))
-                .context_menu(self.sidebar_mode_menu(cx)),
+            track_key_focus(
+                sidebar_icon("sidebar-expand", "panel-left-open", false)
+                    .tooltip(text_tip("展开侧边栏 · 右键选择显示方式"))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.set_sidebar(SidebarMode::Expanded, cx);
+                    })),
+                "sidebar-rail-expand",
+                1,
+                ACCENT,
+                window,
+                cx,
+            )
+            .context_menu(self.sidebar_mode_menu(cx)),
         );
         entries = entries.child(
             sidebar_icon(
@@ -591,7 +598,9 @@ impl WhiskyApp {
                 "游戏库 · {}",
                 games.iter().filter(|game| !game.is_launcher).count()
             )))
-            .on_click(cx.listener(|this, _, _, cx| this.select_bottle(None, cx))),
+            .on_click(cx.listener(|this, _, _, cx| this.select_bottle(None, cx)))
+            .key_focus("sidebar-rail-library")
+            .tab_index(1),
         );
         entries = entries.child(
             sidebar_icon(
@@ -608,7 +617,9 @@ impl WhiskyApp {
             )))
             .on_click(cx.listener(|this, _, _, cx| {
                 this.navigate(PreviewPage::Statistics, cx);
-            })),
+            }))
+            .key_focus("sidebar-rail-statistics")
+            .tab_index(1),
         );
         entries = entries.child(
             sidebar_icon(
@@ -622,7 +633,9 @@ impl WhiskyApp {
             )))
             .on_click(cx.listener(|this, _, _, cx| {
                 this.navigate(PreviewPage::Launchers, cx);
-            })),
+            }))
+            .key_focus("sidebar-rail-launchers")
+            .tab_index(1),
         );
         // The expanded "Bottles" caption becomes a hairline at rail width.
         entries = entries.child(div().h(px(1.)).w(px(24.)).my(px(5.)).bg(rgba(divider())));
@@ -633,20 +646,27 @@ impl WhiskyApp {
             None => "容器 · 右键选择".to_owned(),
         };
         entries = entries.child(
-            sidebar_icon(
-                "containers",
-                "package",
-                !self.settings && self.selected_bottle.is_some(),
+            track_key_focus(
+                sidebar_icon(
+                    "containers",
+                    "package",
+                    !self.settings && self.selected_bottle.is_some(),
+                )
+                .tooltip(text_tip(container_tip))
+                .on_click(cx.listener(|this, _, _, cx| {
+                    let target = this
+                        .selected_bottle
+                        .or_else(|| (!this.bottles.is_empty()).then_some(0));
+                    if target.is_some() {
+                        this.select_bottle(target, cx);
+                    }
+                })),
+                "sidebar-rail-containers",
+                1,
+                ACCENT,
+                window,
+                cx,
             )
-            .tooltip(text_tip(container_tip))
-            .on_click(cx.listener(|this, _, _, cx| {
-                let target = this
-                    .selected_bottle
-                    .or_else(|| (!this.bottles.is_empty()).then_some(0));
-                if target.is_some() {
-                    this.select_bottle(target, cx);
-                }
-            }))
             .context_menu(self.container_menu(cx)),
         );
         let (grad_start, grad_end) = sidebar_gradient();
@@ -673,7 +693,9 @@ impl WhiskyApp {
                             .tooltip(text_tip(format!("切换外观（当前：{}）", self.appearance.label())))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.cycle_appearance(cx);
-                            })),
+                            }))
+                            .key_focus("sidebar-rail-appearance")
+                            .tab_index(1),
                     )
                     .child(
                         round_button("settings", "settings-2")
@@ -682,14 +704,16 @@ impl WhiskyApp {
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.settings = !this.settings;
                                 cx.notify();
-                            })),
+                            }))
+                            .key_focus("sidebar-rail-settings")
+                            .tab_index(1),
                     ),
             )
             .context_menu(self.sidebar_mode_menu(cx))
             .into_any_element()
     }
 
-    fn sidebar_expanded(&self, cx: &mut Context<Self>) -> AnyElement {
+    fn sidebar_expanded(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let games = self.games();
         let mut entries = col().gap(px(1.));
         entries = entries.child(
@@ -700,7 +724,9 @@ impl WhiskyApp {
                 games.iter().filter(|game| !game.is_launcher).count(),
                 !self.settings && self.preview.page == PreviewPage::Library && self.selected_bottle.is_none(),
             )
-            .on_click(cx.listener(|this, _, _, cx| this.select_bottle(None, cx))),
+            .on_click(cx.listener(|this, _, _, cx| this.select_bottle(None, cx)))
+            .key_focus("sidebar-expanded-library")
+            .tab_index(1),
         );
         entries = entries.child(
             sidebar_row(
@@ -709,7 +735,9 @@ impl WhiskyApp {
                 !self.settings && self.preview.page == PreviewPage::Statistics,
             ).on_click(cx.listener(|this, _, _, cx| {
                 this.navigate(PreviewPage::Statistics, cx);
-            })),
+            }))
+            .key_focus("sidebar-expanded-statistics")
+            .tab_index(1),
         );
         entries = entries.child(
             sidebar_row(
@@ -718,7 +746,9 @@ impl WhiskyApp {
                 !self.settings && self.preview.page == PreviewPage::Launchers,
             ).on_click(cx.listener(|this, _, _, cx| {
                 this.navigate(PreviewPage::Launchers, cx);
-            })),
+            }))
+            .key_focus("sidebar-expanded-launchers")
+            .tab_index(1),
         );
         entries = entries.child(
             muted("容器")
@@ -734,16 +764,23 @@ impl WhiskyApp {
                 .filter(|game| game.bottle == index + 1 && !game.is_launcher)
                 .count();
             entries = entries.child(
-                sidebar_row(
-                    ("bottle", index),
-                    &bottle.name,
-                    "package",
-                    count,
-                    !self.settings && self.selected_bottle == Some(index),
+                track_key_focus(
+                    sidebar_row(
+                        ("bottle", index),
+                        &bottle.name,
+                        "package",
+                        count,
+                        !self.settings && self.selected_bottle == Some(index),
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.select_bottle(Some(index), cx);
+                    })),
+                    ("sidebar-expanded-bottle", index),
+                    1,
+                    ACCENT,
+                    window,
+                    cx,
                 )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.select_bottle(Some(index), cx);
-                }))
                 .context_menu(self.bottle_menu(index, cx)),
             );
         }
@@ -781,7 +818,9 @@ impl WhiskyApp {
                                         .tooltip(text_tip(format!("切换外观（当前：{}）", self.appearance.label())))
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.cycle_appearance(cx);
-                                        })),
+                                        }))
+                                        .key_focus("sidebar-expanded-appearance")
+                                        .tab_index(1),
                                     )
                                     .child(
                                         round_button("settings", "settings-2")
@@ -790,7 +829,9 @@ impl WhiskyApp {
                                             .on_click(cx.listener(|this, _, _, cx| {
                                                 this.settings = !this.settings;
                                                 cx.notify();
-                                            })),
+                                            }))
+                                            .key_focus("sidebar-expanded-settings")
+                                            .tab_index(1),
                                     ),
                             ),
                     ),
@@ -855,7 +896,12 @@ impl WhiskyApp {
             )
             .into_any_element()
     }
-    pub(crate) fn toolbar(&self, left_padding: f32, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(crate) fn toolbar(
+        &self,
+        left_padding: f32,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         // Classic stays hidden in GPUI; immersive is GPUI-only. Labelled
         // segments read better than bare icons: each mode names its layout.
         let is_library = self.preview.page == PreviewPage::Library && !self.settings;
@@ -871,23 +917,37 @@ impl WhiskyApp {
             .border_color(rgba(divider()))
             .when(matches!(self.sidebar, SidebarMode::Hidden), |d| {
                 d.child(
-                    round_button("sidebar-show", "panel-left")
-                        .tooltip(text_tip("显示侧边栏 · 右键选择显示方式"))
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.set_sidebar(SidebarMode::Expanded, cx);
-                        }))
-                        .context_menu(self.sidebar_mode_menu(cx)),
+                    track_key_focus(
+                        round_button("sidebar-show", "panel-left")
+                            .tooltip(text_tip("显示侧边栏 · 右键选择显示方式"))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.set_sidebar(SidebarMode::Expanded, cx);
+                            })),
+                        "sidebar-show",
+                        0,
+                        ACCENT,
+                        window,
+                        cx,
+                    )
+                    .context_menu(self.sidebar_mode_menu(cx)),
                 )
             })
             .when(matches!(self.sidebar, SidebarMode::Expanded), |d| {
                 d.child(
-                    round_button("sidebar-hide", "panel-left")
-                        .tooltip(text_tip("收起侧边栏 · 右键选择显示方式"))
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            let style = this.sidebar_collapsed_style;
-                            this.set_sidebar(style, cx);
-                        }))
-                        .context_menu(self.sidebar_mode_menu(cx)),
+                    track_key_focus(
+                        round_button("sidebar-hide", "panel-left")
+                            .tooltip(text_tip("收起侧边栏 · 右键选择显示方式"))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                let style = this.sidebar_collapsed_style;
+                                this.set_sidebar(style, cx);
+                            })),
+                        "sidebar-hide",
+                        0,
+                        ACCENT,
+                        window,
+                        cx,
+                    )
+                    .context_menu(self.sidebar_mode_menu(cx)),
                 )
             })
             .when(self.settings, |d| {
@@ -929,7 +989,8 @@ impl WhiskyApp {
                         .tooltip(text_tip("创建容器…"))
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.open_preview_sheet(crate::state::PreviewSheet::CreateBottle, cx)
-                        })),
+                        }))
+                        .key_focus("toolbar-add"),
                 )
             })
             .when(is_library, |d| d.child(modes))
@@ -999,7 +1060,8 @@ impl WhiskyApp {
                         this.set_mode(target, cx);
                     }))
                     .child(icon(icon_name, 12.))
-                    .child(label),
+                    .child(label)
+                    .key_focus(("timeline-layout", target)),
             );
         }
         group.into_any_element()
@@ -1205,31 +1267,40 @@ impl WhiskyApp {
             .map(|game| game.title.clone())
             .unwrap_or_default();
         let (ph_start, ph_end) = placeholder_gradient();
-        div()
-            .id(("cover", index))
-            .relative()
-            .w(px(width))
-            .h(px(height))
-            .flex_shrink_0()
-            .rounded(px(8.))
-            .overflow_hidden()
-            .border_1()
-            .border_color(rgba(if hovering {
-                if is_dark() { 0xffffff65 } else { 0x00000045 }
-            } else {
-                surface_border()
-            }))
-            .cursor_pointer()
-            .on_hover(cx.listener(move |this, active, _, cx| {
-                if *active {
-                    this.ambient_index = index;
-                    this.hovered = Some(index);
-                } else if this.hovered == Some(index) {
-                    this.hovered = None;
-                }
-                cx.notify();
-            }))
-            .on_click(cx.listener(move |this, _, _, cx| this.open_detail(index, cx)))
+        track_key_focus(
+            div()
+                .id(("cover", index))
+                .relative()
+                .w(px(width))
+                .h(px(height))
+                .flex_shrink_0()
+                .rounded(px(8.))
+                .overflow_hidden()
+                .border_1()
+                .border_color(rgba(if hovering {
+                    if is_dark() { 0xffffff65 } else { 0x00000045 }
+                } else {
+                    surface_border()
+                }))
+                .cursor_pointer()
+                .on_hover(cx.listener(move |this, active, _, cx| {
+                    if *active {
+                        this.ambient_index = index;
+                        this.hovered = Some(index);
+                    } else if this.hovered == Some(index) {
+                        this.hovered = None;
+                    }
+                    cx.notify();
+                }))
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    this.open_detail_from(index, window, cx)
+                })),
+            ("cover", index),
+            0,
+            ACCENT,
+            window,
+            cx,
+        )
             .child(match artwork {
                 Some(path) => self.cover_image(path, cx)
                     .absolute()
@@ -1474,7 +1545,7 @@ impl WhiskyApp {
         index: usize,
         demo_label: &'static str,
         cx: &mut Context<Self>,
-    ) -> Stateful<Div> {
+    ) -> FocusableControl {
         self.play_button_toned(id, index, demo_label, 1., cx)
     }
     /// A play button whose accent fades in with `lit` (0 idle → 1 hot). The
@@ -1487,7 +1558,8 @@ impl WhiskyApp {
         demo_label: &'static str,
         lit: f32,
         cx: &mut Context<Self>,
-    ) -> Stateful<Div> {
+    ) -> FocusableControl {
+        let id = id.into();
         // The demo has no runtime; it keeps its own label and its notice.
         let (label, enabled, busy, action) = if self.demo {
             (demo_label, true, false, None)
@@ -1496,7 +1568,7 @@ impl WhiskyApp {
             (action.label, action.enabled, action.busy, action.action)
         };
         let mut button = row()
-            .id(id)
+            .id(id.clone())
             .flex_shrink_0()
             .justify_center()
             .gap(px(6.))
@@ -1548,7 +1620,11 @@ impl WhiskyApp {
                 .child(leading.into_any_element())
                 .child(label);
         }
-        button
+        let mut focusable = button.key_focus(id).tab_stop(enabled && !busy);
+        if lit > 0.5 && enabled && !busy {
+            focusable = focusable.light_ring();
+        }
+        focusable
     }
     /// Ordered indices for the timeline family (list and staggered). The demo
     /// keeps its hand-tuned featured order for the default sort; every other
@@ -1759,17 +1835,25 @@ impl WhiskyApp {
                                         .context_menu(self.game_menu(index, cx)),
                                 )
                                 .child(
-                                    col()
-                                        .id(("timeline-body", index))
-                                        .flex_1()
-                                        .min_w_0()
-                                        .justify_center()
-                                        .h_full()
-                                        .gap(px(8.))
-                                        .cursor_pointer()
-                                        .on_click(cx.listener(move |this, _, _, cx| {
-                                            this.open_detail(index, cx)
-                                        }))
+                                    track_key_focus(
+                                        col()
+                                            .id(("timeline-body", index))
+                                            .flex_1()
+                                            .min_w_0()
+                                            .justify_center()
+                                            .h_full()
+                                            .gap(px(8.))
+                                            .rounded(px(8.))
+                                            .cursor_pointer()
+                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                this.open_detail_from(index, window, cx)
+                                            })),
+                                        ("timeline-body", index),
+                                        0,
+                                        ACCENT,
+                                        window,
+                                        cx,
+                                    )
                                         .child(
                                             div()
                                                 .text_size(px(19.))
@@ -1969,6 +2053,7 @@ impl WhiskyApp {
         progress: f32,
         width: f32,
         height: f32,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let Some(g) = self.game(index) else {
@@ -2031,13 +2116,16 @@ impl WhiskyApp {
                     .id("detail-dismiss")
                     .absolute()
                     .inset_0()
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.detail_open = false;
-                        cx.notify();
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.close_detail(window, cx);
                     })),
             )
-            .child(
-                col()
+            .child({
+                let trap_handle = window
+                    .use_keyed_state("detail-modal-trap", cx, |_, cx| cx.focus_handle())
+                    .read(cx)
+                    .clone();
+                let panel = col()
                     // Keep clicks inside the panel from reaching the dismiss layer.
                     .occlude()
                     .absolute()
@@ -2077,10 +2165,10 @@ impl WhiskyApp {
                                 round_button("detail-close", "x")
                                     .size(px(27.))
                                     .tooltip(text_tip("关闭（Esc）"))
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.detail_open = false;
-                                        cx.notify();
-                                    })),
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.close_detail(window, cx);
+                                    }))
+                                    .key_focus("detail-close"),
                             )),
                     )
                     .child(
@@ -2156,7 +2244,16 @@ impl WhiskyApp {
                                                             index,
                                                             "继续游玩",
                                                             cx,
-                                                        ),
+                                                        )
+                                                        .when(self.detail_open, |b| {
+                                                            b.auto_focus_key((
+                                                                "detail-play-autofocus",
+                                                                self.detail_open_generation,
+                                                            ))
+                                                        })
+                                                        .when(!self.detail_open, |b| {
+                                                            b.tab_stop(false)
+                                                        }),
                                                     ))
                                                     .when(!self.demo, |d| {
                                                         d.child(
@@ -2235,8 +2332,16 @@ impl WhiskyApp {
                                     .child(self.detail_character_cards(index, cx)),
                             ),
                         ),
-                    ),
-            )
+                    );
+                if self.detail_open {
+                    panel
+                        .track_focus(&trap_handle)
+                        .focus_trap("detail-modal", &trap_handle)
+                        .into_any_element()
+                } else {
+                    panel.into_any_element()
+                }
+            })
             .into_any_element()
     }
 

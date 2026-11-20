@@ -173,6 +173,10 @@ pub(crate) fn sync_theme(
                 theme.colors.progress_bar = primary;
                 theme.colors.slider_bar = primary;
                 theme.colors.caret = primary;
+                let dark_accent: gpui_kit::Hsla = gpui_kit::rgb(0x383840).into();
+                theme.colors.accent = dark_accent;
+                theme.tokens.accent = dark_accent.into();
+                theme.colors.list_active = dark_accent;
                 theme.colors.ring = gpui_kit::rgba(0xff891b88).into();
                 theme.colors.selection = gpui_kit::rgba(0xff891b38).into();
             } else {
@@ -193,6 +197,7 @@ pub(crate) fn sync_theme(
                 theme.colors.slider_bar = primary;
                 theme.colors.caret = primary;
                 theme.colors.accent = light_gray;
+                theme.tokens.accent = light_gray.into();
                 theme.colors.list_active = light_gray;
                 theme.colors.list_active_border = light_gray_border;
                 theme.colors.table_active = light_gray;

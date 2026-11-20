@@ -370,8 +370,8 @@ impl WhiskyApp {
                     ("immersive-detail", index),
                     "info",
                     "详情",
-                    cx.listener(move |this, _, _, cx| {
-                        this.open_detail(index, cx);
+                    cx.listener(move |this, _, window, cx| {
+                        this.open_detail_from(index, window, cx);
                     }),
                 ))
                 .child(hero_chip_button(
@@ -564,35 +564,43 @@ impl WhiskyApp {
         let ih = card_h * (1. + amount * 0.04);
         let artwork = self.artwork(index);
         let (ph_start, ph_end) = placeholder_gradient();
-        let card = div()
-            .id(SharedString::from(format!("immersive-card-{row_key}-{index}")))
-            .relative()
-            .w(px(card_w))
-            .h(px(card_h))
-            .flex_shrink_0()
-            .rounded(px(10.))
-            .overflow_hidden()
-            .border_1()
-            .border_color(rgba(if hovering {
-                if is_dark() {
-                    0xffffff65
+        let card_id = ElementId::from(format!("immersive-card-{row_key}-{index}"));
+        let card = track_key_focus(
+            div()
+                .id(card_id.clone())
+                .relative()
+                .w(px(card_w))
+                .h(px(card_h))
+                .flex_shrink_0()
+                .rounded(px(10.))
+                .overflow_hidden()
+                .border_1()
+                .border_color(rgba(if hovering {
+                    if is_dark() {
+                        0xffffff65
+                    } else {
+                        0x00000045
+                    }
                 } else {
-                    0x00000045
-                }
-            } else {
-                surface_border()
-            }))
-            .cursor_pointer()
-            .on_hover(cx.listener(move |this, active, _, cx| {
-                if *active {
-                    this.ambient_index = index;
-                    this.hovered = Some(index);
-                } else if this.hovered == Some(index) {
-                    this.hovered = None;
-                }
-                cx.notify();
-            }))
-            .on_click(cx.listener(move |this, _, _, cx| this.open_detail(index, cx)))
+                    surface_border()
+                }))
+                .cursor_pointer()
+                .on_hover(cx.listener(move |this, active, _, cx| {
+                    if *active {
+                        this.ambient_index = index;
+                        this.hovered = Some(index);
+                    } else if this.hovered == Some(index) {
+                        this.hovered = None;
+                    }
+                    cx.notify();
+                }))
+                .on_click(cx.listener(move |this, _, window, cx| this.open_detail_from(index, window, cx))),
+            card_id,
+            0,
+            ACCENT,
+            window,
+            cx,
+        )
             .child(match artwork {
                 Some(path) => self.cover_image(path, cx)
                     .absolute()
@@ -678,9 +686,10 @@ fn hero_chip_button(
     icon_name: &str,
     label: &'static str,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-) -> Stateful<Div> {
+) -> FocusableControl {
+    let id = id.into();
     row()
-        .id(id)
+        .id(id.clone())
         .flex_shrink_0()
         .justify_center()
         .gap(px(6.))
@@ -696,4 +705,5 @@ fn hero_chip_button(
         .on_click(on_click)
         .child(icon(icon_name, 13.))
         .child(label)
+        .key_focus(id)
 }

@@ -20,7 +20,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use gpui_kit::component::theme::ThemeMode;
-use gpui_kit::WindowAppearance;
+use gpui_kit::{AppContext as _, WindowAppearance};
 
 use crate::bridge::supervisor::{classify, CallFailure, BACKOFF_MAX_MS, BACKOFF_MIN_MS, PICKER_TIMEOUT};
 use crate::bridge::BottleCreateUpdate;
@@ -1881,6 +1881,479 @@ fn choice_level_policy_gates_individual_options(cx: &mut gpui_kit::TestAppContex
             assert_eq!(
                 this.config.as_ref().unwrap().values.get("graphicsBackend"),
                 Some(&serde_json::json!("dxmt"))
+            );
+        })
+        .unwrap();
+}
+
+fn press_key(cx: &mut gpui_kit::TestAppContext, window: gpui_kit::AnyWindowHandle, key: &str) {
+    let keystroke = gpui_kit::Keystroke::parse(key).unwrap();
+    cx.update_window(window, |_, window, cx| {
+        window.dispatch_event(
+            gpui_kit::PlatformInput::KeyDown(gpui_kit::KeyDownEvent {
+                keystroke: keystroke.clone(),
+                is_held: false,
+                prefer_character_input: false,
+            }),
+            cx,
+        );
+        window.dispatch_event(
+            gpui_kit::PlatformInput::KeyUp(gpui_kit::KeyUpEvent { keystroke }),
+            cx,
+        );
+    })
+    .unwrap();
+    cx.run_until_parked();
+}
+
+#[gpui_kit::test]
+fn minimal_autofocus_button_enter_test(cx: &mut gpui_kit::TestAppContext) {
+    use gpui_kit::component::button::{Button, ButtonVariants as _};
+    use gpui_kit::{InteractiveElement as _, ParentElement as _};
+    struct Harness {
+        clicks: std::rc::Rc<std::cell::Cell<usize>>,
+    }
+    impl gpui_kit::Render for Harness {
+        fn render(
+            &mut self,
+            _: &mut gpui_kit::Window,
+            _: &mut gpui_kit::Context<Self>,
+        ) -> impl gpui_kit::IntoElement {
+            let clicks = self.clicks.clone();
+            gpui_kit::div()
+                .id("card")
+                .child(crate::controls::AutoFocusButton::new(
+                    "btn",
+                    Button::new("btn").label("OK").primary().on_click(move |_, _, _| {
+                        clicks.set(clicks.get() + 1);
+                    }),
+                ))
+        }
+    }
+    cx.update(gpui_kit::init);
+    let clicks = std::rc::Rc::new(std::cell::Cell::new(0));
+    let window = cx.add_window({
+        let clicks = clicks.clone();
+        move |_, _| Harness { clicks }
+    });
+    cx.update_window(window.into(), |_, window, cx| {
+        window.draw(cx).clear(cx);
+    })
+    .unwrap();
+    press_key(cx, window.into(), "enter");
+    assert_eq!(clicks.get(), 1);
+}
+
+#[gpui_kit::test]
+fn clipboard_prompt_auto_focuses_clear_button_and_executes_on_enter(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    let window = engine_window(cx);
+    window
+        .update(cx, |this, _, cx| {
+            this.runtime.apply(crate::runtime::RuntimeUpdate {
+                container: "/bottles/a".into(),
+                resync: true,
+                entries: vec![
+                    crate::bridge::dto::RuntimeEntryDto {
+                        id: "entry:1".into(),
+                        state: "idle".into(),
+                        capabilities: 0,
+                    },
+                    crate::bridge::dto::RuntimeEntryDto {
+                        id: "entry:2".into(),
+                        state: "idle".into(),
+                        capabilities: 0,
+                    },
+                ],
+            });
+            this.apply_bridge_event(
+                crate::bridge::BridgeEvent::ClipboardPrompt(crate::runtime::ClipboardPrompt {
+                    container: "/bottles/a".into(),
+                    entry_id: "entry:1".into(),
+                    executable: None,
+                    token: "tok-1".into(),
+                    content_type: "文本".into(),
+                    size_bytes: 2048,
+                    preview: Some("secret".into()),
+                }),
+                cx,
+            );
+            assert!(this.clipboard_prompt.is_some());
+        })
+        .unwrap();
+    cx.update_window(window.into(), |_, window, cx| {
+        window.draw(cx).clear(cx);
+    })
+    .unwrap();
+    window
+        .update(cx, |this, window, _| {
+            assert!(
+                !this.focus_handle.is_focused(window),
+                "focus must move from app root to the primary clipboard button"
+            );
+        })
+        .unwrap();
+
+    // Pressing Enter activates the focused "清空并启动" button.
+    press_key(cx, window.into(), "enter");
+    window
+        .update(cx, |this, window, _cx| {
+            assert!(
+                this.clipboard_prompt.is_none(),
+                "Enter must execute and close the clipboard prompt"
+            );
+            assert_eq!(
+                this.runtime.entry("entry:1").map(|entry| entry.state),
+                Some(crate::runtime::RuntimeState::Preparing),
+                "confirming clipboard clear must advance entry to Preparing"
+            );
+            assert!(
+                this.focus_handle.is_focused(window),
+                "focus must return to app root after closing the prompt"
+            );
+        })
+        .unwrap();
+
+    // Escape dismisses a newly opened clipboard prompt without launching.
+    window
+        .update(cx, |this, _, cx| {
+            this.apply_bridge_event(
+                crate::bridge::BridgeEvent::ClipboardPrompt(crate::runtime::ClipboardPrompt {
+                    container: "/bottles/a".into(),
+                    entry_id: "entry:2".into(),
+                    executable: None,
+                    token: "tok-2".into(),
+                    content_type: "文本".into(),
+                    size_bytes: 1024,
+                    preview: None,
+                }),
+                cx,
+            );
+        })
+        .unwrap();
+    cx.update_window(window.into(), |_, window, cx| window.draw(cx).clear(cx))
+        .unwrap();
+    cx.simulate_keystrokes(window.into(), "escape");
+    window
+        .update(cx, |this, window, _cx| {
+            assert!(this.clipboard_prompt.is_none(), "Escape must dismiss clipboard prompt");
+            assert_eq!(
+                this.runtime.entry("entry:2").map(|entry| entry.state),
+                Some(crate::runtime::RuntimeState::Idle)
+            );
+            assert!(this.focus_handle.is_focused(window));
+        })
+        .unwrap();
+}
+
+#[gpui_kit::test]
+fn legacy_fullscreen_prompt_auto_focuses_restart_button_and_executes_on_enter(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    let window = engine_window(cx);
+    window
+        .update(cx, |this, _, cx| {
+            this.runtime.apply(crate::runtime::RuntimeUpdate {
+                container: "/bottles/a".into(),
+                resync: true,
+                entries: vec![crate::bridge::dto::RuntimeEntryDto {
+                    id: "entry:fullscreen".into(),
+                    state: "idle".into(),
+                    capabilities: 0,
+                }],
+            });
+            this.apply_bridge_event(
+                crate::bridge::BridgeEvent::LegacyFullscreenPrompt {
+                    container: "/bottles/a".into(),
+                    executable: "C:\\game.exe".into(),
+                    program_name: "Game".into(),
+                    entry_id: "entry:fullscreen".into(),
+                },
+                cx,
+            );
+            assert!(this.legacy_fullscreen_prompt.is_some());
+        })
+        .unwrap();
+    cx.update_window(window.into(), |_, window, cx| window.draw(cx).clear(cx))
+        .unwrap();
+    window
+        .update(cx, |this, window, _| {
+            assert!(
+                !this.focus_handle.is_focused(window),
+                "focus must move from app root to the primary restart button"
+            );
+        })
+        .unwrap();
+
+    // Moving focus away via Shift+Tab must survive subsequent redraws.
+    cx.update_window(window.into(), |_, window, cx| {
+        let before = window.focused(cx);
+        window.focus_prev(cx);
+        let after = window.focused(cx);
+        assert_ne!(before, after, "Shift+Tab must move focus to another dialog button");
+        window.draw(cx).clear(cx);
+        assert_eq!(
+            window.focused(cx),
+            after,
+            "re-rendering the dialog must not steal focus back from user navigation"
+        );
+        // Restore focus back to the primary button before simulating Enter.
+        window.focus(&before.unwrap(), cx);
+        window.draw(cx).clear(cx);
+    })
+    .unwrap();
+
+    press_key(cx, window.into(), "enter");
+    window
+        .update(cx, |this, window, _cx| {
+            assert!(
+                this.legacy_fullscreen_prompt.is_none(),
+                "Enter must execute and close the legacy fullscreen prompt"
+            );
+            assert_eq!(
+                this.runtime.entry("entry:fullscreen").map(|entry| entry.state),
+                Some(crate::runtime::RuntimeState::Preparing),
+                "Enter on primary button must apply and relaunch the entry"
+            );
+            assert!(
+                this.focus_handle.is_focused(window),
+                "focus must return to app root after closing the prompt"
+            );
+        })
+        .unwrap();
+}
+
+#[gpui_kit::test]
+fn engine_dialog_auto_focuses_confirm_button_and_executes_on_enter(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    let window = engine_window(cx);
+    window
+        .update(cx, |this, _, cx| {
+            this.config = Some(crate::state::ConfigPage {
+                container: "/bottles/a".into(),
+                capabilities: Vec::new(),
+                fields: vec![toggle_field("dxvkAsync")],
+                values: BTreeMap::new(),
+                loading: false,
+                error: None,
+            });
+            this.engine_selections
+                .insert("/bottles/a".into(), *external_selection());
+            this.set_config_value("dxvkAsync", serde_json::json!(true), cx);
+            assert!(this.engine_dialog.is_some());
+        })
+        .unwrap();
+    cx.update_window(window.into(), |_, window, cx| window.draw(cx).clear(cx))
+        .unwrap();
+    window
+        .update(cx, |this, window, _| {
+            assert!(!this.focus_handle.is_focused(window));
+        })
+        .unwrap();
+
+    press_key(cx, window.into(), "enter");
+    window
+        .update(cx, |this, window, _cx| {
+            assert!(
+                this.engine_dialog.is_none(),
+                "Enter must confirm and close the engine dialog"
+            );
+            assert!(
+                this.pending_engine_action.is_some(),
+                "Confirming engine dialog must queue the pending engine config write"
+            );
+            assert!(this.focus_handle.is_focused(window));
+        })
+        .unwrap();
+}
+
+#[gpui_kit::test]
+fn dropdown_menu_navigates_with_arrows_after_opening_with_enter(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    cx.update(|app| {
+        gpui_kit::init(app);
+        crate::bind_shortcuts(app);
+    });
+    let (_events_tx, events_rx) = smol::channel::unbounded();
+    let bridge = crate::bridge::BridgeSupervisor::disconnected_for_tests();
+    let app_handle = cx.add_window(|window, cx| {
+        let view = cx.new(|cx| {
+            let mut app = crate::state::WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, true);
+            app.mode = 0;
+            app
+        });
+        gpui_kit::base::Root::new(view, window, cx)
+    });
+    cx.update_window(app_handle.into(), |_, window, cx| {
+        window.draw(cx).clear(cx);
+    })
+    .unwrap();
+    // Tab past `sidebar-hide` and `toolbar-add` to `library-view-menu`.
+    for _ in 0..3 {
+        press_key(cx, app_handle.into(), "tab");
+        cx.update_window(app_handle.into(), |_, window, cx| {
+            window.draw(cx).clear(cx);
+        })
+        .unwrap();
+    }
+
+    // Open the mode dropdown menu with Enter (without extra manual draw calls).
+    press_key(cx, app_handle.into(), "enter");
+    // Move down, back up, then down twice to "列表" (mode 1) and confirm with Enter.
+    press_key(cx, app_handle.into(), "down");
+    press_key(cx, app_handle.into(), "down");
+    press_key(cx, app_handle.into(), "up");
+    press_key(cx, app_handle.into(), "down");
+    press_key(cx, app_handle.into(), "enter");
+    app_handle
+        .read_with(cx, |root, cx| {
+            let app = root.view().clone().downcast::<crate::state::WhiskyApp>().unwrap().read(cx);
+            assert_eq!(app.mode, 1, "Up/Down + Enter in library-view-menu must switch to 列表 (mode 1)");
+        })
+        .unwrap();
+}
+
+#[gpui_kit::test]
+fn toolbar_tab_enters_library_view_then_enter_opens_detail_and_enter_runs_game(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    cx.update(|app| {
+        gpui_kit::init(app);
+        crate::bind_shortcuts(app);
+    });
+    let (_events_tx, events_rx) = smol::channel::unbounded();
+    let bridge = crate::bridge::BridgeSupervisor::disconnected_for_tests();
+    let app_handle = cx.add_window(|window, cx| {
+        let view = cx.new(|cx| {
+            let mut app =
+                crate::state::WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, false);
+            app.mode = 0;
+            app.apply_bridge_event(
+                crate::bridge::BridgeEvent::Containers(vec![crate::bridge::dto::Container {
+                    path: "/bottles/alpha".into(),
+                    name: "Alpha".into(),
+                    available: true,
+                }]),
+                cx,
+            );
+            let entry: crate::bridge::dto::EntryDto = serde_json::from_value(serde_json::json!({
+                "id": "entry:1",
+                "name": "Sample Visual Novel",
+                "executable": "/games/sample/game.exe",
+                "configured": true,
+            }))
+            .unwrap();
+            app.apply_bridge_event(
+                crate::bridge::BridgeEvent::Entries {
+                    container: "/bottles/alpha".into(),
+                    entries: vec![entry],
+                },
+                cx,
+            );
+            app
+        });
+        gpui_kit::base::Root::new(view, window, cx)
+    });
+
+    cx.update_window(app_handle.into(), |_, window, cx| {
+        window.draw(cx).clear(cx);
+    })
+    .unwrap();
+
+    // Focus the last control in the top toolbar (`search`), then verify a single
+    // Tab moves focus directly into the first game card in the shelf view below
+    // (bypassing the sidebar, which sits at tab_index 1).
+    let search_focus = app_handle
+        .read_with(cx, |root, cx| {
+            use gpui_kit::Focusable as _;
+            root.view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap()
+                .read(cx)
+                .search
+                .read(cx)
+                .focus_handle(cx)
+        })
+        .unwrap();
+    cx.update_window(app_handle.into(), |_, window, cx| {
+        window.focus(&search_focus, cx);
+        window.draw(cx).clear(cx);
+    })
+    .unwrap();
+
+    // One Tab from the last toolbar item (search) must enter the first game card below!
+    press_key(cx, app_handle.into(), "tab");
+    let card_focus = cx
+        .update_window(app_handle.into(), |_, window, cx| {
+            window.draw(cx).clear(cx);
+            window.focused(cx)
+        })
+        .unwrap();
+    assert!(card_focus.is_some(), "Tab from toolbar search must focus the first game card");
+
+    // Enter on the focused game card must open the detail panel and auto-focus `detail-play`.
+    press_key(cx, app_handle.into(), "enter");
+    cx.update_window(app_handle.into(), |_, window, cx| {
+        window.draw(cx).clear(cx);
+    })
+    .unwrap();
+    let detail_focus = cx
+        .update_window(app_handle.into(), |_, window, cx| window.focused(cx))
+        .unwrap();
+    app_handle
+        .read_with(cx, |root, cx| {
+            let app = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap()
+                .read(cx);
+            assert!(app.detail_open, "Enter on focused game card must open detail panel");
+            assert_eq!(app.detail, Some(0));
+            assert!(detail_focus.is_some(), "detail panel must auto-focus `detail-play`");
+            assert_ne!(detail_focus, card_focus, "detail panel must move focus off card");
+        })
+        .unwrap();
+
+    // Pressing Enter again inside the detail panel must trigger `detail-play` and start the game.
+    press_key(cx, app_handle.into(), "enter");
+    app_handle
+        .read_with(cx, |root, cx| {
+            let app = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap()
+                .read(cx);
+            assert_eq!(
+                app.notice.as_deref(),
+                Some("正在启动 Sample Visual Novel"),
+                "Second Enter inside detail panel must trigger launch"
+            );
+        })
+        .unwrap();
+
+    // Escape closes the detail panel and restores focus back to the originating game card.
+    press_key(cx, app_handle.into(), "escape");
+    let after_escape_focus = cx
+        .update_window(app_handle.into(), |_, window, cx| window.focused(cx))
+        .unwrap();
+    app_handle
+        .read_with(cx, |root, cx| {
+            let app = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap()
+                .read(cx);
+            assert!(!app.detail_open, "Escape must close detail panel");
+            assert_eq!(
+                after_escape_focus, card_focus,
+                "Escape from detail panel must restore focus back to the game card"
             );
         })
         .unwrap();
