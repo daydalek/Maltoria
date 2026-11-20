@@ -19,6 +19,9 @@
 import Foundation
 import WhiskyBridgeProtocol
 import WhiskyTranslation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 @MainActor
 public final class ApplicationTranslationService {
