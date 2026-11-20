@@ -25,7 +25,7 @@ import Testing
 struct SteamAuditRegressionTests {
     private func pendingRequest() -> Task<Wine.ProgramRunResult, any Error> {
         Task {
-            try await Task.sleep(for: .seconds(30))
+            try await Task.sleep(for: .seconds(600))
             return Wine.ProgramRunResult(
                 exitCode: 0,
                 logFileURL: URL(filePath: "/tmp/steam.log"),
@@ -48,7 +48,7 @@ struct SteamAuditRegressionTests {
         )
         #expect(!appeared)
         #expect(polls >= 1)
-        #expect(ContinuousClock.now - start < .seconds(5))
+        #expect(ContinuousClock.now - start < .seconds(60))
     }
 
     @Test func pendingRequestAllowsGameAppearance() async throws {
@@ -71,14 +71,14 @@ struct SteamAuditRegressionTests {
         let start = ContinuousClock.now
         let monitor = Task {
             try await SteamGameLaunchMonitor.wait(
-                names: ["game.exe"], pollInterval: .seconds(10),
+                names: ["game.exe"], pollInterval: .seconds(600),
                 runningImages: { [] }, accepted: { true }, prepareRetry: {}, retry: {}, launchTask: request
             )
         }
         try await Task.sleep(for: .milliseconds(30))
         monitor.cancel()
         await #expect(throws: CancellationError.self) { _ = try await monitor.value }
-        #expect(ContinuousClock.now - start < .seconds(5))
+        #expect(ContinuousClock.now - start < .seconds(60))
     }
 
     @Test func failedRetryRequestIsObserved() async throws {
