@@ -266,8 +266,7 @@ impl WhiskyApp {
         };
         if is_library {
             // Library view actions only; appearance, motion and layout
-            // preferences live in the settings page's 游戏库 section, and
-            // hidden-program filtering stays on its toolbar pill.
+            // preferences live in the settings page's 游戏库 section.
             for (i, label) in sort_names.into_iter().enumerate() {
                 items.push(
                     self.menu_item(format!("按{label}排序"), Command::Sort(i), cx)
@@ -277,6 +276,16 @@ impl WhiskyApp {
             items.push(
                 self.menu_item("倒序排列", Command::Toggle("reverse-sort"), cx)
                     .checked(self.reversed),
+            );
+            let hidden = self.hidden_count();
+            let hidden_label = if hidden == 0 {
+                "显示已隐藏的游戏".to_string()
+            } else {
+                format!("显示已隐藏的游戏（{hidden}）")
+            };
+            items.push(
+                self.menu_item(hidden_label, Command::Toggle("show-hidden"), cx)
+                    .checked(self.show_hidden()),
             );
             items.push(MenuEntry::separator(cx.entity().downgrade()));
             if self.mode == 0 && self.cover_width > f32::EPSILON {

@@ -327,7 +327,9 @@ impl WhiskyApp {
             (
                 "search-x",
                 "当前游戏均已隐藏",
-                format!("当前范围内共有 {hidden} 款已隐藏的游戏，开启「显示已隐藏」即可查看。"),
+                format!(
+                    "当前范围内共有 {hidden} 款已隐藏的游戏，在「•••」菜单中开启「显示已隐藏的游戏」即可查看。"
+                ),
             )
         } else {
             (
@@ -943,24 +945,6 @@ impl WhiskyApp {
                 is_library && self.mode == 0,
                 |d| d.child(self.cover_size_control(cx)),
             )
-            .when(is_library, |d| {
-                let hidden = self.hidden_count();
-                let label: SharedString = if hidden == 0 {
-                    "已隐藏".into()
-                } else {
-                    format!("已隐藏 · {hidden}").into()
-                };
-                d.child(
-                    Button::new("hidden-filter")
-                        .label(label)
-                        .rounded_full()
-                        .tooltip("显示或隐藏已隐藏的游戏")
-                        .when(self.show_hidden(), |button| button.primary())
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.command(crate::views::Command::Toggle("show-hidden"), cx);
-                        })),
-                )
-            })
             .when(!self.settings, |d| d.child(self.options_menu(cx)))
             .when(is_library, |d| {
                 d.child(
