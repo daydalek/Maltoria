@@ -90,6 +90,13 @@ def main():
         path = fixture / 'config/whisky/preferences.plist'
         return plistlib.loads(path.read_bytes()) if path.exists() else {}
 
+    def open_run_settings():
+        session.click(300, 150, 'button3')
+        time.sleep(0.3)
+        # The Tags submenu sits above metadata and Run Settings.
+        session.click(375, 317)
+        time.sleep(0.6)
+
     try:
         session_type = runpy.run_path(str(TOOLS / 'wayland-driver.py'))['WaylandSession']
         session = session_type(output)
@@ -154,12 +161,10 @@ def main():
             report['steps'].append('native-gtk-wayland-directory-chooser-and-literal-unicode-preference')
             session.click(80, 70)
             time.sleep(0.4)
-            session.click(300, 150, 'button3')
-            time.sleep(0.3)
-            session.click(375, 290)
-            time.sleep(0.6)
+            open_run_settings()
             session.snapshot('wayland-program-settings')
-            session.click(500, 415)
+            # Program Configuration follows the Launch Entries section.
+            session.click(500, 545)
             session.key('a', ('ctrl',))
             arguments = "wayland 中文 $HOME 'literal' %f"
             session.text(arguments)
@@ -170,10 +175,7 @@ def main():
             assert saved['future'] == {'keep': 'opaque'} and saved['environment']['CUSTOM'] == 'retained'
             report['steps'].append('native-wayland-clipboard-unicode-program-save-preserves-unknown-settings')
             time.sleep(0.5)
-            session.click(300, 150, 'button3')
-            time.sleep(0.8)
-            session.click(375, 290)
-            time.sleep(0.5)
+            open_run_settings()
             session.snapshot('wayland-shortcut-section')
             session.click(612, 765)
             shortcut = fixture / 'data/applications/game.desktop'
@@ -214,6 +216,9 @@ def main():
             session.key('s', ('ctrl', 'alt'))
             time.sleep(0.3)
             session.snapshot('wayland-sidebar-shortcut')
+            # Use the collapsed sidebar to return keyboard focus to the library.
+            session.click(27, 106)
+            time.sleep(0.3)
             session.key('q', ('ctrl',))
             assert app.wait(timeout=15) == 0
             saved_window = json.loads((fixture / 'window.json').read_text())
