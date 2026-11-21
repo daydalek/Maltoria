@@ -125,6 +125,10 @@ public final class ApplicationService {
         "launchers.setAutoStart",
         "entry.rating",
         "entry.hidden",
+        "entry.tags",
+        "entry.launchOptions",
+        "library.tags.rename",
+        "library.tags.delete",
         "configuration.schema",
         "configuration.read",
         "configuration.set",
@@ -385,7 +389,9 @@ extension ApplicationService {
                 "metadata.edit",
                 "gameConfig.read",
                 "activity.rating",
-                "visibility.edit"
+                "visibility.edit",
+                "tags.edit",
+                "launchOptions.edit"
             ] + extraCapabilities)).sorted().map(JSONValue.string)),
             "registry": .string(workspace.registry.path),
             "dateUnit": .string("unix_seconds"),
@@ -418,6 +424,8 @@ extension ApplicationService {
         case "library.scan": return try scanLibrary(params)
         case "library.page": return try pageLibrary(params)
         case "library.entries": return try await listEntries(params)
+        case "library.tags.rename": return try renameLibraryTag(params)
+        case "library.tags.delete": return try deleteLibraryTag(params)
         case "workspace.import", "workspace.discover":
             guard !portableLifecycleMethods.isEmpty else { return try await nativeCall(method, params: params) }
             if method == "workspace.import" {
@@ -451,10 +459,17 @@ extension ApplicationService {
             let workspace = workspace
             let scan = Task.detached {
                 let visibility = try LibraryVisibility.load(bottleURL: container)
+                let libraryTags = try LibraryTags.load(bottleURL: container)
+                let launchOptions = try LibraryLaunchOptions.load(bottleURL: container)
                 var repairs: [(URL, GameMetadata)] = []
                 let records = try await workspace.entries(in: container).map { entry -> EntryRecord in
                     try Task.checkCancellation()
-                    let record = try EntryRecord(entry, visibility: visibility)
+                    let record = try EntryRecord(
+                        entry,
+                        visibility: visibility,
+                        libraryTags: libraryTags,
+                        launchOptions: launchOptions
+                    )
                     if let metadata = Self.pendingPortraitRepair(record) {
                         repairs.append((entry.metadataDirectory, metadata))
                     }
@@ -506,9 +521,16 @@ extension ApplicationService {
     private func listEntries(_ params: [String: JSONValue]) async throws -> JSONValue {
         let container = try workspace.resolve(params)
         let visibility = try LibraryVisibility.load(bottleURL: container)
+        let libraryTags = try LibraryTags.load(bottleURL: container)
+        let launchOptions = try LibraryLaunchOptions.load(bottleURL: container)
         var repairs: [(URL, GameMetadata)] = []
         let records = try await workspace.entries(in: container).map { entry -> EntryRecord in
-            let record = try EntryRecord(entry, visibility: visibility)
+            let record = try EntryRecord(
+                entry,
+                visibility: visibility,
+                libraryTags: libraryTags,
+                launchOptions: launchOptions
+            )
             if let metadata = Self.pendingPortraitRepair(record) {
                 repairs.append((entry.metadataDirectory, metadata))
             }
@@ -565,9 +587,109 @@ extension ApplicationService {
             let entry = try await workspace.entry(params)
             _ = try workspace.setHidden(params.flag("hidden"), entry: entry)
             return try .object(["entryID": .string(entry.id), "hidden": .bool(params.flag("hidden"))])
+        case "entry.tags":
+            return try await setEntryTags(params)
+        case "entry.launchOptions":
+            return try await setEntryLaunchOptions(params)
         default:
             return try await nativeCall(method, params: params)
         }
+    }
+
+    private func setEntryTags(_ params: [String: JSONValue]) async throws -> JSONValue {
+        let entry = try await workspace.entry(params)
+        guard case let .array(rawValues) = params["tags"] else {
+            throw BridgeFailure("invalid_params", "Expected string array: tags")
+        }
+        let rawTags = try rawValues.map { value -> String in
+            guard let text = value.string else {
+                throw BridgeFailure("invalid_params", "Expected string array: tags")
+            }
+            return text
+        }
+        let updated = try workspace.setTags(rawTags, entry: entry)
+        return .object([
+            "entryID": .string(entry.id),
+            "tags": .array(updated.map(JSONValue.string))
+        ])
+    }
+
+    private func setEntryLaunchOptions(_ params: [String: JSONValue]) async throws -> JSONValue {
+        let entry = try await workspace.entry(params)
+        let multiExecutable = try params.flag("multiExecutable")
+        guard case let .array(rawPaths) = params["executables"] else {
+            throw BridgeFailure("invalid_params", "Expected path string array: executables")
+        }
+        let executables = try rawPaths.map { value -> URL in
+            guard let path = value.string, !path.isEmpty, !path.contains("\0"), path.hasPrefix("/") else {
+                throw BridgeFailure("invalid_params", "Expected absolute native path array: executables")
+            }
+            return URL(fileURLWithPath: path).standardizedFileURL
+        }
+        let lastPatch: ApplicationWorkspace.LastExecutablePatch = switch params["lastExecutable"] {
+        case nil: .preserveIfValid
+        case .null: .clear
+        case .some: .set(try params.path("lastExecutable"))
+        }
+        let result = try workspace.setLaunchOptions(
+            multiExecutable: multiExecutable,
+            executables: executables,
+            lastExecutable: lastPatch,
+            entry: entry
+        )
+        return .object([
+            "entryID": .string(entry.id),
+            "multiExecutable": .bool(result.options.multiExecutable),
+            "executables": .array(result.executables.map(JSONValue.string)),
+            "lastExecutable": result.lastExecutable.map(JSONValue.string) ?? .null
+        ])
+    }
+
+    private func tagTargetContainers(_ params: [String: JSONValue]) throws -> [URL] {
+        if params["container"] != nil {
+            return [try workspace.resolve(params)]
+        }
+        return try workspace.containers().filter {
+            (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+        }
+    }
+
+    private func renameLibraryTag(_ params: [String: JSONValue]) throws -> JSONValue {
+        let rawOld = try params.text("oldTag")
+        let rawNew = try params.text("newTag")
+        guard let oldTag = LibraryTags.normalize(rawOld),
+              let newTag = LibraryTags.normalize(rawNew)
+        else {
+            throw BridgeFailure("invalid_params", "Expected valid non-empty tag names")
+        }
+        var updatedCount = 0
+        for container in try tagTargetContainers(params) {
+            if try workspace.renameTag(from: oldTag, to: newTag, in: container) {
+                updatedCount += 1
+            }
+        }
+        return .object([
+            "updated": .integer(Int64(updatedCount)),
+            "oldTag": .string(oldTag),
+            "newTag": .string(newTag)
+        ])
+    }
+
+    private func deleteLibraryTag(_ params: [String: JSONValue]) throws -> JSONValue {
+        let rawTag = try params.text("tag")
+        guard let tag = LibraryTags.normalize(rawTag) else {
+            throw BridgeFailure("invalid_params", "Expected a valid non-empty tag name")
+        }
+        var updatedCount = 0
+        for container in try tagTargetContainers(params) {
+            if try workspace.deleteTag(tag, in: container) {
+                updatedCount += 1
+            }
+        }
+        return .object([
+            "updated": .integer(Int64(updatedCount)),
+            "tag": .string(tag)
+        ])
     }
 
     private func rating(_ params: [String: JSONValue]) throws -> Int? {

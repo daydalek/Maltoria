@@ -59,6 +59,14 @@ pub(crate) struct Game {
     /// `LibraryEntry.metadataIdentity` — the stable per-bottle key launcher
     /// auto-start preferences persist under.
     pub(crate) identity: String,
+    /// Per-entry user custom tags.
+    pub(crate) tags: Vec<String>,
+    /// Whether this work exposes multiple selectable `.exe` launch entries.
+    pub(crate) multi_executable: bool,
+    /// Selected launch `.exe` paths for multi-exe mode.
+    pub(crate) launch_executables: Vec<String>,
+    /// Most recently launched `.exe` path in multi-exe mode.
+    pub(crate) last_executable: Option<String>,
 }
 
 impl Game {
@@ -99,7 +107,24 @@ impl Game {
             last_session_ended_at: None,
             is_launcher: false,
             identity: format!("demo:{index}"),
+            tags: Vec::new(),
+            multi_executable: false,
+            launch_executables: Vec::new(),
+            last_executable: None,
         }
+    }
+
+    pub(crate) fn is_steam(&self) -> bool {
+        self.id.starts_with("steam:")
+    }
+
+    pub(crate) fn supports_multi_executable(&self) -> bool {
+        !self.is_steam() && self.game_directory().is_some()
+    }
+
+    pub(crate) fn has_tag(&self, tag: &str) -> bool {
+        let needle = tag.trim().to_lowercase();
+        !needle.is_empty() && self.tags.iter().any(|item| item.to_lowercase() == needle)
     }
 
     /// The installation directory, not a Steam icon or an executable's subfolder.
@@ -134,6 +159,20 @@ impl Game {
 
     pub(crate) fn studio(&self) -> &str {
         self.studio.as_deref().unwrap_or("")
+    }
+
+    pub(crate) fn studio_name(&self) -> Option<String> {
+        self.studio
+            .as_deref()
+            .and_then(crate::library_view::normalize_studio)
+    }
+
+    pub(crate) fn has_studio(&self, studio: &str) -> bool {
+        let Some(needle) = crate::library_view::normalize_studio(studio) else {
+            return false;
+        };
+        self.studio_name()
+            .is_some_and(|name| name.eq_ignore_ascii_case(&needle))
     }
 }
 

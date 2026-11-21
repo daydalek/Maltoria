@@ -2470,6 +2470,10 @@ mod tests {
                     last_session_ended_at: None,
                     is_launcher: false,
                     identity: "g-entry".into(),
+                    tags: Vec::new(),
+                    multi_executable: false,
+                    launch_executables: Vec::new(),
+                    last_executable: None,
                 });
                 this.open_translation_for_game(0, cx);
                 let calls = drain();

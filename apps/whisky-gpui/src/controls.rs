@@ -310,3 +310,81 @@ pub(crate) fn selectable_pill(
             .into_any_element()
     }
 }
+
+pub(crate) fn tag_badge_subtle(label: impl Into<SharedString>) -> Div {
+    div()
+        .flex_shrink_0()
+        .max_w(px(120.))
+        .px(px(6.))
+        .py(px(1.5))
+        .rounded(px(5.))
+        .bg(rgba(theme::card_bg()))
+        .border_1()
+        .border_color(rgba(theme::card_border()))
+        .text_size(px(10.5))
+        .line_height(px(14.))
+        .text_color(rgb(theme::muted_color()))
+        .truncate()
+        .child(label.into())
+}
+
+pub(crate) fn tag_chip(
+    id: impl Into<ElementId>,
+    label: impl Into<SharedString>,
+    active: bool,
+    count: Option<usize>,
+    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> AnyElement {
+    let id = id.into();
+    let chip = row()
+        .id(id.clone())
+        .flex_shrink_0()
+        .items_center()
+        .gap(px(5.))
+        .h(px(26.))
+        .px(px(10.))
+        .rounded_full()
+        .bg(rgba(if active {
+            theme::accent_subtle_bg()
+        } else {
+            theme::card_bg()
+        }))
+        .border_1()
+        .border_color(rgba(if active {
+            theme::accent_subtle_border()
+        } else {
+            theme::card_border()
+        }))
+        .cursor_pointer()
+        .hover(|s| if active { s } else { s.bg(rgba(theme::hover())) })
+        .on_click(on_click)
+        .child(
+            div()
+                .text_size(px(11.5))
+                .font_weight(if active {
+                    FontWeight::SEMIBOLD
+                } else {
+                    FontWeight::MEDIUM
+                })
+                .text_color(rgb(if active {
+                    theme::accent_fg()
+                } else {
+                    theme::text()
+                }))
+                .child(label.into()),
+        )
+        .when_some(count, |d, count| {
+            d.child(
+                div()
+                    .text_size(px(10.5))
+                    .text_color(rgb(if active {
+                        theme::accent_fg()
+                    } else {
+                        theme::muted_color()
+                    }))
+                    .child(count.to_string()),
+            )
+        })
+        .key_focus(id);
+    chip.into_any_element()
+}

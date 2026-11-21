@@ -137,6 +137,15 @@ public final class WineLibraryRuntimeDriver: LibraryRuntimeDriver {
         }
     }
 
+    private func resolvedExecutable(for folder: URL, in bottleURL: URL) -> URL? {
+        if let library = try? FolderGameLibrary.load(bottleURL: bottleURL),
+           let executable = library.executable(for: folder, bottleURL: bottleURL),
+           FileManager.default.fileExists(atPath: executable.path) {
+            return executable
+        }
+        return nil
+    }
+
     private func executable(for request: LibraryLaunchRequest) -> URL? {
         if let executable = request.executableURL {
             return executable
@@ -145,17 +154,14 @@ public final class WineLibraryRuntimeDriver: LibraryRuntimeDriver {
         guard request.entry.source == .folder else { return target }
         // A folder entry names its folder, never a file: the executable is the
         // one the user picked, recorded in the folder library.
-        return resolvedExecutable(for: target, in: request.entry.bottleURL)
-    }
-
-    /// Mirrors `GameActivityTracker.configure`, which tracks a folder game by
-    /// its recorded executable rather than by the folder itself.
-    private func resolvedExecutable(for folder: URL, in bottleURL: URL) -> URL? {
-        guard let library = try? FolderGameLibrary.load(bottleURL: bottleURL),
-              let executable = library.executable(for: folder, bottleURL: bottleURL),
-              FileManager.default.fileExists(atPath: executable.path)
-        else { return nil }
-        return executable
+        if let picked = resolvedExecutable(for: target, in: request.entry.bottleURL) {
+            return picked
+        }
+        if let options = try? LibraryLaunchOptions.load(bottleURL: request.entry.bottleURL) {
+            return options.resolvedLastExecutable(for: request.entry)
+                ?? options.resolvedExecutables(for: request.entry).first
+        }
+        return nil
     }
 
     private func client(for bottle: Bottle) -> SteamClientOrchestrator {

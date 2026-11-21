@@ -468,77 +468,124 @@ impl WhiskyApp {
                 self.section(
                     "library-prefs",
                     "游戏库",
-                    vec![
-                        self.library_mode_cards(cx),
-                        self.toggle(
-                            "refresh",
-                            "退出游戏后刷新游戏库",
-                            if self.toggle_available("refresh") {
-                                ""
-                            } else {
-                                "运行时事件服务接入后可设置。"
-                            },
-                            cx,
-                        ),
-                        self.toggle(
-                            "mixed",
-                            "混合封面布局",
-                            "横版封面跨两列，竖版封面占一列。",
-                            cx,
-                        ),
-                        self.toggle("single-title", "单行显示标题", "", cx),
-                        self.toggle(
-                            "backdrop-fill",
-                            "图片填充背景",
-                            "悬停时用游戏封面填充窗口与详情页背景；关闭后使用主题纯色。",
-                            cx,
-                        ),
-                        self.backdrop_blur_row(cx),
-                        #[cfg(any(target_os = "macos", target_os = "linux"))]
-                        self.choice_pairs(
-                            "cover-upscale",
-                            COVER_UPSCALE_LABEL,
-                            &[("关闭", "off"), ("2× 实用", "x2"), ("4× 激进", "x4")],
-                            cx,
-                        ),
-                        #[cfg(any(target_os = "macos", target_os = "linux"))]
-                        self.choice_pairs(
-                            "cover-engine",
-                            COVER_ENGINE_LABEL,
-                            COVER_ENGINES,
-                            cx,
-                        ),
-                        #[cfg(target_os = "linux")]
-                        self.cover_upscale_status(),
-                        #[cfg(any(target_os = "macos", target_os = "linux"))]
-                        self.cover_batch_row(cx),
-                        self.toggle("scrape-characters", "默认获取人物资料", "从支持的数据源获取人物、声优与头像。", cx),
-                        self.toggle(
-                            "center-cover-text",
-                            "宽封面文字居中",
-                            "横版封面上的标题与信息居中对齐。",
-                            cx,
-                        ),
-                        // The SwiftUI-only display preferences (blurred cover
-                        // fill, fill style, detail layout) stay absent: this
-                        // renderer crops covers with object-fit so a fill never
-                        // shows, and implements one detail layout. They stay in
-                        // the shared preference schema and still affect the
-                        // SwiftUI app. Backdrop blur is a GPUI decode variant
-                        // driven by the `libraryBackdrop*` keys above.
-                        self.toggle(
-                            "motion",
-                            "界面动画",
-                            "滚动回弹、卡片弹簧重排、悬停与详情页过渡。",
-                            cx,
-                        ),
-                        self.toggle(
-                            "lively",
-                            "明显弹性动画",
-                            "卡片重排使用更明显的弹性曲线（默认：柔和）。",
-                            cx,
-                        ),
-                    ],
+                    {
+                        let mut rows = vec![
+                            self.library_mode_cards(cx),
+                            self.toggle(
+                                "refresh",
+                                "退出游戏后刷新游戏库",
+                                if self.toggle_available("refresh") {
+                                    ""
+                                } else {
+                                    "运行时事件服务接入后可设置。"
+                                },
+                                cx,
+                            ),
+                            self.toggle(
+                                "group-by-studio",
+                                "按厂商聚类展示",
+                                "按开发商 / 厂商分组显示作品，支持在网格、画廊、时间线与沉浸式视图中一键归类。",
+                                cx,
+                            ),
+                            self.choice_pairs(
+                                "tag-bar-mode",
+                                "标签与厂商栏显示方式",
+                                &[
+                                    ("顶部二次下滑抽出", "pull-down"),
+                                    ("始终常驻显示", "always"),
+                                ],
+                                cx,
+                            ),
+                        ];
+                        if self.tag_bar_mode == crate::ui_state::TagBarMode::PullDown {
+                            rows.push(
+                                row()
+                                    .py(px(10.))
+                                    .gap(px(16.))
+                                    .items_center()
+                                    .child(
+                                        col()
+                                            .flex_1()
+                                            .min_w_0()
+                                            .gap(px(4.))
+                                            .child("顶部下滑抽出引导")
+                                            .child(
+                                                muted("返回首页并演示微微下滑露出标签与厂商栏的引导动画。")
+                                                    .line_height(relative(1.4)),
+                                            ),
+                                    )
+                                    .child(
+                                        Button::new("replay-tag-bar-hint")
+                                            .label("重播引导")
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.command(super::Command::ReplayTagBarHint, cx);
+                                            })),
+                                    )
+                                    .into_any_element(),
+                            );
+                        }
+                        rows.extend([
+                            self.toggle(
+                                "mixed",
+                                "混合封面布局",
+                                "横版封面跨两列，竖版封面占一列。",
+                                cx,
+                            ),
+                            self.toggle("single-title", "单行显示标题", "", cx),
+                            self.toggle(
+                                "backdrop-fill",
+                                "图片填充背景",
+                                "悬停时用游戏封面填充窗口与详情页背景；关闭后使用主题纯色。",
+                                cx,
+                            ),
+                            self.backdrop_blur_row(cx),
+                            #[cfg(any(target_os = "macos", target_os = "linux"))]
+                            self.choice_pairs(
+                                "cover-upscale",
+                                COVER_UPSCALE_LABEL,
+                                &[("关闭", "off"), ("2× 实用", "x2"), ("4× 激进", "x4")],
+                                cx,
+                            ),
+                            #[cfg(any(target_os = "macos", target_os = "linux"))]
+                            self.choice_pairs(
+                                "cover-engine",
+                                COVER_ENGINE_LABEL,
+                                COVER_ENGINES,
+                                cx,
+                            ),
+                            #[cfg(target_os = "linux")]
+                            self.cover_upscale_status(),
+                            #[cfg(any(target_os = "macos", target_os = "linux"))]
+                            self.cover_batch_row(cx),
+                            self.toggle("scrape-characters", "默认获取人物资料", "从支持的数据源获取人物、声优与头像。", cx),
+                            self.toggle(
+                                "center-cover-text",
+                                "宽封面文字居中",
+                                "横版封面上的标题与信息居中对齐。",
+                                cx,
+                            ),
+                            // The SwiftUI-only display preferences (blurred cover
+                            // fill, fill style, detail layout) stay absent: this
+                            // renderer crops covers with object-fit so a fill never
+                            // shows, and implements one detail layout. They stay in
+                            // the shared preference schema and still affect the
+                            // SwiftUI app. Backdrop blur is a GPUI decode variant
+                            // driven by the `libraryBackdrop*` keys above.
+                            self.toggle(
+                                "motion",
+                                "界面动画",
+                                "滚动回弹、卡片弹簧重排、悬停与详情页过渡。",
+                                cx,
+                            ),
+                            self.toggle(
+                                "lively",
+                                "明显弹性动画",
+                                "卡片重排使用更明显的弹性曲线（默认：柔和）。",
+                                cx,
+                            ),
+                        ]);
+                        rows
+                    },
                     cx,
                 ),
                 self.section(

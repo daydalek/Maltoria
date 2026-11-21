@@ -90,13 +90,17 @@ public final class LinuxWineRuntimeDriver: LibraryRuntimeDriver {
             entries[entry.id] = entry
             let selected = executable(for: .init(entry: entry))
             names[entry.id] = await Task.detached {
+                let launchOptions = (try? LibraryLaunchOptions.load(bottleURL: containerURL)) ?? LibraryLaunchOptions()
+                let extraNames = Set(launchOptions.resolvedExecutables(for: entry, existingOnly: false).map {
+                    $0.lastPathComponent.lowercased()
+                })
                 switch entry.launch {
                 case let .program(url):
                     if entry
                         .source == .folder {
-                        return SteamLibrary.executableNames(under: url, selectedURL: selected)
+                        return SteamLibrary.executableNames(under: url, selectedURL: selected).union(extraNames)
                     }
-                    return Set([url.lastPathComponent.lowercased()])
+                    return Set([url.lastPathComponent.lowercased()]).union(extraNames)
                 case let .steam(appID):
                     let game = SteamLibrary.enumerate(bottleURL: containerURL).first { $0.appId == appID }
                     return game.map { SteamLibrary.executableNames(under: $0.installURL) } ?? []
@@ -366,10 +370,15 @@ public final class LinuxWineRuntimeDriver: LibraryRuntimeDriver {
         guard request.entry.source == .folder else { return target }
         // A folder entry names its folder, never a file: the executable is the
         // one the user picked, recorded in the folder library.
-        guard let library = try? FolderGameLibrary.load(bottleURL: request.entry.bottleURL),
-              let executable = library.executable(for: target, bottleURL: request.entry.bottleURL)
-        else { return nil }
-        return executable
+        if let library = try? FolderGameLibrary.load(bottleURL: request.entry.bottleURL),
+           let executable = library.executable(for: target, bottleURL: request.entry.bottleURL) {
+            return executable
+        }
+        if let options = try? LibraryLaunchOptions.load(bottleURL: request.entry.bottleURL) {
+            return options.resolvedLastExecutable(for: request.entry)
+                ?? options.resolvedExecutables(for: request.entry).first
+        }
+        return nil
     }
 
     static func tail(of url: URL, lines count: Int = 6) -> String {

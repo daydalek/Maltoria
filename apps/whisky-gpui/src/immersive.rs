@@ -70,21 +70,25 @@ pub(crate) fn featured(games: &[Game], ordered: &[usize], limit: usize) -> Vec<u
 
 /// Stable identity for one strip, folded into element ids and the scroll
 /// handle map so the same card can live in two rows without collisions.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum RowKey {
     Resume,
     /// One-based bottle slot, matching `Game::bottle` and the sidebar.
     Bottle(usize),
+    Studio(String),
     All,
+    Tag(String),
     Launchers,
 }
 
 impl RowKey {
-    pub(crate) fn name(self) -> String {
+    pub(crate) fn name(&self) -> String {
         match self {
             RowKey::Resume => "resume".to_owned(),
             RowKey::Bottle(slot) => format!("bottle-{slot}"),
+            RowKey::Studio(studio) => format!("studio-{studio}"),
             RowKey::All => "all".to_owned(),
+            RowKey::Tag(tag) => format!("tag-{tag}"),
             RowKey::Launchers => "launchers".to_owned(),
         }
     }
@@ -104,13 +108,47 @@ pub(crate) struct Row {
 /// 2. Whole-library view with more than one bottle: one row per bottle,
 ///    holding that bottle's non-launchers in `ordered` order. Otherwise a
 ///    single "全部游戏" row. Empty sections are skipped.
-/// 3. "启动器" — storefront clients, always last (omitted when empty).
+/// 3. Optional per-tag shelves when `show_tag_shelves` is true.
+/// 4. "启动器" — storefront clients, always last (omitted when empty).
+#[cfg(test)]
 pub(crate) fn rows(
     games: &[Game],
     ordered: &[usize],
     selected_bottle: Option<usize>,
     bottles_count: usize,
     bottle_name: impl Fn(usize) -> String,
+) -> Vec<Row> {
+    rows_with_tags(games, ordered, selected_bottle, bottles_count, bottle_name, false)
+}
+
+#[cfg(test)]
+pub(crate) fn rows_with_tags(
+    games: &[Game],
+    ordered: &[usize],
+    selected_bottle: Option<usize>,
+    bottles_count: usize,
+    bottle_name: impl Fn(usize) -> String,
+    show_tag_shelves: bool,
+) -> Vec<Row> {
+    rows_with_options(
+        games,
+        ordered,
+        selected_bottle,
+        bottles_count,
+        bottle_name,
+        show_tag_shelves,
+        false,
+    )
+}
+
+pub(crate) fn rows_with_options(
+    games: &[Game],
+    ordered: &[usize],
+    selected_bottle: Option<usize>,
+    bottles_count: usize,
+    bottle_name: impl Fn(usize) -> String,
+    show_tag_shelves: bool,
+    group_by_studio: bool,
 ) -> Vec<Row> {
     let mut out = Vec::new();
     let mut resume: Vec<usize> = ordered
@@ -131,7 +169,20 @@ pub(crate) fn rows(
             indices: resume,
         });
     }
-    if selected_bottle.is_none() && bottles_count > 1 {
+    if group_by_studio {
+        let non_launchers: Vec<usize> = ordered
+            .iter()
+            .copied()
+            .filter(|&i| games.get(i).is_some_and(|game| !game.is_launcher))
+            .collect();
+        for cluster in crate::library_view::group_indices_by_studio(games, &non_launchers) {
+            out.push(Row {
+                key: RowKey::Studio(cluster.key),
+                title: cluster.label,
+                indices: cluster.indices,
+            });
+        }
+    } else if selected_bottle.is_none() && bottles_count > 1 {
         for slot in 1..=bottles_count {
             let indices: Vec<usize> = ordered
                 .iter()
@@ -162,6 +213,26 @@ pub(crate) fn rows(
                 title: "全部游戏".to_owned(),
                 indices,
             });
+        }
+    }
+    if show_tag_shelves {
+        for (tag, _) in crate::library_view::collect_tag_counts(games, true) {
+            let indices: Vec<usize> = ordered
+                .iter()
+                .copied()
+                .filter(|&i| {
+                    games
+                        .get(i)
+                        .is_some_and(|game| !game.is_launcher && game.has_tag(&tag))
+                })
+                .collect();
+            if !indices.is_empty() {
+                out.push(Row {
+                    key: RowKey::Tag(tag.clone()),
+                    title: tag,
+                    indices,
+                });
+            }
         }
     }
     let launchers: Vec<usize> = ordered
@@ -323,5 +394,58 @@ mod tests {
         assert_eq!(sections[0].indices.len(), 20);
         // Most recent (index 24) leads.
         assert_eq!(sections[0].indices[0], 24);
+    }
+
+    #[test]
+    fn rows_with_tags_adds_tag_shelves_before_launchers() {
+        let mut games: Vec<Game> = (0..4).map(game).collect();
+        games[0].tags = vec!["VN".into(), "Favorited".into()];
+        games[1].tags = vec!["VN".into()];
+        games[3].is_launcher = true;
+        games[3].tags = vec!["VN".into()]; // launchers should not enter tag shelves
+        let ordered = [0, 1, 2, 3];
+        let sections = super::rows_with_tags(&games, &ordered, None, 1, |_| "only".to_owned(), true);
+        let keys: Vec<RowKey> = sections.into_iter().map(|s| s.key).collect();
+        assert_eq!(
+            keys,
+            vec![
+                RowKey::All,
+                RowKey::Tag("VN".to_owned()),
+                RowKey::Tag("Favorited".to_owned()),
+                RowKey::Launchers,
+            ]
+        );
+    }
+
+    #[test]
+    fn studio_grouping_emits_per_studio_shelves_between_continue_and_launchers() {
+        let mut games: Vec<Game> = (0..5).map(game).collect();
+        games[0].studio = Some("Key".into());
+        games[0].last_played = Some(200);
+        games[1].studio = Some("Nitroplus".into());
+        games[2].studio = Some("Key".into());
+        games[3].studio = None;
+        games[4].is_launcher = true;
+        let ordered = [0, 1, 2, 3, 4];
+        let sections = super::rows_with_options(
+            &games,
+            &ordered,
+            None,
+            2,
+            |slot| format!("bottle {slot}"),
+            false,
+            true,
+        );
+        let keys: Vec<RowKey> = sections.into_iter().map(|s| s.key).collect();
+        assert_eq!(
+            keys,
+            vec![
+                RowKey::Resume,
+                RowKey::Studio("key".to_owned()),
+                RowKey::Studio("nitroplus".to_owned()),
+                RowKey::Studio(String::new()),
+                RowKey::Launchers,
+            ]
+        );
     }
 }

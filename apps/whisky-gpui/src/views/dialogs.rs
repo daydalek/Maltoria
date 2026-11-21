@@ -287,33 +287,29 @@ impl WhiskyApp {
         if self.demo {
             return self.demo_run_settings(index, cx);
         }
+        let mut sections = Vec::new();
+        if let Some(launch_section) = self.launch_entry_section(index, cx) {
+            sections.push(launch_section);
+        }
         if self.program_settings.loading && self.program_settings.settings.is_none() {
-            return self.form(
-                "run-settings-scroll",
-                vec![self.section(
-                    "program-loading",
-                    "程序配置",
-                    vec![
-                        row()
-                            .gap(px(8.))
-                            .py(px(12.))
-                            .child(Spinner::new().with_size(px(14.)))
-                            .child(muted("正在读取程序设置…"))
-                            .into_any_element(),
-                    ],
-                    cx,
-                )],
-            );
+            sections.push(self.section(
+                "program-loading",
+                "程序配置",
+                vec![
+                    row()
+                        .gap(px(8.))
+                        .py(px(12.))
+                        .child(Spinner::new().with_size(px(14.)))
+                        .child(muted("正在读取程序设置…"))
+                        .into_any_element(),
+                ],
+                cx,
+            ));
+            return self.form("run-settings-scroll", sections);
         }
         let Some(settings) = self.program_settings.settings.clone() else {
-            let reason = self
-                .program_settings
-                .error
-                .clone()
-                .unwrap_or_else(|| "没有可用的程序设置。".to_owned());
-            return self.form(
-                "run-settings-scroll",
-                vec![self.section(
+            if let Some(reason) = self.program_settings.error.clone() {
+                sections.push(self.section(
                     "program-load-error",
                     "程序配置",
                     vec![
@@ -326,11 +322,49 @@ impl WhiskyApp {
                             .into_any_element(),
                     ],
                     cx,
-                )],
-            );
+                ));
+            } else {
+                let supports_pick = self
+                    .game(index)
+                    .is_some_and(crate::model::Game::supports_multi_executable);
+                let multi_exe = self.game(index).is_some_and(|g| g.multi_executable);
+                let mut rows: Vec<AnyElement> = vec![
+                    muted("当前条目尚未指定具体启动 .exe。你可以打开下方「多 exe 入口」并在首次启动时勾选多个程序，也可以现在先配置入口。")
+                        .text_size(px(12.))
+                        .line_height(relative(1.45))
+                        .py(px(4.))
+                        .into_any_element(),
+                ];
+                if supports_pick {
+                    rows.push(
+                        row()
+                            .py(px(6.))
+                            .gap(px(8.))
+                            .child(
+                                Button::new("run-settings-pick-exe")
+                                    .label(if multi_exe {
+                                        "立即勾选多个入口…"
+                                    } else {
+                                        "选择启动程序…"
+                                    })
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        if multi_exe {
+                                            this.open_multi_executable_picker(
+                                                index, false, true, false, cx,
+                                            );
+                                        } else {
+                                            this.open_executable_picker(index, false, cx);
+                                        }
+                                    })),
+                            )
+                            .into_any_element(),
+                    );
+                }
+                sections.push(self.section("program-no-exe", "程序配置", rows, cx));
+            }
+            return self.form("run-settings-scroll", sections);
         };
 
-        let mut sections = Vec::new();
         if let Some(error) = &self.program_settings.error {
             sections.push(self.section(
                 "program-settings-error",
@@ -2101,6 +2135,12 @@ impl WhiskyApp {
             );
         };
         let folder = picker.folder.clone();
+        let multi_select = picker.multi_select;
+        let selected = picker.selected.clone();
+        let game_index = picker.game_index;
+        let supports_multi = self
+            .game(game_index)
+            .is_some_and(crate::model::Game::supports_multi_executable);
         let mut rows: Vec<AnyElement> = Vec::new();
         if picker.loading {
             rows.push(
@@ -2120,8 +2160,9 @@ impl WhiskyApp {
         for (i, candidate) in picker.candidates.iter().enumerate() {
             let path = candidate.path.clone();
             let view = cx.entity().downgrade();
-            let location = candidate.location(&folder);
-            let is_root = location == "根目录";
+            let (location, is_root) =
+                crate::bridge::dto::relative_directory_label(&candidate.path, &folder);
+            let is_checked = multi_select && selected.iter().any(|item| item == &path);
             let row_id = SharedString::from(format!("exe-candidate-{}", i));
             rows.push(
                 row()
@@ -2131,15 +2172,66 @@ impl WhiskyApp {
                     .my(px(3.))
                     .gap(px(12.))
                     .rounded(px(8.))
-                    .bg(rgba(crate::theme::card_bg_subtle()))
+                    .bg(rgba(if is_checked {
+                        crate::theme::accent_subtle_bg()
+                    } else {
+                        crate::theme::card_bg_subtle()
+                    }))
                     .border_1()
-                    .border_color(rgba(crate::theme::card_border()))
+                    .border_color(rgba(if is_checked {
+                        crate::theme::accent_subtle_border()
+                    } else {
+                        crate::theme::card_border()
+                    }))
                     .cursor_pointer()
-                    .hover(|d| d.bg(rgba(crate::theme::hover())).border_color(rgba(crate::theme::hover_strong())))
+                    .hover(|d| {
+                        d.bg(rgba(if is_checked {
+                            crate::theme::accent_subtle_hover()
+                        } else {
+                            crate::theme::hover()
+                        }))
+                        .border_color(rgba(if is_checked {
+                            crate::theme::accent_subtle_border()
+                        } else {
+                            crate::theme::hover_strong()
+                        }))
+                    })
                     .on_click(move |_, _, cx| {
                         let _ = view.update(cx, |this, cx| {
-                            this.choose_executable(&path, cx);
+                            if multi_select {
+                                this.toggle_picker_executable(&path, cx);
+                            } else {
+                                this.choose_executable(&path, cx);
+                            }
                         });
+                    })
+                    .when(multi_select, |d| {
+                        d.child(
+                            div()
+                                .size(px(18.))
+                                .rounded(px(5.))
+                                .flex_shrink_0()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .border_1()
+                                .border_color(rgba(if is_checked {
+                                    crate::theme::accent_subtle_border()
+                                } else {
+                                    crate::theme::surface_border()
+                                }))
+                                .bg(rgba(if is_checked {
+                                    crate::theme::accent_subtle_hover()
+                                } else {
+                                    crate::theme::card_bg()
+                                }))
+                                .when(is_checked, |box_el| {
+                                    box_el.child(
+                                        icon("check", 12.)
+                                            .text_color(rgb(crate::theme::accent_fg())),
+                                    )
+                                }),
+                        )
                     })
                     .child(
                         div()
@@ -2151,7 +2243,7 @@ impl WhiskyApp {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .child(icon("package", 16.).text_color(rgb(if is_root { crate::theme::accent_fg() } else { crate::theme::muted_color() }))),
+                            .child(icon("package", 16.).text_color(rgb(if is_root || is_checked { crate::theme::accent_fg() } else { crate::theme::muted_color() }))),
                     )
                     .child(
                         col()
@@ -2190,12 +2282,51 @@ impl WhiskyApp {
                                     .child(location),
                             ),
                     )
-                    .child(
+                    .child(if multi_select {
+                        row()
+                            .gap(px(4.))
+                            .items_center()
+                            .child(muted(if is_checked { "已勾选" } else { "点击勾选" }))
+                            .into_any_element()
+                    } else {
                         row()
                             .gap(px(4.))
                             .items_center()
                             .child(muted("选择"))
-                            .child(muted("›")),
+                            .child(muted("›"))
+                            .into_any_element()
+                    })
+                    .into_any_element(),
+            );
+        }
+        let mut info_rows = vec![self.info(&picker.title, &folder)];
+        if supports_multi {
+            info_rows.push(
+                row()
+                    .py(px(8.))
+                    .gap(px(14.))
+                    .items_center()
+                    .child(
+                        col()
+                            .flex_1()
+                            .min_w_0()
+                            .gap(px(2.))
+                            .child(div().text_size(px(13.)).child("多 exe 入口模式"))
+                            .child(
+                                muted(if multi_select {
+                                    format!("已勾选 {} 个入口，每次启动将弹出快捷选择面板。", selected.len())
+                                } else {
+                                    "开启后可同时勾选多个 .exe 作为作品的启动入口。".to_owned()
+                                })
+                                .text_size(px(11.)),
+                            ),
+                    )
+                    .child(
+                        Switch::new("picker-multi-exe")
+                            .checked(multi_select)
+                            .on_change(cx.listener(move |this, checked, _, cx| {
+                                this.set_multi_executable(game_index, *checked, cx);
+                            })),
                     )
                     .into_any_element(),
             );
@@ -2203,13 +2334,17 @@ impl WhiskyApp {
         self.form(
             "executable-scroll",
             vec![
+                self.section("executable-folder", "游戏目录", info_rows, cx),
                 self.section(
-                    "executable-folder",
-                    "游戏目录",
-                    vec![self.info(&picker.title, &folder)],
+                    "executable-list",
+                    if multi_select {
+                        "勾选可执行程序（可多选）"
+                    } else {
+                        "选择可执行程序 (.exe)"
+                    },
+                    rows,
                     cx,
                 ),
-                self.section("executable-list", "选择可执行程序 (.exe)", rows, cx),
             ],
         )
     }
@@ -3372,7 +3507,17 @@ impl WhiskyApp {
         let title = match sheet {
             PreviewSheet::RunSettings(_) => "运行设置",
             PreviewSheet::Scan => "管理扫描文件夹",
-            PreviewSheet::Executable => "选择启动程序",
+            PreviewSheet::Executable => {
+                if self
+                    .executable_picker
+                    .as_ref()
+                    .is_some_and(|picker| picker.multi_select)
+                {
+                    "配置启动入口"
+                } else {
+                    "选择启动程序"
+                }
+            }
             PreviewSheet::Winetricks => "Winetricks",
             PreviewSheet::CreateBottle => "创建容器",
             PreviewSheet::MoveEntry(_) => "移动到容器",
@@ -3384,6 +3529,8 @@ impl WhiskyApp {
             PreviewSheet::Dll => "DLL 覆盖",
             PreviewSheet::Graphics => "高级图形设置",
             PreviewSheet::GameInfo(_) => "游戏资料",
+            PreviewSheet::GameTags(_) => "编辑标签",
+            PreviewSheet::ManageTags => "管理标签",
         };
         let content = match sheet {
             PreviewSheet::RunSettings(i) => self.run_settings(i, window, cx),
@@ -3391,6 +3538,8 @@ impl WhiskyApp {
             PreviewSheet::OpenFile => self.open_file_sheet(cx),
             PreviewSheet::Scan => self.scan_settings(window, cx),
             PreviewSheet::Executable => self.executable_picker(cx),
+            PreviewSheet::GameTags(i) => self.game_tags_sheet(i, cx),
+            PreviewSheet::ManageTags => self.manage_tags_sheet(cx),
             PreviewSheet::Winetricks => self.winetricks_sheet(cx),
             PreviewSheet::CreateBottle => {
                 let state = self.create_bottle.as_ref();
@@ -3791,6 +3940,8 @@ impl WhiskyApp {
                                 cx.listener(|this, _, window, cx| {
                                     this.preview.sheet = None;
                                     this.preview.sheet_history.clear();
+                                    this.executable_picker = None;
+                                    this.tag_manager_rename_target = None;
                                     this.game_info = None;
                                     this.focus_handle.focus(window, cx);
                                     cx.notify();
@@ -3807,6 +3958,21 @@ impl WhiskyApp {
                             .py(px(13.))
                             .border_t_1()
                             .border_color(rgba(crate::theme::divider()))
+                            .when(
+                                matches!(sheet, PreviewSheet::Executable)
+                                    && self
+                                        .executable_picker
+                                        .as_ref()
+                                        .is_some_and(|picker| picker.multi_select),
+                                |d| {
+                                    d.child(Button::new("executable-cancel").label("取消").on_click(
+                                        cx.listener(|this, _, window, cx| {
+                                            this.cancel_executable_picker(cx);
+                                            this.focus_handle.focus(window, cx);
+                                        }),
+                                    ))
+                                },
+                            )
                             .when(matches!(sheet, PreviewSheet::GameInfo(_)), |d| {
                                 let busy = self.game_info.as_ref().is_some_and(|page| page.editor.busy);
                                 let allowed = self.metadata_sources();
@@ -3843,12 +4009,17 @@ impl WhiskyApp {
                                     PreviewSheet::RunSettings(index) => index,
                                     _ => 0,
                                 };
-                                d.child(self.action(
-                                    "shortcut",
-                                    "创建快捷方式",
-                                    Command::Shortcut,
-                                    cx,
-                                ))
+                                d.when(
+                                    self.demo || self.program_settings.executable.is_some(),
+                                    |row| {
+                                        row.child(self.action(
+                                            "shortcut",
+                                            "创建快捷方式",
+                                            Command::Shortcut,
+                                            cx,
+                                        ))
+                                    },
+                                )
                                 .child(self.action(
                                     "reveal",
                                     crate::platform::REVEAL_LABEL,
@@ -3868,54 +4039,72 @@ impl WhiskyApp {
                                 Button::new("sheet-done")
                                     .label(if matches!(sheet, PreviewSheet::GameInfo(_)) {
                                         if self.game_info.as_ref().is_some_and(|page| page.editor.busy) {
-                                            "处理中…"
-                                        } else { "保存资料" }
+                                            "处理中…".to_owned()
+                                        } else { "保存资料".to_owned() }
+                                    } else if matches!(sheet, PreviewSheet::Executable)
+                                        && self.executable_picker.as_ref().is_some_and(|p| p.multi_select)
+                                    {
+                                        let picker = self.executable_picker.as_ref().unwrap();
+                                        if picker.launch_after {
+                                            if picker.selected.len() > 1 {
+                                                format!("继续启动 ({})", picker.selected.len())
+                                            } else {
+                                                "保存并启动".to_owned()
+                                            }
+                                        } else {
+                                            format!("保存入口 ({})", picker.selected.len())
+                                        }
                                     } else if !self.demo
                                         && matches!(sheet, PreviewSheet::RunSettings(_))
                                     {
-                                        if self.program_settings.saving {
-                                            "保存中…"
+                                        if self.program_settings.executable.is_none() {
+                                            "关闭".to_owned()
+                                        } else if self.program_settings.saving {
+                                            "保存中…".to_owned()
                                         } else {
-                                            "保存"
+                                            "保存".to_owned()
                                         }
                                     } else if matches!(sheet, PreviewSheet::MoveEntry(_)) {
                                         if self.move_entry.as_ref().is_some_and(|state| state.pending) {
-                                            "移动中…"
+                                            "移动中…".to_owned()
                                         } else {
-                                            "取消"
+                                            "取消".to_owned()
                                         }
                                     } else if matches!(sheet, PreviewSheet::OpenFile) {
-                                        "取消"
+                                        "取消".to_owned()
                                     } else if matches!(sheet, PreviewSheet::CreateBottle) {
                                         let state = self.create_bottle.as_ref();
                                         if state.is_some_and(|s| s.running()) {
-                                            "创建中…"
+                                            "创建中…".to_owned()
                                         } else if state.is_some_and(|s| s.finished) {
-                                            "关闭"
+                                            "关闭".to_owned()
                                         } else {
-                                            "创建"
+                                            "创建".to_owned()
                                         }
                                     } else if matches!(sheet, PreviewSheet::Winetricks) {
                                         let job = self.winetricks_job();
                                         if job.is_some_and(crate::winetricks::InstallJob::running) {
-                                            "安装中…"
+                                            "安装中…".to_owned()
                                         } else if job.is_some_and(|job| job.finished) {
-                                            "关闭"
+                                            "关闭".to_owned()
                                         } else {
-                                            "安装选中组件"
+                                            "安装选中组件".to_owned()
                                         }
                                     } else {
-                                        "完成"
+                                        "完成".to_owned()
                                     })
                                     .primary()
                                     .disabled(
                                         (matches!(sheet, PreviewSheet::GameInfo(_))
                                             && (!self.game_info.as_ref().is_some_and(|page| page.editor.loaded && !page.editor.busy)
                                                 || !self.service_available("metadata.configuration.save")))
+                                            || (matches!(sheet, PreviewSheet::Executable)
+                                                && self.executable_picker.as_ref().is_some_and(|p| p.multi_select && (p.loading || p.selected.is_empty())))
                                             || (matches!(sheet, PreviewSheet::CreateBottle)
                                             && self.create_bottle.as_ref().is_some_and(|s| s.running()))
                                             || (!self.demo
                                                 && matches!(sheet, PreviewSheet::RunSettings(_))
+                                                && self.program_settings.executable.is_some()
                                                 && (self.program_settings.loading
                                                     || self.program_settings.saving
                                                     || self.program_settings.settings.is_none()))
@@ -3935,6 +4124,12 @@ impl WhiskyApp {
                                             this.save_metadata_editor(cx);
                                             return;
                                         }
+                                        if matches!(this.preview.sheet, Some(PreviewSheet::Executable))
+                                            && this.executable_picker.as_ref().is_some_and(|p| p.multi_select)
+                                        {
+                                            this.confirm_multi_executable_picker(cx);
+                                            return;
+                                        }
                                         if matches!(this.preview.sheet, Some(PreviewSheet::CreateBottle)) {
                                             let state = this.create_bottle.as_ref();
                                             if state.is_some_and(|s| s.running()) {
@@ -3952,7 +4147,7 @@ impl WhiskyApp {
                                                 this.submit_create_bottle(cx);
                                             }
                                         } else if matches!(this.preview.sheet, Some(PreviewSheet::RunSettings(_))) {
-                                            if this.demo {
+                                            if this.demo || this.program_settings.executable.is_none() {
                                                 this.preview.sheet = None;
                                                 this.preview.sheet_history.clear();
                                                 cx.notify();
@@ -3978,9 +4173,7 @@ impl WhiskyApp {
                                                 this.start_winetricks_install(cx);
                                             }
                                         } else {
-                                            this.preview.sheet = None;
-                                            this.preview.sheet_history.clear();
-                                            cx.notify();
+                                            this.preview_dismiss(cx);
                                         }
                                     })),
                             ),
@@ -5653,6 +5846,676 @@ impl WhiskyApp {
                     .child(footer),
             )
             .into_any_element()
+    }
+
+    fn launch_entry_section(&self, index: usize, cx: &Context<Self>) -> Option<AnyElement> {
+        let game = self.game(index)?;
+        if !game.supports_multi_executable() {
+            return None;
+        }
+        let multi_exe = game.multi_executable;
+        let executables = game.launch_executables.clone();
+        let last_executable = game.last_executable.clone();
+        let folder = game
+            .game_directory()
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let current_target = self.program_settings.executable.clone();
+        let primary_exe = game
+            .executable
+            .as_ref()
+            .filter(|path| {
+                path.extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
+            })
+            .map(|path| path.to_string_lossy().into_owned());
+
+        let mut rows: Vec<AnyElement> = Vec::new();
+        rows.push(
+            row()
+                .py(px(10.))
+                .gap(px(16.))
+                .items_center()
+                .child(
+                    col()
+                        .flex_1()
+                        .min_w_0()
+                        .gap(px(3.))
+                        .child(
+                            div()
+                                .text_size(px(13.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(rgb(crate::theme::text()))
+                                .child("多 exe 入口"),
+                        )
+                        .child(
+                            muted("启用后，首次启动允许勾选多个 .exe；之后每次启动都会展示简洁的入口选择器。")
+                                .text_size(px(11.5))
+                                .line_height(relative(1.4)),
+                        ),
+                )
+                .child(
+                    Switch::new("run-settings-multi-exe")
+                        .checked(multi_exe)
+                        .on_change(cx.listener(move |this, checked, _, cx| {
+                            this.set_multi_executable(index, *checked, cx);
+                        })),
+                )
+                .into_any_element(),
+        );
+
+        if multi_exe {
+            let status = if executables.is_empty() {
+                "尚未勾选入口：首次点击启动作品时会提示勾选多个 .exe，也可现在直接配置。".to_owned()
+            } else {
+                format!("已配置 {} 个启动入口，每次启动将提示选择", executables.len())
+            };
+            rows.push(
+                row()
+                    .py(px(8.))
+                    .gap(px(10.))
+                    .items_center()
+                    .border_t_1()
+                    .border_color(rgba(crate::theme::divider()))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .text_size(px(12.))
+                            .text_color(rgb(crate::theme::subtext()))
+                            .child(status),
+                    )
+                    .child(
+                        Button::new("run-settings-manage-exes")
+                            .label(if executables.is_empty() {
+                                "勾选入口…"
+                            } else {
+                                "管理入口…"
+                            })
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.open_multi_executable_picker(index, false, true, false, cx);
+                            })),
+                    )
+                    .into_any_element(),
+            );
+
+            if !executables.is_empty() {
+                let mut entries_list = col().w_full().gap(px(6.)).pb(px(8.));
+                for exe in &executables {
+                    let name = std::path::Path::new(exe)
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| exe.clone());
+                    let (rel_dir, _) =
+                        crate::bridge::dto::relative_directory_label(exe, &folder);
+                    let is_last = last_executable.as_deref() == Some(exe.as_str());
+                    entries_list = entries_list.child(
+                        row()
+                            .w_full()
+                            .px(px(10.))
+                            .py(px(6.))
+                            .gap(px(8.))
+                            .items_center()
+                            .rounded(px(7.))
+                            .bg(rgba(crate::theme::card_bg_subtle()))
+                            .border_1()
+                            .border_color(rgba(if is_last {
+                                crate::theme::accent_subtle_border()
+                            } else {
+                                crate::theme::card_border()
+                            }))
+                            .child(icon("play", 11.).text_color(rgb(if is_last {
+                                crate::theme::accent_fg()
+                            } else {
+                                crate::theme::muted_color()
+                            })))
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(rgb(crate::theme::text()))
+                                    .child(name),
+                            )
+                            .child(
+                                muted(rel_dir)
+                                    .flex_1()
+                                    .min_w_0()
+                                    .truncate()
+                                    .text_size(px(11.)),
+                            )
+                            .when(is_last, |d| {
+                                d.child(
+                                    div()
+                                        .px(px(6.))
+                                        .py(px(1.))
+                                        .rounded(px(4.))
+                                        .bg(rgba(crate::theme::accent_subtle_bg()))
+                                        .text_size(px(10.))
+                                        .text_color(rgb(crate::theme::accent_fg()))
+                                        .child("上次启动"),
+                                )
+                            }),
+                    );
+                }
+                rows.push(entries_list.into_any_element());
+            }
+
+            if executables.len() >= 2 {
+                let mut switcher = row().flex_wrap().gap(px(6.)).pb(px(6.));
+                for (ei, exe) in executables.iter().enumerate() {
+                    let name = std::path::Path::new(exe)
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| exe.clone());
+                    let active = current_target.as_deref() == Some(exe.as_str());
+                    let exe_path = exe.clone();
+                    switcher = switcher.child(selectable_pill(
+                        ("run-settings-target", ei),
+                        name,
+                        active,
+                        false,
+                        cx.listener(move |this, _, _, cx| {
+                            this.select_run_settings_executable(index, exe_path.clone(), cx);
+                        }),
+                    ));
+                }
+                rows.push(
+                    col()
+                        .gap(px(6.))
+                        .pt(px(8.))
+                        .border_t_1()
+                        .border_color(rgba(crate::theme::divider()))
+                        .child(muted("当前编辑的程序配置目标").text_size(px(11.5)))
+                        .child(switcher)
+                        .into_any_element(),
+                );
+            }
+        } else if game.is_folder {
+            let label = primary_exe
+                .as_deref()
+                .and_then(|p| std::path::Path::new(p).file_name())
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "尚未指定启动程序".to_owned());
+            rows.push(
+                row()
+                    .py(px(8.))
+                    .gap(px(10.))
+                    .items_center()
+                    .border_t_1()
+                    .border_color(rgba(crate::theme::divider()))
+                    .child(
+                        muted(format!("当前启动程序：{label}"))
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .text_size(px(12.)),
+                    )
+                    .child(
+                        Button::new("run-settings-single-exe")
+                            .label("选择启动程序…")
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.open_executable_picker(index, false, cx);
+                            })),
+                    )
+                    .into_any_element(),
+            );
+        }
+
+        Some(self.section("program-launch-entries", "启动入口", rows, cx))
+    }
+
+    pub(crate) fn launch_chooser_dialog(
+        &self,
+        width: f32,
+        height: f32,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let Some(chooser) = self.launch_chooser.as_ref() else {
+            return div().into_any_element();
+        };
+        let pw = 460_f32.min(width - 48.);
+        let ph = (210. + chooser.executables.len() as f32 * 58.)
+            .clamp(270., 520.)
+            .min(height - 48.);
+        let artwork = self.artwork(chooser.game_index);
+        let (ph_start, ph_end) = crate::theme::placeholder_gradient();
+        let thumb = match artwork {
+            Some(path) => self
+                .artwork_image(path)
+                .w(px(36.))
+                .h(px(48.))
+                .flex_shrink_0()
+                .rounded(px(6.))
+                .object_fit(ObjectFit::Cover)
+                .into_any_element(),
+            None => div()
+                .w(px(36.))
+                .h(px(48.))
+                .flex_shrink_0()
+                .rounded(px(6.))
+                .bg(gradient(ph_start, ph_end))
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(icon("package", 16.).text_color(rgb(crate::theme::muted_color())))
+                .into_any_element(),
+        };
+
+        let mut list = col()
+            .id("launch-chooser-list")
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scroll()
+            .px(px(18.))
+            .py(px(12.))
+            .gap(px(8.));
+        for (i, exe_path) in chooser.executables.iter().enumerate() {
+            let name = std::path::Path::new(exe_path)
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| exe_path.clone());
+            let (location, _) =
+                crate::bridge::dto::relative_directory_label(exe_path, &chooser.folder);
+            let is_last = chooser.last_executable.as_deref() == Some(exe_path.as_str());
+            let path_click = exe_path.clone();
+            list = list.child(
+                row()
+                    .id(("launch-chooser-entry", i))
+                    .w_full()
+                    .p(px(10.))
+                    .gap(px(12.))
+                    .items_center()
+                    .rounded(px(10.))
+                    .bg(rgba(if is_last {
+                        crate::theme::accent_subtle_bg()
+                    } else {
+                        crate::theme::card_bg_subtle()
+                    }))
+                    .border_1()
+                    .border_color(rgba(if is_last {
+                        crate::theme::accent_subtle_border()
+                    } else {
+                        crate::theme::card_border()
+                    }))
+                    .cursor_pointer()
+                    .hover(|s| {
+                        s.bg(rgba(if is_last {
+                            crate::theme::accent_subtle_hover()
+                        } else {
+                            crate::theme::hover()
+                        }))
+                        .border_color(rgba(if is_last {
+                            crate::theme::accent_subtle_border()
+                        } else {
+                            crate::theme::hover_strong()
+                        }))
+                    })
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.launch_selected_entry(path_click.clone(), cx);
+                        this.focus_handle.focus(window, cx);
+                    }))
+                    .child(
+                        div()
+                            .size(px(34.))
+                            .flex_shrink_0()
+                            .rounded(px(8.))
+                            .bg(rgba(if is_last {
+                                crate::theme::accent_subtle_hover()
+                            } else {
+                                crate::theme::card_bg()
+                            }))
+                            .border_1()
+                            .border_color(rgba(crate::theme::card_border()))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(icon("play", 14.).text_color(rgb(if is_last {
+                                crate::theme::accent_fg()
+                            } else {
+                                crate::theme::text()
+                            }))),
+                    )
+                    .child(
+                        col()
+                            .flex_1()
+                            .min_w_0()
+                            .gap(px(2.))
+                            .child(
+                                row()
+                                    .gap(px(6.))
+                                    .items_center()
+                                    .child(
+                                        div()
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .text_size(px(13.))
+                                            .text_color(rgb(crate::theme::text()))
+                                            .truncate()
+                                            .child(name),
+                                    )
+                                    .when(is_last, |d| {
+                                        d.child(
+                                            div()
+                                                .px(px(6.))
+                                                .py(px(1.))
+                                                .rounded(px(4.))
+                                                .bg(rgba(crate::theme::accent_subtle_hover()))
+                                                .text_size(px(10.))
+                                                .text_color(rgb(crate::theme::accent_fg()))
+                                                .child("上次启动"),
+                                        )
+                                    }),
+                            )
+                            .child(muted(location).text_size(px(11.)).truncate()),
+                    )
+                    .child(muted("启动 ›").text_size(px(12.))),
+            );
+        }
+
+        div()
+            .absolute()
+            .inset_0()
+            .occlude()
+            .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
+            .bg(rgba(crate::theme::overlay()))
+            .child(
+                div()
+                    .id("launch-chooser-dismiss")
+                    .absolute()
+                    .inset_0()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.dismiss_launch_chooser(cx);
+                        this.focus_handle.focus(window, cx);
+                    })),
+            )
+            .child(
+                col()
+                    .id("launch-chooser-card")
+                    .occlude()
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .absolute()
+                    .left(px((width - pw) / 2.))
+                    .top(px((height - ph) / 2.))
+                    .w(px(pw))
+                    .h(px(ph))
+                    .rounded(px(RADIUS_LG))
+                    .overflow_hidden()
+                    .bg(rgb(crate::theme::surface()))
+                    .border_1()
+                    .border_color(rgba(crate::theme::surface_border()))
+                    .shadow_xl()
+                    .child(
+                        row()
+                            .flex_shrink_0()
+                            .px(px(18.))
+                            .py(px(14.))
+                            .gap(px(12.))
+                            .items_center()
+                            .border_b_1()
+                            .border_color(rgba(crate::theme::divider()))
+                            .child(thumb)
+                            .child(
+                                col()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .gap(px(2.))
+                                    .child(
+                                        div()
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .text_size(px(14.))
+                                            .text_color(rgb(crate::theme::text()))
+                                            .truncate()
+                                            .child(chooser.title.clone()),
+                                    )
+                                    .child(muted("选择此次要启动的可执行入口").text_size(px(11.5))),
+                            )
+                            .child(Button::new("launch-chooser-close").label("×").ghost().on_click(
+                                cx.listener(|this, _, window, cx| {
+                                    this.dismiss_launch_chooser(cx);
+                                    this.focus_handle.focus(window, cx);
+                                }),
+                            )),
+                    )
+                    .child(list)
+                    .child(
+                        row()
+                            .flex_shrink_0()
+                            .px(px(18.))
+                            .py(px(12.))
+                            .gap(px(8.))
+                            .border_t_1()
+                            .border_color(rgba(crate::theme::divider()))
+                            .child(
+                                Button::new("launch-chooser-edit")
+                                    .label("编辑入口…")
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.edit_launch_chooser_executables(cx);
+                                    })),
+                            )
+                            .child(div().flex_1())
+                            .child(
+                                Button::new("launch-chooser-cancel")
+                                    .label("取消")
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.dismiss_launch_chooser(cx);
+                                        this.focus_handle.focus(window, cx);
+                                    })),
+                            ),
+                    ),
+            )
+            .into_any_element()
+    }
+
+    fn game_tags_sheet(&self, index: usize, cx: &Context<Self>) -> AnyElement {
+        let Some(game) = self.game(index).cloned() else {
+            return self.form(
+                "game-tags-scroll",
+                vec![self.section(
+                    "game-tags-missing",
+                    "作品标签",
+                    vec![muted("找不到该作品").into_any_element()],
+                    cx,
+                )],
+            );
+        };
+        let mut sections = Vec::new();
+        let mut current_rows: Vec<AnyElement> = vec![self.info("作品", game.title.clone())];
+        if game.tags.is_empty() {
+            current_rows.push(
+                muted("尚未添加任何标签。可在下方输入新标签，或直接点选游戏库中的已有标签。")
+                    .py(px(8.))
+                    .text_size(px(12.))
+                    .into_any_element(),
+            );
+        } else {
+            let mut pills = row().flex_wrap().gap(px(6.)).py(px(8.));
+            for (ti, tag) in game.tags.iter().enumerate() {
+                let tag_remove = tag.clone();
+                pills = pills.child(
+                    row()
+                        .id(("sheet-game-tag", ti))
+                        .items_center()
+                        .gap(px(6.))
+                        .h(px(26.))
+                        .pl(px(10.))
+                        .pr(px(7.))
+                        .rounded_full()
+                        .bg(rgba(crate::theme::accent_subtle_bg()))
+                        .border_1()
+                        .border_color(rgba(crate::theme::accent_subtle_border()))
+                        .cursor_pointer()
+                        .hover(|s| s.bg(rgba(crate::theme::accent_subtle_hover())))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.toggle_game_tag(index, &tag_remove, cx);
+                        }))
+                        .child(
+                            div()
+                                .text_size(px(11.5))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(rgb(crate::theme::accent_fg()))
+                                .child(tag.clone()),
+                        )
+                        .child(icon("x", 11.).text_color(rgb(crate::theme::accent_fg()))),
+                );
+            }
+            current_rows.push(pills.into_any_element());
+        }
+        sections.push(self.section("game-tags-current", "当前标签（点击即可移除）", current_rows, cx));
+
+        let add_row = row()
+            .gap(px(8.))
+            .py(px(8.))
+            .items_center()
+            .child(div().flex_1().min_w_0().child(Input::new(&self.tag_input)))
+            .child(
+                Button::new("game-tags-add-btn")
+                    .label("添加")
+                    .primary()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.submit_tag_input(Some(window), cx);
+                    })),
+            )
+            .into_any_element();
+        sections.push(self.section(
+            "game-tags-add",
+            "新建标签（回车或逗号分隔连续添加）",
+            vec![add_row],
+            cx,
+        ));
+
+        let existing = crate::library_view::collect_tag_counts(self.games(), true);
+        if !existing.is_empty() {
+            let mut pills = row().flex_wrap().gap(px(6.)).py(px(8.));
+            for (ti, (tag, count)) in existing.into_iter().enumerate() {
+                let active = game.has_tag(&tag);
+                let tag_toggle = tag.clone();
+                pills = pills.child(crate::controls::tag_chip(
+                    ("sheet-existing-tag", ti),
+                    tag,
+                    active,
+                    Some(count),
+                    cx.listener(move |this, _, _, cx| {
+                        this.toggle_game_tag(index, &tag_toggle, cx);
+                    }),
+                ));
+            }
+            sections.push(self.section(
+                "game-tags-library",
+                "从已有标签中快速勾选",
+                vec![pills.into_any_element()],
+                cx,
+            ));
+        }
+
+        self.form("game-tags-scroll", sections)
+    }
+
+    fn manage_tags_sheet(&self, cx: &Context<Self>) -> AnyElement {
+        let tags = crate::library_view::collect_tag_counts(self.games(), true);
+        if tags.is_empty() {
+            return self.form(
+                "manage-tags-scroll",
+                vec![self.section(
+                    "manage-tags-empty",
+                    "标签管理",
+                    vec![
+                        self.info("暂无自定义标签", "在作品详情页、卡片右键菜单或「编辑标签」中添加标签后，可在此统一重命名、合并或删除。"),
+                    ],
+                    cx,
+                )],
+            );
+        }
+        let mut rows: Vec<AnyElement> = Vec::new();
+        for (i, (tag, count)) in tags.into_iter().enumerate() {
+            let renaming = self
+                .tag_manager_rename_target
+                .as_ref()
+                .is_some_and(|target| target.to_lowercase() == tag.to_lowercase());
+            if renaming {
+                rows.push(
+                    row()
+                        .w_full()
+                        .py(px(8.))
+                        .gap(px(8.))
+                        .items_center()
+                        .when(i > 0, |d| {
+                            d.border_t_1().border_color(rgba(crate::theme::divider()))
+                        })
+                        .child(div().flex_1().min_w_0().child(Input::new(&self.tag_manager_input)))
+                        .child(
+                            Button::new(("manage-tag-save", i))
+                                .label("保存")
+                                .primary()
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.confirm_rename_library_tag(Some(window), cx);
+                                })),
+                        )
+                        .child(
+                            Button::new(("manage-tag-cancel", i))
+                                .label("取消")
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.cancel_rename_library_tag(cx);
+                                })),
+                        )
+                        .into_any_element(),
+                );
+            } else {
+                let tag_filter = tag.clone();
+                let tag_rename = tag.clone();
+                let tag_delete = tag.clone();
+                rows.push(
+                    row()
+                        .w_full()
+                        .py(px(8.))
+                        .gap(px(8.))
+                        .items_center()
+                        .when(i > 0, |d| {
+                            d.border_t_1().border_color(rgba(crate::theme::divider()))
+                        })
+                        .child(icon("tag", 13.).text_color(rgb(crate::theme::accent_fg())))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_size(px(13.))
+                                .text_color(rgb(crate::theme::text()))
+                                .child(tag),
+                        )
+                        .child(muted(format!("{count} 部作品")).text_size(px(11.5)))
+                        .child(
+                            Button::new(("manage-tag-filter", i))
+                                .label("筛选")
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.set_tag_filter(
+                                        crate::library_view::TagFilter::Tags(vec![tag_filter.clone()]),
+                                        cx,
+                                    );
+                                    this.preview_dismiss(cx);
+                                })),
+                        )
+                        .child(
+                            Button::new(("manage-tag-rename", i))
+                                .label("重命名")
+                                .on_click(cx.listener(move |this, _, window, cx| {
+                                    this.begin_rename_library_tag(&tag_rename, Some(window), cx);
+                                })),
+                        )
+                        .child(
+                            Button::new(("manage-tag-delete", i))
+                                .label("删除")
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.delete_library_tag(&tag_delete, cx);
+                                })),
+                        )
+                        .into_any_element(),
+                );
+            }
+        }
+        self.form(
+            "manage-tags-scroll",
+            vec![self.section("manage-tags-list", "全部自定义标签", rows, cx)],
+        )
     }
 }
 

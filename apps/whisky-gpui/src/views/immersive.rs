@@ -46,12 +46,14 @@ impl WhiskyApp {
         } else {
             self.immersive_slide % featured.len()
         };
-        let sections = crate::immersive::rows(
+        let sections = crate::immersive::rows_with_options(
             games,
             &ordered,
             self.selected_bottle,
             self.bottles.len(),
             |slot| self.bottle_name_at(slot).to_owned(),
+            !self.tag_filter.is_active(),
+            self.group_by_studio && !self.studio_filter.is_active(),
         );
         let mut content = col().w_full().flex_shrink_0();
         if !featured.is_empty() {
@@ -433,9 +435,23 @@ impl WhiskyApp {
                 .entry(key.clone())
                 .or_insert_with(ScrollHandle::new)
                 .clone();
+            let tag_filter_name = match &section.key {
+                crate::immersive::RowKey::Tag(tag) => Some(tag.clone()),
+                _ => None,
+            };
+            let studio_filter_key = match &section.key {
+                crate::immersive::RowKey::Studio(studio_key) => Some((studio_key.clone(), section.title.clone())),
+                _ => None,
+            };
             let header = row()
                 .items_center()
                 .gap(px(10.))
+                .when(tag_filter_name.is_some(), |d| {
+                    d.child(icon("tag", 15.).text_color(rgb(crate::theme::accent_fg())))
+                })
+                .when(studio_filter_key.is_some(), |d| {
+                    d.child(icon("building-2", 15.).text_color(rgb(crate::theme::accent_fg())))
+                })
                 .child(
                     div()
                         .text_size(px(17.))
@@ -447,6 +463,38 @@ impl WhiskyApp {
                         .text_size(px(11.))
                         .mt(px(4.)),
                 )
+                .when_some(tag_filter_name, |d, tag_name| {
+                    let row_key = key.clone();
+                    d.child(
+                        crate::controls::selectable_pill(
+                            SharedString::from(format!("immersive-filter-{row_key}")),
+                            "筛选此标签",
+                            false,
+                            false,
+                            cx.listener(move |this, _, _, cx| {
+                                this.click_tag_filter(&tag_name, false, cx);
+                            }),
+                        ),
+                    )
+                })
+                .when_some(studio_filter_key, |d, (studio_key, studio_label)| {
+                    let row_key = key.clone();
+                    d.child(
+                        crate::controls::selectable_pill(
+                            SharedString::from(format!("immersive-studio-filter-{row_key}")),
+                            "筛选此厂商",
+                            false,
+                            false,
+                            cx.listener(move |this, _, _, cx| {
+                                if studio_key.is_empty() {
+                                    this.toggle_unknown_studio_filter(cx);
+                                } else {
+                                    this.click_studio_filter(&studio_label, cx);
+                                }
+                            }),
+                        ),
+                    )
+                })
                 .child(div().flex_1())
                 .child(self.immersive_row_chevron(
                     format!("immersive-row-prev-{key}"),

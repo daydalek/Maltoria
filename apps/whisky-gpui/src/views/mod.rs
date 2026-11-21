@@ -101,6 +101,10 @@ pub(crate) enum Command {
     GameDbApply(usize),
     /// Auto-match metadata for every folder entry in the selected bottle.
     SyncMetadata,
+    EditTags(usize),
+    ManageTags,
+    FilterStudio(usize),
+    ReplayTagBarHint,
     InstallWineRuntime,
     InstallRosetta,
     DismissSetup,
@@ -277,6 +281,10 @@ impl WhiskyApp {
                 self.menu_item("倒序排列", Command::Toggle("reverse-sort"), cx)
                     .checked(self.reversed),
             );
+            items.push(
+                self.menu_item("按厂商聚类", Command::Toggle("group-by-studio"), cx)
+                    .checked(self.group_by_studio),
+            );
             let hidden = self.hidden_count();
             let hidden_label = if hidden == 0 {
                 "显示已隐藏的游戏".to_string()
@@ -298,6 +306,24 @@ impl WhiskyApp {
             }
             items.push(self.menu_item("扫描并同步游戏信息", Command::SyncMetadata, cx));
             items.push(self.menu_item("管理扫描文件夹…", Command::Sheet(PreviewSheet::Scan), cx));
+            items.push(self.menu_item("管理标签…", Command::ManageTags, cx));
+            items.push(
+                self.menu_item("标签栏：顶部二次下滑抽出", Command::Toggle("tag-bar-pull-down"), cx)
+                    .checked(self.tag_bar_mode == crate::ui_state::TagBarMode::PullDown),
+            );
+            if self.tag_bar_mode == crate::ui_state::TagBarMode::PullDown
+                && self.has_filter_bar_content()
+            {
+                items.push(self.menu_item(
+                    if self.pull_reveal.is_open() {
+                        "收起标签与厂商栏"
+                    } else {
+                        "展开标签与厂商栏"
+                    },
+                    Command::Toggle("toggle-tag-drawer"),
+                    cx,
+                ));
+            }
             items.push(MenuEntry::separator(cx.entity().downgrade()));
             items.push(self.menu_item("刷新游戏库", Command::RefreshLibrary, cx));
         } else if has_bottle {
@@ -341,7 +367,15 @@ impl WhiskyApp {
         let game = self.game(index);
         let hidden = game.is_some_and(|game| game.hidden);
         let is_folder = game.is_some_and(|game| game.is_folder);
+        let multi_exe = game.is_some_and(|game| game.multi_executable);
         let has_path = game.is_some_and(|game| game.executable.is_some());
+        let entry_tags: Vec<String> = game.map(|g| g.tags.clone()).unwrap_or_default();
+        let library_tags: Vec<String> =
+            crate::library_view::collect_tag_counts(self.games(), true)
+                .into_iter()
+                .map(|(tag, _)| tag)
+                .collect();
+        let view = cx.entity().downgrade();
         let mut items = vec![
             self.menu_item("运行", Command::Runtime(index), cx),
             MenuEntry::separator(cx.entity().downgrade()),
@@ -351,13 +385,22 @@ impl WhiskyApp {
                 cx,
             ),
             self.menu_item("游戏详情", Command::Details(index), cx),
+        ];
+        if let Some(studio) = game.and_then(|game| game.studio_name()) {
+            items.push(self.menu_item(
+                format!("查看同厂商作品（{studio}）"),
+                Command::FilterStudio(index),
+                cx,
+            ));
+        }
+        items.extend([
             self.menu_item("游戏资料与封面…", Command::GameInfo(index), cx),
             self.menu_item(
                 "运行设置…",
                 Command::Sheet(PreviewSheet::RunSettings(index)),
                 cx,
             ),
-        ];
+        ]);
         items.push(self.menu_item("游戏翻译…", Command::Translation(index), cx));
         if has_path {
             items.push(self.menu_item(crate::platform::REVEAL_LABEL, Command::Reveal(index), cx));
@@ -373,15 +416,58 @@ impl WhiskyApp {
             && !game.is_some_and(|game| game.id.starts_with("steam:")) {
             items.push(self.menu_item("移动到容器…", Command::Move(index), cx));
         }
-        // Only a folder entry runs something the user picked; a pin or a Steam
-        // app already names its own executable.
-        if is_folder {
+        // Only a folder entry or a multi-exe work picks launch executables from
+        // its directory; a single pinned or Steam entry runs its fixed target.
+        if is_folder || multi_exe {
             items.push(MenuEntry::separator(cx.entity().downgrade()));
-            items.push(self.menu_item("选择启动程序…", Command::Executable(index), cx));
+            items.push(self.menu_item(
+                if multi_exe {
+                    "管理启动入口…"
+                } else {
+                    "选择启动程序…"
+                },
+                Command::Executable(index),
+                cx,
+            ));
         }
-        move |mut menu, _, _| {
-            for item in &items {
+        move |mut menu, window, cx| {
+            let mut inserted_tags = false;
+            for (idx, item) in items.iter().enumerate() {
                 menu = menu.item(item.build());
+                if idx == 3 && !inserted_tags {
+                    inserted_tags = true;
+                    let library_tags = library_tags.clone();
+                    let entry_tags = entry_tags.clone();
+                    let view = view.clone();
+                    menu = menu.submenu("标签", window, cx, move |mut sub, _, _| {
+                        for tag in &library_tags {
+                            let tag_key = tag.to_lowercase();
+                            let active = entry_tags.iter().any(|t| t.to_lowercase() == tag_key);
+                            let tag_click = tag.clone();
+                            let view = view.clone();
+                            sub = sub.item(
+                                PopupMenuItem::new(tag.clone())
+                                    .checked(active)
+                                    .on_click(move |_, _, cx| {
+                                        let _ = view.update(cx, |this, cx| {
+                                            this.toggle_game_tag(index, &tag_click, cx);
+                                        });
+                                    }),
+                            );
+                        }
+                        if !library_tags.is_empty() {
+                            sub = sub.separator();
+                        }
+                        let view = view.clone();
+                        sub.item(PopupMenuItem::new("编辑 / 新建标签…").on_click(
+                            move |_, _, cx| {
+                                let _ = view.update(cx, |this, cx| {
+                                    this.command(Command::EditTags(index), cx);
+                                });
+                            },
+                        ))
+                    });
+                }
             }
             menu
         }
@@ -447,6 +533,7 @@ impl WhiskyApp {
         let checked = match key {
             "mixed" => self.mixed,
             "motion" => self.motion,
+            "group-by-studio" => self.group_by_studio,
             _ => self.flag(key),
         };
         row()

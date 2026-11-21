@@ -104,8 +104,9 @@ public final class GameActivityTracker: ObservableObject {
         names[url] = await Task.detached {
             let steam = SteamLibrary.enumerate(bottleURL: url)
             let folders = try? FolderGameLibrary.load(bottleURL: url)
+            let launchOptions = try? LibraryLaunchOptions.load(bottleURL: url)
             return Dictionary(uniqueKeysWithValues: targets.map { entry in
-                let executables: Set<String>
+                var executables: Set<String>
                 switch entry.launch {
                 case let .steam(appID):
                     executables = steam.first { $0.appId == appID }.map {
@@ -121,6 +122,9 @@ public final class GameActivityTracker: ObservableObject {
                         executables = SteamLibrary.executableNames(under: program, selectedURL: executable)
                     } else {
                         executables = executable.map { Set([$0.lastPathComponent.lowercased()]) } ?? []
+                    }
+                    if let configured = launchOptions?.resolvedExecutables(for: entry, existingOnly: false) {
+                        executables.formUnion(configured.map { $0.lastPathComponent.lowercased() })
                     }
                 }
                 return (entry.metadataIdentity, executables)

@@ -184,6 +184,10 @@ public struct EntryRecord: Codable, Sendable {
     /// A storefront client (Steam etc.) rather than a game; frontends sort
     /// these below the games they launch (`LibraryEntry.isLauncher`).
     public let isLauncher: Bool
+    public let tags: [String]
+    public let multiExecutable: Bool
+    public let launchExecutables: [String]
+    public let lastExecutable: String?
     public let metadata: GameMetadata?
     /// Cached portraits, keyed by provider character ID. Remote URLs stay in metadata.
     public let characterImages: [String: String]?
@@ -197,8 +201,18 @@ public struct EntryRecord: Codable, Sendable {
         return name
     }
 
-    public init(_ entry: LibraryEntry, visibility: LibraryVisibility) throws {
+    public init(
+        _ entry: LibraryEntry,
+        visibility: LibraryVisibility,
+        libraryTags: LibraryTags? = nil,
+        launchOptions: LibraryLaunchOptions? = nil
+    ) throws {
         let presentation = try LibraryPresentation.load(for: entry)
+        let resolvedTags = try (libraryTags ?? LibraryTags.load(bottleURL: entry.bottleURL)).tags(for: entry)
+        let resolvedLaunchOptions = try launchOptions ?? LibraryLaunchOptions.load(bottleURL: entry.bottleURL)
+        let entryLaunch = resolvedLaunchOptions.options(for: entry)
+        let resolvedExes = resolvedLaunchOptions.resolvedExecutables(for: entry)
+        let resolvedLast = resolvedLaunchOptions.resolvedLastExecutable(for: entry)
         id = entry.id
         identity = entry.metadataIdentity
         name = entry.name
@@ -210,8 +224,9 @@ public struct EntryRecord: Codable, Sendable {
             if entry.source == .folder {
                 folder = url.path
                 let chosen = Self.chosenExecutable(for: url, bottleURL: entry.bottleURL)
-                executable = chosen?.path ?? url.path
-                needsExecutable = chosen == nil
+                let fallback = chosen ?? resolvedLast ?? resolvedExes.first
+                executable = fallback?.path ?? url.path
+                needsExecutable = fallback == nil
             } else {
                 folder = nil
                 executable = url.path
@@ -227,6 +242,16 @@ public struct EntryRecord: Codable, Sendable {
         icon = entry.iconURL?.path
         hidden = !visibility.includes(entry)
         isLauncher = entry.launcher != nil
+        tags = resolvedTags
+        if case .steam = entry.launch {
+            multiExecutable = false
+            launchExecutables = []
+            lastExecutable = nil
+        } else {
+            multiExecutable = entryLaunch.multiExecutable
+            launchExecutables = resolvedExes.map(\.path)
+            lastExecutable = resolvedLast?.path
+        }
         metadata = presentation.metadata
         let store = GameMetadataStore(directory: entry.metadataDirectory, networkAccess: {})
         characterImages = Dictionary(
@@ -359,6 +384,167 @@ public final class ApplicationWorkspace: Sendable {
                 visibility.setHidden(hidden, for: entry)
                 try visibility.save(bottleURL: entry.bottleURL)
                 return visibility
+            }
+    }
+
+    @discardableResult
+    public func setTags(_ rawTags: [String], entry: LibraryEntry) throws -> [String] {
+        try HostFileLock()
+            .withExclusiveLock(at: entry.bottleURL.appendingPathComponent("Library Tags.json.lock")) {
+                var storage = try LibraryTags.load(bottleURL: entry.bottleURL)
+                let updated = storage.setTags(rawTags, for: entry)
+                try storage.save(bottleURL: entry.bottleURL)
+                return updated
+            }
+    }
+
+    public func renameTag(from oldName: String, to newName: String, in container: URL) throws -> Bool {
+        try HostFileLock()
+            .withExclusiveLock(at: container.appendingPathComponent("Library Tags.json.lock")) {
+                var storage = try LibraryTags.load(bottleURL: container)
+                let changed = storage.renameTag(from: oldName, to: newName)
+                if changed {
+                    try storage.save(bottleURL: container)
+                }
+                return changed
+            }
+    }
+
+    public func deleteTag(_ name: String, in container: URL) throws -> Bool {
+        try HostFileLock()
+            .withExclusiveLock(at: container.appendingPathComponent("Library Tags.json.lock")) {
+                var storage = try LibraryTags.load(bottleURL: container)
+                let changed = storage.deleteTag(name)
+                if changed {
+                    try storage.save(bottleURL: container)
+                }
+                return changed
+            }
+    }
+
+    public enum LastExecutablePatch: Sendable {
+        case preserveIfValid
+        case clear
+        case set(URL)
+    }
+
+    public struct LaunchOptionsResult: Sendable {
+        public let options: EntryLaunchOptions
+        public let executables: [String]
+        public let lastExecutable: String?
+    }
+
+    @discardableResult
+    public func setLaunchOptions(
+        multiExecutable: Bool,
+        executables: [URL],
+        lastExecutable: LastExecutablePatch = .preserveIfValid,
+        entry: LibraryEntry
+    ) throws -> LaunchOptionsResult {
+        guard case let .program(entryURL) = entry.launch else {
+            throw BridgeFailure("invalid_params", "Launch entry options are not available for Steam games")
+        }
+        var seenPaths = Set<String>()
+        var validURLs: [URL] = []
+        var keys: [String] = []
+        for exe in executables {
+            let standardized = exe.standardizedFileURL
+            guard standardized.pathExtension.lowercased() == "exe",
+                  (try? standardized.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
+            else {
+                throw BridgeFailure("invalid_params", "Expected existing .exe files: executables")
+            }
+            guard seenPaths.insert(standardized.path).inserted else { continue }
+            validURLs.append(standardized)
+            keys.append(FolderGameLibrary.key(for: standardized, bottleURL: entry.bottleURL))
+        }
+
+        let explicitLastKey: String? = switch lastExecutable {
+        case .preserveIfValid:
+            nil
+        case .clear:
+            nil
+        case let .set(url):
+            try {
+                let std = url.standardizedFileURL
+                guard std.pathExtension.lowercased() == "exe",
+                      (try? std.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
+                else {
+                    throw BridgeFailure("invalid_params", "Expected an existing .exe file: lastExecutable")
+                }
+                return FolderGameLibrary.key(for: std, bottleURL: entry.bottleURL)
+            }()
+        }
+
+        let result: LaunchOptionsResult = try HostFileLock()
+            .withExclusiveLock(at: entry.bottleURL.appendingPathComponent("Library Launch Options.json.lock")) {
+                var storage = try LibraryLaunchOptions.load(bottleURL: entry.bottleURL)
+                let current = storage.options(for: entry)
+                var nextLastKey: String? = switch lastExecutable {
+                case .preserveIfValid: current.lastExecutable
+                case .clear: nil
+                case .set: explicitLastKey
+                }
+                if let candidateKey = nextLastKey {
+                    let candidateURL = FolderGameLibrary.url(for: candidateKey, bottleURL: entry.bottleURL)
+                        .standardizedFileURL
+                    let exists = candidateURL.pathExtension.lowercased() == "exe"
+                        && (try? candidateURL.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
+                    if !exists || (!validURLs.isEmpty && !seenPaths.contains(candidateURL.path)) {
+                        nextLastKey = nil
+                    }
+                }
+                let updated = EntryLaunchOptions(
+                    multiExecutable: multiExecutable,
+                    executables: keys,
+                    lastExecutable: nextLastKey
+                )
+                storage.setOptions(updated, for: entry)
+                try storage.save(bottleURL: entry.bottleURL)
+                return LaunchOptionsResult(
+                    options: updated,
+                    executables: storage.resolvedExecutables(for: entry).map(\.path),
+                    lastExecutable: storage.resolvedLastExecutable(for: entry)?.path
+                )
+            }
+
+        if entry.source == .folder, !validURLs.isEmpty {
+            try HostFileLock()
+                .withExclusiveLock(at: entry.bottleURL.appendingPathComponent("Folder Games.json.lock")) {
+                    var library = try FolderGameLibrary.load(bottleURL: entry.bottleURL)
+                    let folderKey = FolderGameLibrary.key(for: entryURL, bottleURL: entry.bottleURL)
+                    let currentExec = library.executable(for: entryURL, bottleURL: entry.bottleURL)?
+                        .standardizedFileURL
+                    if currentExec == nil || !seenPaths.contains(currentExec?.path ?? "") {
+                        let fallbackURL = result.lastExecutable.map { URL(fileURLWithPath: $0) } ?? validURLs[0]
+                        library.executables[folderKey] = FolderGameLibrary.key(
+                            for: fallbackURL,
+                            bottleURL: entry.bottleURL
+                        )
+                        try library.save(bottleURL: entry.bottleURL)
+                    }
+                }
+        }
+        return result
+    }
+
+    public func recordLastExecutable(_ executable: URL, entry: LibraryEntry) throws {
+        guard case .program = entry.launch else { return }
+        let standardized = executable.standardizedFileURL
+        guard standardized.pathExtension.lowercased() == "exe" else { return }
+        try HostFileLock()
+            .withExclusiveLock(at: entry.bottleURL.appendingPathComponent("Library Launch Options.json.lock")) {
+                var storage = try LibraryLaunchOptions.load(bottleURL: entry.bottleURL)
+                var options = storage.options(for: entry)
+                guard options.multiExecutable else { return }
+                let allowed = storage.resolvedExecutables(for: entry, existingOnly: false)
+                if !allowed.isEmpty,
+                   !allowed.contains(where: { $0.standardizedFileURL.path == standardized.path }) {
+                    return
+                }
+                options.lastExecutable = FolderGameLibrary.key(for: standardized, bottleURL: entry.bottleURL)
+                storage.setOptions(options, for: entry)
+                try storage.save(bottleURL: entry.bottleURL)
             }
     }
 }

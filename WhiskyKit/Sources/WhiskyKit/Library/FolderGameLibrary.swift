@@ -122,6 +122,12 @@ extension FolderGameLibrary {
         }
         var targetVisibility = try LibraryVisibility.load(bottleURL: targetBottleURL)
         var visibilityChanged = false
+        let sourceTags = try LibraryTags.load(bottleURL: sourceBottleURL)
+        var targetTags = try LibraryTags.load(bottleURL: targetBottleURL)
+        var tagsChanged = false
+        let sourceLaunch = try LibraryLaunchOptions.load(bottleURL: sourceBottleURL)
+        var targetLaunch = try LibraryLaunchOptions.load(bottleURL: targetBottleURL)
+        var launchChanged = false
         for folderKey in matchingSourceKeys {
             let folderURL = url(for: folderKey, bottleURL: sourceBottleURL).standardizedFileURL
             let newFolderKey = key(for: folderURL, bottleURL: targetBottleURL)
@@ -134,6 +140,27 @@ extension FolderGameLibrary {
             }
             if targetVisibility.hiddenIdentities.remove("program:" + newFolderKey) != nil {
                 visibilityChanged = true
+            }
+            let sourceIdentity = "program:" + folderKey
+            let targetIdentity = "program:" + newFolderKey
+            let movedTags = sourceTags.tags(forIdentity: sourceIdentity)
+            if !movedTags.isEmpty {
+                targetTags.setTags(movedTags, forIdentity: targetIdentity)
+                tagsChanged = true
+            }
+            let movedLaunch = sourceLaunch.options(forIdentity: sourceIdentity)
+            if !movedLaunch.isDefault {
+                let rekeyed = EntryLaunchOptions(
+                    multiExecutable: movedLaunch.multiExecutable,
+                    executables: movedLaunch.executables.map { exeKey in
+                        key(for: url(for: exeKey, bottleURL: sourceBottleURL), bottleURL: targetBottleURL)
+                    },
+                    lastExecutable: movedLaunch.lastExecutable.map { exeKey in
+                        key(for: url(for: exeKey, bottleURL: sourceBottleURL), bottleURL: targetBottleURL)
+                    }
+                )
+                targetLaunch.setOptions(rekeyed, forIdentity: targetIdentity)
+                launchChanged = true
             }
             if sourceLib.pendingMetadata.remove(folderKey) != nil, targetLib.automaticMetadata {
                 targetLib.pendingMetadata.insert(newFolderKey)
@@ -150,6 +177,12 @@ extension FolderGameLibrary {
         try sourceLib.save(bottleURL: sourceBottleURL)
         if visibilityChanged {
             try targetVisibility.save(bottleURL: targetBottleURL)
+        }
+        if tagsChanged {
+            try targetTags.save(bottleURL: targetBottleURL)
+        }
+        if launchChanged {
+            try targetLaunch.save(bottleURL: targetBottleURL)
         }
     }
 

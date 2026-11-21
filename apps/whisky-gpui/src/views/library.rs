@@ -6,6 +6,7 @@ use gpui_kit::base::{FocusTrapElement as _, Spring, spring, transition};
 use gpui_kit::component::{
     Disableable, Sizable,
     button::{Button, ButtonVariants},
+    input::Input,
     menu::{ContextMenuExt, PopupMenu, PopupMenuItem},
     spinner::Spinner,
     tooltip::Tooltip,
@@ -285,14 +286,188 @@ impl WhiskyApp {
                 .child(muted("正在加载游戏库…"))
                 .into_any_element();
         }
-        match self.mode {
+        let content = match self.mode {
             1 => self.timeline(width, window, cx),
             2 => self.classic(width, window, cx),
             3 => self.immersive(width, window, cx),
             4 => self.gallery(width, window, cx),
             5 => self.staggered(width, window, cx),
             _ => self.shelf(width, window, cx),
-        }
+        };
+        const FILTER_BAR_HEIGHT: f32 = 44.;
+        let target_frac = self.filter_bar_target_fraction();
+        let dragging_pull = self.tag_bar_mode == crate::ui_state::TagBarMode::PullDown
+            && !self.pull_reveal.is_open()
+            && self.pull_reveal.pull_fraction() > 0.0;
+        let drawer_spring = Spring::new(Duration::from_millis(if dragging_pull { 60 } else { 260 }))
+            .with_damping(0.88)
+            .with_epsilon(0.002)
+            .with_travel(self.motion);
+        let reveal_frac = spring(
+            ElementId::from("library-filter-drawer-reveal"),
+            target_frac,
+            drawer_spring,
+            window,
+            cx,
+        )
+        .clamp(0.0, 1.0);
+        let hint_opacity = transition(
+            ElementId::from("library-pull-hint-opacity"),
+            if self.tag_bar_hint_peeking { 1_f32 } else { 0.0 },
+            self.timing(NOTICE_MS),
+            window,
+            cx,
+        );
+
+        let view = cx.entity().downgrade();
+        let pull_observer = canvas(
+            move |bounds, window, _| {
+                let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
+                (bounds, hitbox.id)
+            },
+            move |_, (bounds, hitbox): (Bounds<Pixels>, HitboxId), window, _| {
+                window.on_mouse_event(move |event: &ScrollWheelEvent, phase, window, cx| {
+                    if phase != DispatchPhase::Capture
+                        || !bounds.contains(&event.position)
+                        || !hitbox.should_handle_scroll(window)
+                    {
+                        return;
+                    }
+                    let delta = event.delta.pixel_delta(window.line_height());
+                    if delta.x.abs() > delta.y.abs() {
+                        return;
+                    }
+                    let pull_phase = match event.touch_phase {
+                        TouchPhase::Started => crate::library_view::PullWheelPhase::Started,
+                        TouchPhase::Ended | TouchPhase::Cancelled => {
+                            crate::library_view::PullWheelPhase::Ended
+                        }
+                        TouchPhase::Moved => crate::library_view::PullWheelPhase::Moved,
+                    };
+                    let consumed = view
+                        .update(cx, |this, cx| {
+                            if this.mode == 4 {
+                                let detail_bounds = this.gallery_detail_scroll.bounds();
+                                if detail_bounds.size.height > px(0.)
+                                    && detail_bounds.contains(&event.position)
+                                {
+                                    return false;
+                                }
+                            }
+                            this.handle_library_pull_wheel(f32::from(delta.y), pull_phase, cx)
+                        })
+                        .unwrap_or(false);
+                    if consumed {
+                        cx.stop_propagation();
+                    }
+                });
+            },
+        )
+        .absolute()
+        .inset_0();
+
+        col()
+            .relative()
+            .size_full()
+            .child(pull_observer)
+            .when(reveal_frac > 0.004, |d| {
+                d.child(
+                    div()
+                        .id("library-filter-drawer-clip")
+                        .w_full()
+                        .h(px(FILTER_BAR_HEIGHT * reveal_frac))
+                        .flex_shrink_0()
+                        .overflow_hidden()
+                        .flex()
+                        .flex_col()
+                        .justify_end()
+                        .when(self.tag_bar_hint_peeking, |clip| {
+                            clip.cursor_pointer().on_click(cx.listener(|this, _, _, cx| {
+                                this.dismiss_tag_bar_hint(true, cx);
+                            }))
+                        })
+                        .child(self.library_filter_drawer(cx)),
+                )
+            })
+            .child(
+                div()
+                    .relative()
+                    .flex_1()
+                    .min_h_0()
+                    .w_full()
+                    .child(content)
+                    .when(hint_opacity > 0.01, |d| {
+                        d.child(
+                            div()
+                                .absolute()
+                                .top(px(8.))
+                                .left_0()
+                                .right_0()
+                                .flex()
+                                .justify_center()
+                                .opacity(hint_opacity)
+                                .child(
+                                    row()
+                                        .id("library-pull-hint-pill")
+                                        .occlude()
+                                        .items_center()
+                                        .gap(px(8.))
+                                        .px(px(12.))
+                                        .py(px(6.))
+                                        .rounded_full()
+                                        .bg(rgb(crate::theme::surface()))
+                                        .border_1()
+                                        .border_color(rgba(accent_subtle_border()))
+                                        .shadow_md()
+                                        .cursor_pointer()
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.dismiss_tag_bar_hint(true, cx);
+                                        }))
+                                        .child(
+                                            icon("chevrons-down", 13.)
+                                                .text_color(rgb(accent_fg())),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_size(px(12.))
+                                                .font_weight(FontWeight::MEDIUM)
+                                                .text_color(rgb(text()))
+                                                .child("在顶部再次下滑可抽出标签与厂商栏"),
+                                        )
+                                        .child(
+                                            div()
+                                                .px(px(7.))
+                                                .py(px(2.))
+                                                .rounded_full()
+                                                .bg(rgba(accent_subtle_bg()))
+                                                .text_size(px(11.))
+                                                .font_weight(FontWeight::SEMIBOLD)
+                                                .text_color(rgb(accent_fg()))
+                                                .child("立即展开"),
+                                        )
+                                        .child(
+                                            div()
+                                                .id("library-pull-hint-close")
+                                                .size(px(18.))
+                                                .rounded_full()
+                                                .flex()
+                                                .items_center()
+                                                .justify_center()
+                                                .hover(|s| s.bg(rgba(hover())))
+                                                .on_click(cx.listener(|this, _, _, cx| {
+                                                    this.dismiss_tag_bar_hint(false, cx);
+                                                    cx.stop_propagation();
+                                                }))
+                                                .child(
+                                                    icon("x", 11.)
+                                                        .text_color(rgb(muted_color())),
+                                                ),
+                                        ),
+                                ),
+                        )
+                    }),
+            )
+            .into_any_element()
     }
 
     pub(crate) fn library_empty_surface(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -321,8 +496,38 @@ impl WhiskyApp {
             (
                 "search-x",
                 "没有找到匹配的游戏",
-                format!("未找到与「{query}」匹配的游戏、开发商或年份，可尝试更换关键词。"),
+                format!("未找到与「{query}」匹配的游戏、开发商、年份或标签，可尝试更换关键词。"),
             )
+        } else if self.tag_filter.is_active() || self.studio_filter.is_active() {
+            if self.studio_filter.is_active() && self.tag_filter.is_active() {
+                (
+                    "building-2",
+                    "没有符合当前筛选条件的作品",
+                    format!(
+                        "当前厂商「{}」与标签「{}」没有共同匹配的作品。",
+                        self.studio_filter.display_label(),
+                        self.tag_filter.display_label()
+                    ),
+                )
+            } else if self.studio_filter.is_active() {
+                (
+                    "building-2",
+                    "没有符合当前厂商的作品",
+                    format!(
+                        "当前筛选厂商为「{}」，没有匹配的作品。点击下方按钮可恢复显示全部作品。",
+                        self.studio_filter.display_label()
+                    ),
+                )
+            } else {
+                (
+                    "tag",
+                    "没有符合当前标签的作品",
+                    format!(
+                        "当前筛选标签为「{}」，没有匹配的作品。点击下方按钮可恢复显示全部作品。",
+                        self.tag_filter.display_label()
+                    ),
+                )
+            }
         } else if hidden > 0 && !self.show_hidden() {
             (
                 "search-x",
@@ -387,6 +592,26 @@ impl WhiskyApp {
                         .on_click(cx.listener(|this, _, window, cx| {
                             this.search.update(cx, |state, cx| state.clean(window, cx));
                             cx.notify();
+                        })),
+                );
+            }
+            if self.studio_filter.is_active() {
+                actions = actions.child(
+                    Button::new("empty-clear-studio-filter")
+                        .label("清除厂商筛选")
+                        .primary()
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.clear_studio_filter(cx);
+                        })),
+                );
+            }
+            if self.tag_filter.is_active() {
+                actions = actions.child(
+                    Button::new("empty-clear-tag-filter")
+                        .label("清除标签筛选")
+                        .primary()
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.clear_tag_filter(cx);
                         })),
                 );
             }
@@ -669,6 +894,26 @@ impl WhiskyApp {
             )
             .context_menu(self.container_menu(cx)),
         );
+        let rail_tags = crate::library_view::collect_tag_counts(games, self.show_hidden());
+        if !rail_tags.is_empty() || self.tag_filter.is_active() {
+            let tag_tip = if self.tag_filter.is_active() {
+                format!("标签筛选：{} · 点击清除 / 右键切换", self.tag_filter.display_label())
+            } else {
+                format!("标签（{} 个）· 右键筛选", rail_tags.len())
+            };
+            entries = entries.child(
+                sidebar_icon("tags", "tag", self.tag_filter.is_active())
+                    .tooltip(text_tip(tag_tip))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        if this.tag_filter.is_active() {
+                            this.clear_tag_filter(cx);
+                        } else {
+                            this.open_manage_tags_sheet(cx);
+                        }
+                    }))
+                    .context_menu(self.tag_filter_menu(cx)),
+            );
+        }
         let (grad_start, grad_end) = sidebar_gradient();
         col()
             .id("sidebar-rail")
@@ -784,6 +1029,163 @@ impl WhiskyApp {
                 .context_menu(self.bottle_menu(index, cx)),
             );
         }
+        let sidebar_tags = crate::library_view::collect_tag_counts(games, self.show_hidden());
+        if !sidebar_tags.is_empty() || self.tag_filter.is_active() {
+            entries = entries.child(
+                row()
+                    .mt(px(17.))
+                    .mb(px(4.))
+                    .px(px(13.))
+                    .items_center()
+                    .justify_between()
+                    .child(muted("标签").text_size(px(11.)).font_weight(FontWeight::SEMIBOLD))
+                    .when(!self.demo, |d| {
+                        d.child(
+                            div()
+                                .id("sidebar-manage-tags")
+                                .px(px(6.))
+                                .py(px(1.))
+                                .rounded(px(4.))
+                                .text_size(px(10.5))
+                                .text_color(rgb(muted_color()))
+                                .cursor_pointer()
+                                .hover(|s| s.bg(rgba(hover())).text_color(rgb(text())))
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.open_manage_tags_sheet(cx);
+                                }))
+                                .child("管理"),
+                        )
+                    }),
+            );
+            for (ti, (tag, count)) in sidebar_tags.into_iter().enumerate() {
+                let active = self.tag_filter.contains(&tag);
+                let tag_click = tag.clone();
+                let tag_menu = tag.clone();
+                entries = entries.child(
+                    sidebar_row(("sidebar-tag", ti), &tag, "tag", count, active)
+                        .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
+                            this.click_tag_filter(
+                                &tag_click,
+                                event.modifiers().platform || event.modifiers().shift,
+                                cx,
+                            );
+                        }))
+                        .context_menu(self.tag_context_menu(tag_menu, cx)),
+                );
+            }
+            let untagged = crate::library_view::untagged_count(games, self.show_hidden());
+            if untagged > 0 || self.tag_filter == crate::library_view::TagFilter::Untagged {
+                let active = self.tag_filter == crate::library_view::TagFilter::Untagged;
+                entries = entries.child(
+                    sidebar_row("sidebar-tag-untagged", "未标记", "tag-x", untagged, active)
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            let next = if active {
+                                crate::library_view::TagFilter::All
+                            } else {
+                                crate::library_view::TagFilter::Untagged
+                            };
+                            this.set_tag_filter(next, cx);
+                        })),
+                );
+            }
+        }
+        let sidebar_studios = crate::library_view::collect_studio_counts(
+            games,
+            self.bottle_slot(),
+            self.show_hidden(),
+        );
+        let sidebar_unknown_studios = crate::library_view::unknown_studio_count(
+            games,
+            self.bottle_slot(),
+            self.show_hidden(),
+        );
+        if !sidebar_studios.is_empty()
+            || sidebar_unknown_studios > 0
+            || self.studio_filter.is_active()
+        {
+            let expanded = self.sidebar_studios_expanded || self.studio_filter.is_active();
+            entries = entries.child(
+                row()
+                    .mt(px(17.))
+                    .mb(px(4.))
+                    .px(px(13.))
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        row()
+                            .id("sidebar-studios-toggle")
+                            .gap(px(4.))
+                            .items_center()
+                            .cursor_pointer()
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.sidebar_studios_expanded = !this.sidebar_studios_expanded;
+                                cx.notify();
+                            }))
+                            .child(
+                                icon(
+                                    if expanded { "chevron-down" } else { "chevron-right" },
+                                    11.,
+                                )
+                                .text_color(rgb(muted_color())),
+                            )
+                            .child(muted("厂商").text_size(px(11.)).font_weight(FontWeight::SEMIBOLD)),
+                    )
+                    .child(
+                        div()
+                            .id("sidebar-group-by-studio")
+                            .px(px(6.))
+                            .py(px(1.))
+                            .rounded(px(4.))
+                            .text_size(px(10.5))
+                            .bg(if self.group_by_studio {
+                                rgba(accent_subtle_bg())
+                            } else {
+                                rgba(0x00000000)
+                            })
+                            .text_color(rgb(if self.group_by_studio {
+                                accent_fg()
+                            } else {
+                                muted_color()
+                            }))
+                            .cursor_pointer()
+                            .hover(|s| s.bg(rgba(hover())))
+                            .tooltip(text_tip("按厂商聚类展示"))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.toggle_group_by_studio(cx);
+                            }))
+                            .child(if self.group_by_studio { "已聚类" } else { "聚类" }),
+                    ),
+            );
+            if expanded {
+                for (si, (studio, count)) in sidebar_studios.into_iter().take(12).enumerate() {
+                    let active = self.studio_filter.is_studio(&studio);
+                    let studio_click = studio.clone();
+                    entries = entries.child(
+                        sidebar_row(("sidebar-studio", si), &studio, "building-2", count, active)
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.click_studio_filter(&studio_click, cx);
+                            })),
+                    );
+                }
+                if sidebar_unknown_studios > 0
+                    || self.studio_filter == crate::library_view::StudioFilter::Unknown
+                {
+                    let active = self.studio_filter == crate::library_view::StudioFilter::Unknown;
+                    entries = entries.child(
+                        sidebar_row(
+                            "sidebar-studio-unknown",
+                            crate::library_view::UNKNOWN_STUDIO_LABEL,
+                            "building-2",
+                            sidebar_unknown_studios,
+                            active,
+                        )
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.toggle_unknown_studio_filter(cx);
+                        })),
+                    );
+                }
+            }
+        }
         let (grad_start, grad_end) = sidebar_gradient();
         col()
             .size_full()
@@ -792,8 +1194,14 @@ impl WhiskyApp {
             .border_color(rgba(divider()))
             // The collapse button lives in the toolbar beside the traffic
             // lights, so the rows start directly under it like the rail's.
-            .child(entries.px(px(5.)).pt(px(5.)))
-            .child(div().flex_1())
+            .child(
+                div()
+                    .id("sidebar-entries-scroll")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .child(entries.px(px(5.)).pt(px(5.)).pb(px(10.))),
+            )
             .child(
                 col()
                     .gap(px(2.))
@@ -1510,8 +1918,142 @@ impl WhiskyApp {
             .h(px(rect.height))
             .child(child)
     }
+    fn studio_cluster_header(
+        &self,
+        cluster_pos: usize,
+        cluster: &crate::library_view::StudioCluster,
+        top: f32,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let key_toggle = cluster.key.clone();
+        let collapsed = self.collapsed_studios.contains(&cluster.key);
+        let is_filtered = if cluster.is_unknown {
+            self.studio_filter == crate::library_view::StudioFilter::Unknown
+        } else {
+            self.studio_filter.is_studio(&cluster.label)
+        };
+        let label = cluster.label.clone();
+        let is_unknown = cluster.is_unknown;
+        row()
+            .id(("studio-cluster-header", cluster_pos))
+            .absolute()
+            .top(px(top))
+            .left(px(18.))
+            .right(px(18.))
+            .h(px(34.))
+            .px(px(10.))
+            .gap(px(8.))
+            .rounded(px(8.))
+            .bg(rgba(card_bg()))
+            .border_1()
+            .border_color(rgba(card_border()))
+            .items_center()
+            .child(
+                row()
+                    .id(("studio-cluster-collapse", cluster_pos))
+                    .flex_1()
+                    .min_w_0()
+                    .gap(px(8.))
+                    .items_center()
+                    .cursor_pointer()
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.toggle_studio_collapsed(&key_toggle, cx);
+                    }))
+                    .child(
+                        icon(
+                            if collapsed { "chevron-right" } else { "chevron-down" },
+                            14.,
+                        )
+                        .text_color(rgb(muted_color())),
+                    )
+                    .child(icon("building-2", 14.).text_color(rgb(accent_fg())))
+                    .child(
+                        div()
+                            .truncate()
+                            .text_size(px(13.))
+                            .font_weight(FontWeight::BOLD)
+                            .child(cluster.label.clone()),
+                    )
+                    .child(
+                        muted(format!("{} 款", cluster.indices.len()))
+                            .text_size(px(11.))
+                            .flex_shrink_0(),
+                    ),
+            )
+            .child(selectable_pill(
+                ("studio-cluster-filter", cluster_pos),
+                if is_filtered { "全部厂商" } else { "仅看此厂商" },
+                is_filtered,
+                false,
+                cx.listener(move |this, _, _, cx| {
+                    if is_unknown {
+                        this.toggle_unknown_studio_filter(cx);
+                    } else {
+                        this.click_studio_filter(&label, cx);
+                    }
+                }),
+            ))
+            .into_any_element()
+    }
+
     pub(crate) fn shelf(&self, width: f32, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let indices = self.ordered(cx);
+        if indices.is_empty() {
+            return self.library_viewport(0, self.library_empty_surface(cx));
+        }
+        if self.group_by_studio {
+            let clusters = crate::library_view::group_indices_by_studio(self.games(), &indices);
+            let mut y_cursor = 14_f32;
+            let mut items: Vec<AnyElement> = Vec::new();
+            let mut updated_cover_metrics = false;
+            for (ci, cluster) in clusters.iter().enumerate() {
+                items.push(self.studio_cluster_header(ci, cluster, y_cursor, cx));
+                y_cursor += 34.;
+                if !self.collapsed_studios.contains(&cluster.key) {
+                    let layout = LibraryLayout::shelf_with_width(
+                        &cluster.indices,
+                        width,
+                        self.cover_width,
+                        |i| self.mixed && self.game(i).is_some_and(|game| game.landscape),
+                    );
+                    if !updated_cover_metrics {
+                        self.cover_unit.set(layout.cover_width);
+                        self.cover_span.set(crate::library_layout::shelf_available(width));
+                        updated_cover_metrics = true;
+                    }
+                    let y_shift = y_cursor + 10. - 18.;
+                    for (index, mut target) in layout.cards {
+                        target.y += y_shift;
+                        let rect = self.animated_rect(index, target, window, cx);
+                        items.push(
+                            self.card_slot(
+                                index,
+                                rect,
+                                self.cover(index, rect.width, rect.height, true, window, cx),
+                            )
+                            .into_any_element(),
+                        );
+                    }
+                    y_cursor += 10. + (layout.height - 36.).max(0.) + 18.;
+                } else {
+                    y_cursor += 10.;
+                }
+            }
+            if !updated_cover_metrics {
+                let fallback = LibraryLayout::shelf_with_width(&indices, width, self.cover_width, |i| {
+                    self.mixed && self.game(i).is_some_and(|game| game.landscape)
+                });
+                self.cover_unit.set(fallback.cover_width);
+                self.cover_span.set(crate::library_layout::shelf_available(width));
+            }
+            let content = div()
+                .relative()
+                .w_full()
+                .h(px(y_cursor.max(100.)))
+                .flex_shrink_0()
+                .children(items);
+            return self.library_viewport(0, content);
+        }
         let layout = LibraryLayout::shelf_with_width(&indices, width, self.cover_width, |i| {
             self.mixed && self.game(i).is_some_and(|game| game.landscape)
         });
@@ -1531,9 +2073,6 @@ impl WhiskyApp {
                 rect,
                 self.cover(index, rect.width, rect.height, true, window, cx),
             ));
-        }
-        if indices.is_empty() {
-            return self.library_viewport(0, self.library_empty_surface(cx));
         }
         self.library_viewport(0, content)
     }
@@ -1631,7 +2170,7 @@ impl WhiskyApp {
     /// case uses the same memoised order as the other modes.
     pub(crate) fn timeline_ordered(&self, cx: &mut Context<Self>) -> Vec<usize> {
         let games = self.games();
-        if self.demo && self.preview.sort == 0 {
+        let mut indices = if self.demo && self.preview.sort == 0 {
             let mut indices = self.filtered(cx);
             let featured = [
                 "Northwind Signal",
@@ -1651,7 +2190,14 @@ impl WhiskyApp {
             indices
         } else {
             self.ordered(cx)
+        };
+        if self.group_by_studio {
+            indices = crate::library_view::group_indices_by_studio(games, &indices)
+                .into_iter()
+                .flat_map(|cluster| cluster.indices)
+                .collect();
         }
+        indices
     }
     pub(crate) fn timeline(&self, width: f32, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let games = self.games();
@@ -1703,6 +2249,31 @@ impl WhiskyApp {
                 }
                 if let Some(label) = crate::model::format_play_time(g.play_time) {
                     meta = meta.child(badge("clock-3", label));
+                }
+            }
+            if !g.tags.is_empty() {
+                for (ti, tag) in g.tags.iter().take(2).enumerate() {
+                    let tag_click = tag.clone();
+                    meta = meta.child(
+                        crate::controls::tag_badge_subtle(tag.clone())
+                            .id(("timeline-tag", index * 16 + ti))
+                            .cursor_pointer()
+                            .hover(|s| s.bg(rgba(hover())))
+                            .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
+                                this.click_tag_filter(
+                                    &tag_click,
+                                    event.modifiers().platform || event.modifiers().shift,
+                                    cx,
+                                );
+                                cx.stop_propagation();
+                            })),
+                    );
+                }
+                if g.tags.len() > 2 {
+                    meta = meta.child(crate::controls::tag_badge_subtle(format!(
+                        "+{}",
+                        g.tags.len() - 2
+                    )));
                 }
             }
             if let Some(state) = self.runtime_state(index) {
@@ -1932,6 +2503,71 @@ impl WhiskyApp {
     }
     pub(crate) fn classic(&self, width: f32, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let indices = self.ordered(cx);
+        if indices.is_empty() {
+            return self.library_viewport(2, self.library_empty_surface(cx));
+        }
+        if self.group_by_studio {
+            let clusters = crate::library_view::group_indices_by_studio(self.games(), &indices);
+            let mut y_cursor = 14_f32;
+            let mut items: Vec<AnyElement> = Vec::new();
+            for (ci, cluster) in clusters.iter().enumerate() {
+                items.push(self.studio_cluster_header(ci, cluster, y_cursor, cx));
+                y_cursor += 34.;
+                if !self.collapsed_studios.contains(&cluster.key) {
+                    let layout = LibraryLayout::classic(&cluster.indices, width);
+                    let y_shift = y_cursor + 10. - 18.;
+                    for (i, mut target) in layout.cards {
+                        target.y += y_shift;
+                        let rect = self.animated_rect(i, target, window, cx);
+                        let hover = transition(
+                            ElementId::from(("classic-hover", i)),
+                            if self.hovered == Some(i) { 1_f32 } else { 0. },
+                            self.timing(HOVER_MS),
+                            window,
+                            cx,
+                        );
+                        let studio = self
+                            .game(i)
+                            .map(|game| game.studio.clone().unwrap_or_default());
+                        let card = col()
+                            .size_full()
+                            .gap(px(10.))
+                            .pb(px(13.))
+                            .rounded(px(12.))
+                            .overflow_hidden()
+                            .bg(rgba(card_bg()))
+                            .border_1()
+                            .border_color(rgba(card_border()))
+                            .child(self.cover(i, rect.width, (rect.height - 55.).max(1.), true, window, cx))
+                            .child(
+                                row()
+                                    .px(px(12.))
+                                    .justify_between()
+                                    .when(self.demo || studio.is_some(), |d| {
+                                        d.child(
+                                            muted(studio.clone().unwrap_or_default())
+                                                .flex_1()
+                                                .min_w_0()
+                                                .truncate(),
+                                        )
+                                    })
+                                    .child(self.play_button_toned(("classic-play", i), i, "游玩", hover, cx)),
+                            );
+                        items.push(self.card_slot(i, rect, card).into_any_element());
+                    }
+                    y_cursor += 10. + (layout.height - 36.).max(0.) + 18.;
+                } else {
+                    y_cursor += 10.;
+                }
+            }
+            let content = div()
+                .relative()
+                .w_full()
+                .h(px(y_cursor.max(100.)))
+                .flex_shrink_0()
+                .children(items);
+            return self.library_viewport(2, content);
+        }
         let layout = LibraryLayout::classic(&indices, width);
         let mut content = div()
             .relative()
@@ -1976,9 +2612,6 @@ impl WhiskyApp {
                         .child(self.play_button_toned(("classic-play", i), i, "游玩", hover, cx)),
                 );
             content = content.child(self.card_slot(i, rect, card));
-        }
-        if indices.is_empty() {
-            return self.library_viewport(2, self.library_empty_surface(cx));
         }
         self.library_viewport(2, content)
     }
@@ -2223,10 +2856,61 @@ impl WhiskyApp {
                                                             .line_height(relative(1.2))
                                                             .child(g.title.clone()),
                                                     )
-                                                    .when(self.demo || g.studio.is_some(), |d| {
+                                                    .when_some(g.studio_name(), |d, studio_name| {
+                                                        let active =
+                                                            self.studio_filter.is_studio(&studio_name);
+                                                        let studio_click = studio_name.clone();
                                                         d.child(
-                                                            muted(g.studio())
-                                                                .text_size(px(14.)),
+                                                            row()
+                                                                .id(("detail-studio-link", index))
+                                                                .items_center()
+                                                                .gap(px(6.))
+                                                                .px(px(9.))
+                                                                .py(px(3.))
+                                                                .rounded_full()
+                                                                .bg(rgba(if active {
+                                                                    accent_subtle_bg()
+                                                                } else {
+                                                                    card_bg()
+                                                                }))
+                                                                .border_1()
+                                                                .border_color(rgba(if active {
+                                                                    accent_subtle_border()
+                                                                } else {
+                                                                    card_border()
+                                                                }))
+                                                                .cursor_pointer()
+                                                                .hover(|s| s.bg(rgba(hover())))
+                                                                .tooltip(text_tip("点击按此厂商筛选"))
+                                                                .on_click(cx.listener(
+                                                                    move |this, _, window, cx| {
+                                                                        this.click_studio_filter(
+                                                                            &studio_click,
+                                                                            cx,
+                                                                        );
+                                                                        this.close_detail(window, cx);
+                                                                    },
+                                                                ))
+                                                                .child(
+                                                                    icon("building-2", 12.).text_color(
+                                                                        rgb(if active {
+                                                                            accent_fg()
+                                                                        } else {
+                                                                            muted_color()
+                                                                        }),
+                                                                    ),
+                                                                )
+                                                                .child(
+                                                                    div()
+                                                                        .text_size(px(12.5))
+                                                                        .font_weight(FontWeight::MEDIUM)
+                                                                        .text_color(rgb(if active {
+                                                                            accent_fg()
+                                                                        } else {
+                                                                            subtext()
+                                                                        }))
+                                                                        .child(studio_name),
+                                                                ),
                                                         )
                                                     })
                                                     .when(g.release.is_some(), |d| {
@@ -2303,6 +2987,9 @@ impl WhiskyApp {
                                                     }),
                                             ),
                                     )
+                                    .when(!self.demo, |d| {
+                                        d.child(self.detail_tags_section(index, window, cx))
+                                    })
                                     .when_some(g.description.clone(), |d, description| {
                                         d.child(
                                             col()
@@ -2826,5 +3513,514 @@ impl WhiskyApp {
             cards = cards.child(card);
         }
         cards.into_any_element()
+    }
+
+    fn tag_filter_menu(
+        &self,
+        cx: &Context<Self>,
+    ) -> impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static {
+        let view = cx.entity().downgrade();
+        let tags = crate::library_view::collect_tag_counts(self.games(), self.show_hidden());
+        let untagged = crate::library_view::untagged_count(self.games(), self.show_hidden());
+        let current = self.tag_filter.clone();
+        move |mut menu, _, _| {
+            let v = view.clone();
+            menu = menu.item(
+                PopupMenuItem::new("全部游戏")
+                    .checked(!current.is_active())
+                    .on_click(move |_, _, cx| {
+                        let _ = v.update(cx, |this, cx| this.clear_tag_filter(cx));
+                    }),
+            );
+            if !tags.is_empty() {
+                menu = menu.separator();
+            }
+            for (tag, count) in &tags {
+                let checked = current.contains(tag);
+                let tag_click = tag.clone();
+                let v = view.clone();
+                menu = menu.item(
+                    PopupMenuItem::new(format!("{tag} ({count})"))
+                        .checked(checked)
+                        .on_click(move |_, _, cx| {
+                            let _ = v.update(cx, |this, cx| {
+                                this.click_tag_filter(&tag_click, false, cx);
+                            });
+                        }),
+                );
+            }
+            if untagged > 0 || current == crate::library_view::TagFilter::Untagged {
+                let v = view.clone();
+                menu = menu.item(
+                    PopupMenuItem::new(format!("未标记 ({untagged})"))
+                        .checked(current == crate::library_view::TagFilter::Untagged)
+                        .on_click(move |_, _, cx| {
+                            let _ = v.update(cx, |this, cx| {
+                                this.set_tag_filter(
+                                    crate::library_view::TagFilter::Untagged,
+                                    cx,
+                                );
+                            });
+                        }),
+                );
+            }
+            menu = menu.separator();
+            let v = view.clone();
+            menu.item(PopupMenuItem::new("管理标签…").on_click(move |_, _, cx| {
+                let _ = v.update(cx, |this, cx| this.open_manage_tags_sheet(cx));
+            }))
+        }
+    }
+
+    fn tag_context_menu(
+        &self,
+        tag: String,
+        cx: &Context<Self>,
+    ) -> impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static {
+        let view = cx.entity().downgrade();
+        let active = self.tag_filter.contains(&tag);
+        let is_demo = self.demo;
+        move |mut menu, _, _| {
+            let tag_filter = tag.clone();
+            let v = view.clone();
+            menu = menu.item(
+                PopupMenuItem::new(if active { "取消此标签筛选" } else { "仅看此标签" })
+                    .on_click(move |_, _, cx| {
+                        let _ = v.update(cx, |this, cx| {
+                            this.click_tag_filter(&tag_filter, false, cx);
+                        });
+                    }),
+            );
+            if !is_demo {
+                menu = menu.separator();
+                let tag_rename = tag.clone();
+                let v = view.clone();
+                menu = menu.item(PopupMenuItem::new("重命名…").on_click(move |_, _, cx| {
+                    let _ = v.update(cx, |this, cx| {
+                        this.open_manage_tags_sheet(cx);
+                        this.begin_rename_library_tag(&tag_rename, None, cx);
+                    });
+                }));
+                let tag_delete = tag.clone();
+                let v = view.clone();
+                menu = menu.item(PopupMenuItem::new("删除标签").on_click(move |_, _, cx| {
+                    let _ = v.update(cx, |this, cx| {
+                        this.delete_library_tag(&tag_delete, cx);
+                    });
+                }));
+            }
+            menu
+        }
+    }
+
+    fn library_filter_drawer(&self, cx: &Context<Self>) -> AnyElement {
+        let games = self.games();
+        let show_hidden = self.show_hidden();
+        let slot = self.bottle_slot();
+        let tags = crate::library_view::collect_tag_counts(games, show_hidden);
+        let untagged = crate::library_view::untagged_count(games, show_hidden);
+        let studios = crate::library_view::collect_studio_counts(games, slot, show_hidden);
+        let unknown_studios = crate::library_view::unknown_studio_count(games, slot, show_hidden);
+        let has_tags = !tags.is_empty() || self.tag_filter.is_active();
+        let has_studios = !studios.is_empty() || self.studio_filter.is_active();
+        let active_tab = self.effective_filter_bar_tab(has_tags, has_studios);
+
+        let mut strip = row()
+            .id("library-tag-bar-scroll")
+            .flex_1()
+            .min_w_0()
+            .items_center()
+            .gap(px(6.))
+            .overflow_x_scroll()
+            .restrict_scroll_to_axis();
+
+        match active_tab {
+            crate::ui_state::FilterBarTab::Tags => {
+                strip = strip.child(tag_chip(
+                    "library-tag-all",
+                    "全部标签",
+                    !self.tag_filter.is_active(),
+                    None,
+                    cx.listener(|this, _, _, cx| {
+                        this.clear_tag_filter(cx);
+                    }),
+                ));
+                for (ti, (tag, count)) in tags.into_iter().enumerate() {
+                    let active = self.tag_filter.contains(&tag);
+                    let tag_click = tag.clone();
+                    strip = strip.child(tag_chip(
+                        ("library-tag-pill", ti),
+                        tag,
+                        active,
+                        Some(count),
+                        cx.listener(move |this, event: &ClickEvent, _, cx| {
+                            this.click_tag_filter(
+                                &tag_click,
+                                event.modifiers().platform || event.modifiers().shift,
+                                cx,
+                            );
+                        }),
+                    ));
+                }
+                if untagged > 0 || self.tag_filter == crate::library_view::TagFilter::Untagged {
+                    let active = self.tag_filter == crate::library_view::TagFilter::Untagged;
+                    strip = strip.child(tag_chip(
+                        "library-tag-untagged",
+                        "未标记",
+                        active,
+                        Some(untagged),
+                        cx.listener(move |this, _, _, cx| {
+                            let next = if active {
+                                crate::library_view::TagFilter::All
+                            } else {
+                                crate::library_view::TagFilter::Untagged
+                            };
+                            this.set_tag_filter(next, cx);
+                        }),
+                    ));
+                }
+            }
+            crate::ui_state::FilterBarTab::Studios => {
+                strip = strip.child(tag_chip(
+                    "library-studio-all",
+                    "全部厂商",
+                    !self.studio_filter.is_active(),
+                    None,
+                    cx.listener(|this, _, _, cx| {
+                        this.clear_studio_filter(cx);
+                    }),
+                ));
+                for (si, (studio, count)) in studios.into_iter().enumerate() {
+                    let active = self.studio_filter.is_studio(&studio);
+                    let studio_click = studio.clone();
+                    strip = strip.child(tag_chip(
+                        ("library-studio-pill", si),
+                        studio,
+                        active,
+                        Some(count),
+                        cx.listener(move |this, _, _, cx| {
+                            this.click_studio_filter(&studio_click, cx);
+                        }),
+                    ));
+                }
+                if unknown_studios > 0
+                    || self.studio_filter == crate::library_view::StudioFilter::Unknown
+                {
+                    let active =
+                        self.studio_filter == crate::library_view::StudioFilter::Unknown;
+                    strip = strip.child(tag_chip(
+                        "library-studio-unknown",
+                        crate::library_view::UNKNOWN_STUDIO_LABEL,
+                        active,
+                        Some(unknown_studios),
+                        cx.listener(|this, _, _, cx| {
+                            this.toggle_unknown_studio_filter(cx);
+                        }),
+                    ));
+                }
+            }
+        }
+
+        let show_switcher = (has_tags && has_studios)
+            || (self.tag_filter.is_active() || self.studio_filter.is_active());
+        let mut bar = row()
+            .id("library-filter-drawer")
+            .w_full()
+            .h(px(44.))
+            .flex_shrink_0()
+            .items_center()
+            .px(px(20.))
+            .gap(px(8.))
+            .bg(rgba(toolbar_bg()))
+            .border_b_1()
+            .border_color(rgba(divider()));
+
+        if show_switcher {
+            let mut switcher = row()
+                .flex_shrink_0()
+                .p(px(2.))
+                .gap(px(2.))
+                .rounded_full()
+                .bg(rgba(hover()))
+                .border_1()
+                .border_color(rgba(divider()));
+            for (tab, icon_name, label, has_dot) in [
+                (
+                    crate::ui_state::FilterBarTab::Tags,
+                    "tag",
+                    "标签",
+                    self.tag_filter.is_active()
+                        && active_tab != crate::ui_state::FilterBarTab::Tags,
+                ),
+                (
+                    crate::ui_state::FilterBarTab::Studios,
+                    "building-2",
+                    "厂商",
+                    self.studio_filter.is_active()
+                        && active_tab != crate::ui_state::FilterBarTab::Studios,
+                ),
+            ] {
+                let selected = active_tab == tab;
+                switcher = switcher.child(
+                    row()
+                        .id(match tab {
+                            crate::ui_state::FilterBarTab::Tags => "filter-tab-tags",
+                            crate::ui_state::FilterBarTab::Studios => "filter-tab-studios",
+                        })
+                        .h(px(22.))
+                        .px(px(9.))
+                        .gap(px(4.))
+                        .rounded_full()
+                        .items_center()
+                        .cursor_pointer()
+                        .when(selected, |d| d.bg(rgba(hover_strong())))
+                        .when(!selected, |d| {
+                            d.text_color(rgb(muted_color()))
+                                .hover(|s| s.bg(rgba(hover())))
+                        })
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.set_filter_bar_tab(tab, cx);
+                        }))
+                        .child(icon(icon_name, 11.))
+                        .child(
+                            div()
+                                .text_size(px(11.))
+                                .font_weight(if selected {
+                                    FontWeight::SEMIBOLD
+                                } else {
+                                    FontWeight::NORMAL
+                                })
+                                .child(label),
+                        )
+                        .when(has_dot, |d| {
+                            d.child(div().size(px(5.)).rounded_full().bg(rgb(ACCENT)))
+                        }),
+                );
+            }
+            bar = bar.child(switcher);
+        }
+
+        bar = bar.child(strip);
+
+        if active_tab == crate::ui_state::FilterBarTab::Tags && self.studio_filter.is_active() {
+            bar = bar.child(selectable_pill(
+                "library-cross-studio-clear",
+                format!("厂商: {} ×", self.studio_filter.display_label()),
+                true,
+                false,
+                cx.listener(|this, _, _, cx| {
+                    this.clear_studio_filter(cx);
+                }),
+            ));
+        } else if active_tab == crate::ui_state::FilterBarTab::Studios
+            && self.tag_filter.is_active()
+        {
+            bar = bar.child(selectable_pill(
+                "library-cross-tag-clear",
+                format!("标签: {} ×", self.tag_filter.display_label()),
+                true,
+                false,
+                cx.listener(|this, _, _, cx| {
+                    this.clear_tag_filter(cx);
+                }),
+            ));
+        }
+
+        if self.has_active_library_filter() {
+            bar = bar.child(selectable_pill(
+                "library-tag-clear",
+                "清除筛选",
+                false,
+                false,
+                cx.listener(|this, _, _, cx| {
+                    this.clear_all_library_filters(cx);
+                }),
+            ));
+        }
+
+        bar = bar.child(selectable_pill(
+            "library-studio-cluster-toggle",
+            "按厂商聚类",
+            self.group_by_studio,
+            false,
+            cx.listener(|this, _, _, cx| {
+                this.toggle_group_by_studio(cx);
+            }),
+        ));
+
+        if !self.demo && active_tab == crate::ui_state::FilterBarTab::Tags {
+            bar = bar.child(selectable_pill(
+                "library-tag-manage",
+                "管理",
+                false,
+                false,
+                cx.listener(|this, _, _, cx| {
+                    this.open_manage_tags_sheet(cx);
+                }),
+            ));
+        }
+
+        if self.tag_bar_mode == crate::ui_state::TagBarMode::PullDown {
+            bar = bar.child(
+                row()
+                    .id("library-filter-drawer-close")
+                    .size(px(26.))
+                    .flex_shrink_0()
+                    .items_center()
+                    .justify_center()
+                    .rounded_full()
+                    .bg(rgba(card_bg()))
+                    .border_1()
+                    .border_color(rgba(card_border()))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(rgba(hover())))
+                    .tooltip(text_tip("收起标签与厂商栏"))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.set_tag_drawer_open(false, cx);
+                    }))
+                    .child(icon("chevron-up", 13.).text_color(rgb(muted_color()))),
+            );
+        }
+
+        bar.into_any_element()
+    }
+
+    fn detail_tags_section(
+        &self,
+        index: usize,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let Some(game) = self.game(index).cloned() else {
+            return div().into_any_element();
+        };
+        let library_tags: Vec<(String, usize)> =
+            crate::library_view::collect_tag_counts(self.games(), true)
+                .into_iter()
+                .filter(|(tag, _)| !game.has_tag(tag))
+                .take(12)
+                .collect();
+
+        let mut tags_row = row().flex_wrap().items_center().gap(px(6.));
+        if game.tags.is_empty() {
+            tags_row = tags_row.child(muted("暂无标签").text_size(px(12.)));
+        } else {
+            for (ti, tag) in game.tags.iter().enumerate() {
+                let tag_filter = tag.clone();
+                let tag_remove = tag.clone();
+                tags_row = tags_row.child(
+                    row()
+                        .id(("detail-tag-chip", ti))
+                        .items_center()
+                        .gap(px(5.))
+                        .h(px(26.))
+                        .pl(px(10.))
+                        .pr(px(6.))
+                        .rounded_full()
+                        .bg(rgba(accent_subtle_bg()))
+                        .border_1()
+                        .border_color(rgba(accent_subtle_border()))
+                        .cursor_pointer()
+                        .hover(|s| s.bg(rgba(accent_subtle_hover())))
+                        .on_click(cx.listener(move |this, event: &ClickEvent, window, cx| {
+                            this.click_tag_filter(
+                                &tag_filter,
+                                event.modifiers().platform || event.modifiers().shift,
+                                cx,
+                            );
+                            this.close_detail(window, cx);
+                        }))
+                        .child(
+                            div()
+                                .text_size(px(11.5))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(rgb(accent_fg()))
+                                .child(tag.clone()),
+                        )
+                        .child(
+                            div()
+                                .id(("detail-tag-remove", ti))
+                                .size(px(16.))
+                                .rounded_full()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .hover(|s| s.bg(rgba(hover_strong())))
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.toggle_game_tag(index, &tag_remove, cx);
+                                    cx.stop_propagation();
+                                }))
+                                .child(icon("x", 10.).text_color(rgb(accent_fg()))),
+                        ),
+                );
+            }
+        }
+
+        col()
+            .flex_shrink_0()
+            .gap(px(12.))
+            .p(px(20.))
+            .rounded(px(12.))
+            .bg(rgba(card_bg()))
+            .border_1()
+            .border_color(rgba(card_border()))
+            .child(
+                row()
+                    .items_center()
+                    .justify_between()
+                    .gap(px(8.))
+                    .child(
+                        row()
+                            .items_center()
+                            .gap(px(6.))
+                            .child(icon("tag", 14.).text_color(rgb(accent_fg())))
+                            .child(div().font_weight(FontWeight::SEMIBOLD).child("标签")),
+                    )
+                    .child(
+                        row()
+                            .items_center()
+                            .gap(px(8.))
+                            .child(muted("回车添加 · 点击标签按分类查看").text_size(px(11.)))
+                            .child(
+                                Button::new("detail-manage-tags")
+                                    .label("管理全部…")
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.open_manage_tags_sheet(cx);
+                                    })),
+                            ),
+                    ),
+            )
+            .child(tags_row)
+            .child(
+                row()
+                    .gap(px(8.))
+                    .items_center()
+                    .child(div().flex_1().min_w_0().child(Input::new(&self.tag_input)))
+                    .child(
+                        Button::new("detail-add-tag-btn")
+                            .label("添加")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.submit_tag_input(Some(window), cx);
+                            })),
+                    ),
+            )
+            .when(!library_tags.is_empty(), |d| {
+                let mut quick = row().flex_wrap().items_center().gap(px(6.));
+                quick = quick.child(muted("快速添加：").text_size(px(11.)));
+                for (qi, (tag, _)) in library_tags.into_iter().enumerate() {
+                    let tag_add = tag.clone();
+                    quick = quick.child(tag_chip(
+                        ("detail-quick-tag", qi),
+                        format!("+ {tag}"),
+                        false,
+                        None,
+                        cx.listener(move |this, _, _, cx| {
+                            this.toggle_game_tag(index, &tag_add, cx);
+                        }),
+                    ));
+                }
+                d.child(quick)
+            })
+            .into_any_element()
     }
 }

@@ -104,6 +104,7 @@ impl Render for WhiskyApp {
         // Native fullscreen auto-hides the lights; simple (borderless)
         // fullscreen removes them entirely. Either way content hugs the edge.
         let fullscreen = window.is_fullscreen() || window.is_simple_fullscreen();
+        self.apply_pending_tag_inputs(window, cx);
         let backdrop = self.backdrop(window, cx);
         let body = if self.capture.panel_open {
             self.capture_panel(window, cx)
@@ -169,6 +170,7 @@ impl Render for WhiskyApp {
                     || this.bridge_dialog
                     || this.bottle_dialog.is_some()
                     || this.engine_dialog.is_some()
+                    || this.launch_chooser.is_some()
                     || this.clipboard_prompt.is_some()
                     || this.legacy_fullscreen_prompt.is_some()
                     || this.import_bottles.is_some()
@@ -239,6 +241,8 @@ impl Render for WhiskyApp {
                     this.dismiss_legacy_fullscreen(cx);
                 } else if this.clipboard_prompt.is_some() {
                     this.dismiss_clipboard(cx);
+                } else if this.launch_chooser.is_some() {
+                    this.launch_chooser = None;
                 } else if this.setup_dialog && !this.setup_installing {
                     this.dismiss_setup(cx);
                 } else if this.about {
@@ -307,6 +311,9 @@ impl Render for WhiskyApp {
         }
         if let Some(sheet) = self.preview.sheet {
             root = root.child(self.preview_sheet(sheet, ww, wh, window, cx));
+        }
+        if self.launch_chooser.is_some() {
+            root = root.child(self.launch_chooser_dialog(ww, wh, cx));
         }
         if self.clipboard_prompt.is_some() {
             root = root.child(self.clipboard_dialog(ww, wh, cx));

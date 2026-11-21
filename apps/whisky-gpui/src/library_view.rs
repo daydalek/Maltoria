@@ -7,8 +7,14 @@
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
+use std::time::{Duration, Instant};
 
 use crate::model::{BottleVm, Game};
+
+pub(crate) const UNKNOWN_STUDIO_LABEL: &str = "未知厂商";
+pub(crate) const PULL_OPEN_THRESHOLD: f32 = 40.0;
+pub(crate) const PULL_CLOSE_THRESHOLD: f32 = 30.0;
+pub(crate) const PULL_GESTURE_PAUSE_MS: u64 = 260;
 
 /// Merge per-bottle caches in sidebar order.
 ///
@@ -75,7 +81,109 @@ pub(crate) fn next_rating(current: Option<u8>, star: u8) -> Option<u8> {
     if current == Some(star) { None } else { Some(star) }
 }
 
-/// Case-insensitive match over the name, developer, and release year.
+pub(crate) const MAX_TAGS_PER_ENTRY: usize = 32;
+pub(crate) const MAX_TAG_LENGTH: usize = 32;
+
+/// Normalize a user-supplied tag name matching Swift `LibraryTags.normalize`.
+pub(crate) fn normalize_tag(raw: &str) -> Option<String> {
+    if raw.contains('\0') {
+        return None;
+    }
+    let collapsed = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.is_empty() {
+        return None;
+    }
+    let clamped: String = collapsed.chars().take(MAX_TAG_LENGTH).collect();
+    let trimmed = clamped.trim().to_owned();
+    (!trimmed.is_empty()).then_some(trimmed)
+}
+
+/// Normalize, deduplicate case-insensitively, and cap a tag list.
+pub(crate) fn normalize_tags<I, S>(raw: I) -> Vec<String>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for item in raw {
+        let Some(tag) = normalize_tag(item.as_ref()) else {
+            continue;
+        };
+        if !seen.insert(tag.to_lowercase()) {
+            continue;
+        }
+        out.push(tag);
+        if out.len() >= MAX_TAGS_PER_ENTRY {
+            break;
+        }
+    }
+    out
+}
+
+/// Tag classification filter across library views.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub(crate) enum TagFilter {
+    #[default]
+    All,
+    Untagged,
+    Tags(Vec<String>),
+}
+
+impl TagFilter {
+    pub(crate) fn is_active(&self) -> bool {
+        !matches!(self, Self::All)
+    }
+
+    pub(crate) fn contains(&self, tag: &str) -> bool {
+        let needle = tag.trim().to_lowercase();
+        !needle.is_empty()
+            && matches!(self, Self::Tags(tags) if tags.iter().any(|t| t.to_lowercase() == needle))
+    }
+
+    pub(crate) fn toggle_single(&mut self, tag: &str) {
+        let Some(clean) = normalize_tag(tag) else {
+            return;
+        };
+        let key = clean.to_lowercase();
+        if matches!(self, Self::Tags(tags) if tags.len() == 1 && tags[0].to_lowercase() == key) {
+            *self = Self::All;
+        } else {
+            *self = Self::Tags(vec![clean]);
+        }
+    }
+
+    pub(crate) fn toggle_multi(&mut self, tag: &str) {
+        let Some(clean) = normalize_tag(tag) else {
+            return;
+        };
+        let key = clean.to_lowercase();
+        let mut next = match std::mem::take(self) {
+            Self::Tags(tags) => tags,
+            Self::All | Self::Untagged => Vec::new(),
+        };
+        if let Some(pos) = next.iter().position(|t| t.to_lowercase() == key) {
+            next.remove(pos);
+        } else {
+            next.push(clean);
+        }
+        *self = if next.is_empty() {
+            Self::All
+        } else {
+            Self::Tags(next)
+        };
+    }
+
+    pub(crate) fn display_label(&self) -> String {
+        match self {
+            Self::All => "全部".to_owned(),
+            Self::Untagged => "未标记".to_owned(),
+            Self::Tags(tags) => tags.join(" + "),
+        }
+    }
+}
+
+/// Case-insensitive match over the name, developer, release year, and tags.
 pub(crate) fn matches_query(game: &Game, query: &str) -> bool {
     let query = query.trim().to_lowercase();
     if query.is_empty() {
@@ -86,13 +194,365 @@ pub(crate) fn matches_query(game: &Game, query: &str) -> bool {
         || game
             .year()
             .is_some_and(|year| year.to_lowercase().contains(&query))
+        || game.tags.iter().any(|tag| tag.to_lowercase().contains(&query))
+}
+
+pub(crate) fn matches_tag_filter(game: &Game, filter: &TagFilter) -> bool {
+    match filter {
+        TagFilter::All => true,
+        TagFilter::Untagged => game.tags.is_empty(),
+        TagFilter::Tags(tags) => tags.iter().all(|tag| game.has_tag(tag)),
+    }
+}
+
+/// Normalize a developer / studio display name by collapsing internal whitespace.
+pub(crate) fn normalize_studio(raw: &str) -> Option<String> {
+    if raw.contains('\0') {
+        return None;
+    }
+    let collapsed = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+    let trimmed = collapsed.trim().to_owned();
+    (!trimmed.is_empty()).then_some(trimmed)
+}
+
+/// Studio / developer classification filter across library views.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub(crate) enum StudioFilter {
+    #[default]
+    All,
+    Unknown,
+    Studio(String),
+}
+
+impl StudioFilter {
+    pub(crate) fn is_active(&self) -> bool {
+        !matches!(self, Self::All)
+    }
+
+    pub(crate) fn matches(&self, game: &Game) -> bool {
+        match self {
+            Self::All => true,
+            Self::Unknown => game.studio_name().is_none(),
+            Self::Studio(studio) => game.has_studio(studio),
+        }
+    }
+
+    pub(crate) fn is_studio(&self, studio: &str) -> bool {
+        let Some(clean) = normalize_studio(studio) else {
+            return false;
+        };
+        matches!(self, Self::Studio(active) if active.eq_ignore_ascii_case(&clean))
+    }
+
+    pub(crate) fn toggle_studio(&mut self, studio: &str) {
+        let Some(clean) = normalize_studio(studio) else {
+            return;
+        };
+        if self.is_studio(&clean) {
+            *self = Self::All;
+        } else {
+            *self = Self::Studio(clean);
+        }
+    }
+
+    pub(crate) fn toggle_unknown(&mut self) {
+        *self = if *self == Self::Unknown {
+            Self::All
+        } else {
+            Self::Unknown
+        };
+    }
+
+    pub(crate) fn display_label(&self) -> String {
+        match self {
+            Self::All => "全部".to_owned(),
+            Self::Unknown => UNKNOWN_STUDIO_LABEL.to_owned(),
+            Self::Studio(studio) => studio.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct StudioCluster {
+    pub(crate) key: String,
+    pub(crate) label: String,
+    pub(crate) is_unknown: bool,
+    pub(crate) indices: Vec<usize>,
+}
+
+/// Collect studio counts in the visible scope, ordered by count desc then natural name asc.
+pub(crate) fn collect_studio_counts(
+    games: &[Game],
+    slot: usize,
+    show_hidden: bool,
+) -> Vec<(String, usize)> {
+    let mut counts: std::collections::HashMap<String, (String, usize)> =
+        std::collections::HashMap::new();
+    for game in games {
+        if (slot != 0 && game.bottle != slot)
+            || game.is_launcher
+            || (!show_hidden && game.hidden)
+        {
+            continue;
+        }
+        let Some(studio) = game.studio_name() else {
+            continue;
+        };
+        let key = studio.to_lowercase();
+        counts
+            .entry(key)
+            .and_modify(|(_, count)| *count += 1)
+            .or_insert((studio, 1));
+    }
+    let mut list: Vec<(String, usize)> = counts.into_values().collect();
+    list.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| natural_cmp(&a.0, &b.0)));
+    list
+}
+
+/// Count of visible non-launcher games without a studio name in the scope.
+pub(crate) fn unknown_studio_count(games: &[Game], slot: usize, show_hidden: bool) -> usize {
+    games
+        .iter()
+        .filter(|game| {
+            (slot == 0 || game.bottle == slot)
+                && !game.is_launcher
+                && (show_hidden || !game.hidden)
+                && game.studio_name().is_none()
+        })
+        .count()
+}
+
+/// Group ordered game indices by studio while preserving their relative order inside each cluster.
+/// Known studios come first (larger clusters first, then alphabetically); unknown comes last.
+pub(crate) fn group_indices_by_studio(games: &[Game], indices: &[usize]) -> Vec<StudioCluster> {
+    let mut grouped: std::collections::HashMap<String, (String, Vec<usize>)> =
+        std::collections::HashMap::new();
+    let mut unknown = Vec::new();
+    for &index in indices {
+        let Some(game) = games.get(index) else {
+            continue;
+        };
+        if let Some(studio) = game.studio_name() {
+            let key = studio.to_lowercase();
+            grouped
+                .entry(key)
+                .and_modify(|(_, items)| items.push(index))
+                .or_insert_with(|| (studio, vec![index]));
+        } else {
+            unknown.push(index);
+        }
+    }
+    let mut clusters: Vec<StudioCluster> = grouped
+        .into_iter()
+        .map(|(key, (label, indices))| StudioCluster {
+            key,
+            label,
+            is_unknown: false,
+            indices,
+        })
+        .collect();
+    clusters.sort_by(|a, b| {
+        b.indices
+            .len()
+            .cmp(&a.indices.len())
+            .then_with(|| natural_cmp(&a.label, &b.label))
+    });
+    if !unknown.is_empty() {
+        clusters.push(StudioCluster {
+            key: String::new(),
+            label: UNKNOWN_STUDIO_LABEL.to_owned(),
+            is_unknown: true,
+            indices: unknown,
+        });
+    }
+    clusters
+}
+
+/// Scroll-wheel phase simplified for the pull-down drawer state machine.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PullWheelPhase {
+    Started,
+    Moved,
+    Ended,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct PullRevealOutcome {
+    pub(crate) changed: bool,
+    pub(crate) consume: bool,
+    pub(crate) opened: bool,
+    pub(crate) closed: bool,
+    pub(crate) needs_idle_reset: bool,
+}
+
+/// State machine implementing the two-step "second downward pull at top" drawer gesture.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct PullRevealState {
+    open: bool,
+    pull_distance: f32,
+    close_scroll_distance: f32,
+    in_touch_gesture: bool,
+    /// Blocks opening during the same scroll/momentum sequence that brought the viewport to top.
+    blocked_until_next_gesture: bool,
+    last_wheel_at: Option<Instant>,
+}
+
+impl PullRevealState {
+    pub(crate) fn is_open(&self) -> bool {
+        self.open
+    }
+
+    pub(crate) fn pull_fraction(&self) -> f32 {
+        (self.pull_distance / PULL_OPEN_THRESHOLD).clamp(0.0, 1.0)
+    }
+
+    pub(crate) fn set_open(&mut self, open: bool) {
+        self.open = open;
+        self.pull_distance = 0.0;
+        self.close_scroll_distance = 0.0;
+        if !open {
+            self.blocked_until_next_gesture = false;
+        }
+    }
+
+    pub(crate) fn reset_idle_pull(&mut self) -> bool {
+        if !self.open && !self.in_touch_gesture && self.pull_distance > 0.0 {
+            self.pull_distance = 0.0;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub(crate) fn on_wheel(
+        &mut self,
+        delta_y: f32,
+        scroll_y: f32,
+        phase: PullWheelPhase,
+        now: Instant,
+        has_active_filter: bool,
+    ) -> PullRevealOutcome {
+        let paused = self
+            .last_wheel_at
+            .replace(now)
+            .is_some_and(|at| now.saturating_duration_since(at) >= Duration::from_millis(PULL_GESTURE_PAUSE_MS));
+        let at_top = scroll_y >= -1.0;
+        match phase {
+            PullWheelPhase::Started => self.in_touch_gesture = true,
+            PullWheelPhase::Ended => self.in_touch_gesture = false,
+            PullWheelPhase::Moved => {}
+        }
+
+        let mut outcome = PullRevealOutcome::default();
+        if !self.open {
+            if !at_top {
+                self.blocked_until_next_gesture = true;
+                if self.pull_distance > 0.0 {
+                    self.pull_distance = 0.0;
+                    outcome.changed = true;
+                }
+                return outcome;
+            }
+            match phase {
+                PullWheelPhase::Started => {
+                    self.blocked_until_next_gesture = false;
+                    if self.pull_distance > 0.0 {
+                        self.pull_distance = 0.0;
+                        outcome.changed = true;
+                    }
+                    return outcome;
+                }
+                PullWheelPhase::Ended => {
+                    if !self.blocked_until_next_gesture && self.pull_distance >= PULL_OPEN_THRESHOLD {
+                        self.open = true;
+                        self.pull_distance = 0.0;
+                        self.close_scroll_distance = 0.0;
+                        outcome.opened = true;
+                        outcome.changed = true;
+                    } else if self.pull_distance > 0.0 {
+                        self.pull_distance = 0.0;
+                        outcome.changed = true;
+                    }
+                    return outcome;
+                }
+                PullWheelPhase::Moved => {
+                    if self.blocked_until_next_gesture {
+                        if paused {
+                            self.blocked_until_next_gesture = false;
+                        } else {
+                            return outcome;
+                        }
+                    }
+                    if delta_y > 0.0 {
+                        self.pull_distance = (self.pull_distance + delta_y).min(PULL_OPEN_THRESHOLD);
+                        outcome.consume = true;
+                        outcome.changed = true;
+                        if self.pull_distance >= PULL_OPEN_THRESHOLD {
+                            self.open = true;
+                            self.pull_distance = 0.0;
+                            self.close_scroll_distance = 0.0;
+                            outcome.opened = true;
+                        } else if !self.in_touch_gesture {
+                            outcome.needs_idle_reset = true;
+                        }
+                    } else if delta_y < 0.0 && self.pull_distance > 0.0 {
+                        self.pull_distance = (self.pull_distance + delta_y).max(0.0);
+                        outcome.consume = true;
+                        outcome.changed = true;
+                    }
+                    return outcome;
+                }
+            }
+        }
+
+        if delta_y < 0.0 && !has_active_filter {
+            if paused {
+                self.close_scroll_distance = 0.0;
+            }
+            self.close_scroll_distance += -delta_y;
+            if self.close_scroll_distance >= PULL_CLOSE_THRESHOLD || scroll_y < -20.0 {
+                self.open = false;
+                self.close_scroll_distance = 0.0;
+                self.pull_distance = 0.0;
+                self.blocked_until_next_gesture = !at_top;
+                outcome.closed = true;
+                outcome.changed = true;
+            }
+        } else if delta_y > 0.0 {
+            self.close_scroll_distance = 0.0;
+        }
+        outcome
+    }
 }
 
 /// Indices in the visible scope, before ordering. `slot` is one-based and `0`
 /// means the whole library.
+#[cfg(test)]
 pub(crate) fn filter_indices(
     games: &[Game],
     query: &str,
+    slot: usize,
+    show_hidden: bool,
+) -> Vec<usize> {
+    filter_indices_with_filters(games, query, &TagFilter::All, &StudioFilter::All, slot, show_hidden)
+}
+
+#[cfg(test)]
+pub(crate) fn filter_indices_with_tags(
+    games: &[Game],
+    query: &str,
+    tag_filter: &TagFilter,
+    slot: usize,
+    show_hidden: bool,
+) -> Vec<usize> {
+    filter_indices_with_filters(games, query, tag_filter, &StudioFilter::All, slot, show_hidden)
+}
+
+pub(crate) fn filter_indices_with_filters(
+    games: &[Game],
+    query: &str,
+    tag_filter: &TagFilter,
+    studio_filter: &StudioFilter,
     slot: usize,
     show_hidden: bool,
 ) -> Vec<usize> {
@@ -105,8 +565,44 @@ pub(crate) fn filter_indices(
                 && !game.is_launcher
                 && (show_hidden || !game.hidden)
                 && matches_query(game, query)
+                && matches_tag_filter(game, tag_filter)
+                && studio_filter.matches(game)
         })
         .collect()
+}
+
+pub(crate) fn collect_tag_counts(games: &[Game], show_hidden: bool) -> Vec<(String, usize)> {
+    let mut counts: std::collections::HashMap<String, (String, usize)> =
+        std::collections::HashMap::new();
+    for game in games {
+        if game.is_launcher || (!show_hidden && game.hidden) {
+            continue;
+        }
+        let mut seen_in_game = std::collections::HashSet::new();
+        for tag in &game.tags {
+            let key = tag.to_lowercase();
+            if !seen_in_game.insert(key.clone()) {
+                continue;
+            }
+            counts
+                .entry(key)
+                .and_modify(|(_, count)| *count += 1)
+                .or_insert_with(|| (tag.clone(), 1));
+        }
+    }
+    let mut list: Vec<(String, usize)> = counts.into_values().collect();
+    list.sort_by(|a, b| {
+        b.1.cmp(&a.1)
+            .then_with(|| a.0.to_lowercase().cmp(&b.0.to_lowercase()))
+    });
+    list
+}
+
+pub(crate) fn untagged_count(games: &[Game], show_hidden: bool) -> usize {
+    games
+        .iter()
+        .filter(|game| !game.is_launcher && (show_hidden || !game.hidden) && game.tags.is_empty())
+        .count()
 }
 
 /// Order `indices` in place. The tie-break is always the name, matching
@@ -270,6 +766,10 @@ mod tests {
             container: container.into(),
             last_session_ended_at: None,
             is_launcher: false,
+            tags: Vec::new(),
+            multi_executable: false,
+            launch_executables: Vec::new(),
+            last_executable: None,
         }
     }
 
@@ -506,5 +1006,172 @@ mod tests {
         assert_eq!(Sort::from_index(1), Sort::Name);
         assert_eq!(Sort::from_index(2), Sort::Bottle);
         assert_eq!(Sort::from_index(99), Sort::Recent);
+    }
+
+    #[test]
+    fn normalize_tag_and_list_enforce_dedup_and_bounds() {
+        assert_eq!(normalize_tag("   "), None);
+        assert_eq!(normalize_tag("bad\0tag"), None);
+        assert_eq!(normalize_tag("  Visual   Novel  "), Some("Visual Novel".into()));
+        let long = "a".repeat(50);
+        assert_eq!(normalize_tag(&long).unwrap().chars().count(), MAX_TAG_LENGTH);
+
+        let normalized = normalize_tags(["RPG", "rpg", "  Visual   Novel ", "", "Action"]);
+        assert_eq!(normalized, vec!["RPG", "Visual Novel", "Action"]);
+
+        let many: Vec<String> = (1..=45).map(|i| format!("Tag{i}")).collect();
+        assert_eq!(normalize_tags(many).len(), MAX_TAGS_PER_ENTRY);
+    }
+
+    #[test]
+    fn tag_filter_single_multi_untagged_and_search_match_tags() {
+        let bottles = [bottle("main")];
+        let mut g1 = game("g1", "Alpha", "Key", "2020-01-01", 1, &bottles[0].path);
+        g1.tags = vec!["RPG".into(), "日系".into()];
+        let mut g2 = game("g2", "Beta", "Nitro", "2021-01-01", 1, &bottles[0].path);
+        g2.tags = vec!["rpg".into(), "ADV".into()];
+        let g3 = game("g3", "Gamma", "", "", 1, &bottles[0].path);
+        let games = vec![g1, g2, g3];
+
+        // Search query matches tag names too.
+        assert!(matches_query(&games[0], "日系"));
+        assert!(!matches_query(&games[2], "日系"));
+
+        // Collect tag counts merges case-insensitively and sorts by count desc then name.
+        let counts = collect_tag_counts(&games, true);
+        assert_eq!(counts[0], ("RPG".to_owned(), 2));
+        assert_eq!(untagged_count(&games, true), 1);
+
+        let mut filter = TagFilter::All;
+        filter.toggle_single("RPG");
+        assert_eq!(filter_indices_with_tags(&games, "", &filter, 0, true), vec![0, 1]);
+
+        filter.toggle_multi("ADV");
+        assert_eq!(filter_indices_with_tags(&games, "", &filter, 0, true), vec![1]);
+
+        filter.toggle_single("RPG"); // clicking active single filter returns to All?
+        // First toggle_single sets single "RPG", second clears to All.
+        assert_eq!(filter, TagFilter::Tags(vec!["RPG".into()]));
+        filter.toggle_single("RPG");
+        assert_eq!(filter, TagFilter::All);
+
+        assert_eq!(
+            filter_indices_with_tags(&games, "", &TagFilter::Untagged, 0, true),
+            vec![2]
+        );
+    }
+
+    #[test]
+    fn studio_normalization_counts_and_clustering_order() {
+        let bottles = [bottle("alpha"), bottle("beta")];
+        let mut g0 = game("g0", "Clannad", "  Key  ", "2004-04-28", 1, &bottles[0].path);
+        g0.tags = vec!["催泪".into()];
+        let g1 = game("g1", "Air", "key", "2000-09-08", 1, &bottles[0].path);
+        let mut g2 = game("g2", "Saya", "Nitroplus", "2003-12-26", 2, &bottles[1].path);
+        g2.tags = vec!["催泪".into()];
+        let g3 = game("g3", "NoStudio", "", "", 1, &bottles[0].path);
+        let mut hidden = game("g4", "HiddenKey", "Key", "", 1, &bottles[0].path);
+        hidden.hidden = true;
+        let games = vec![g0, g1, g2, g3, hidden];
+
+        assert_eq!(normalize_studio("  Type   Moon \n"), Some("Type Moon".into()));
+        assert_eq!(normalize_studio("   "), None);
+
+        let counts_all = collect_studio_counts(&games, 0, false);
+        assert_eq!(counts_all, vec![("Key".into(), 2), ("Nitroplus".into(), 1)]);
+        assert_eq!(unknown_studio_count(&games, 0, false), 1);
+
+        let counts_hidden = collect_studio_counts(&games, 1, true);
+        assert_eq!(counts_hidden, vec![("Key".into(), 3)]);
+
+        // Clustering keeps relative order inside clusters and puts unknown last.
+        let clusters = group_indices_by_studio(&games, &[3, 2, 0, 1]);
+        assert_eq!(clusters.len(), 3);
+        assert_eq!(clusters[0].label, "Key");
+        assert_eq!(clusters[0].indices, vec![0, 1]);
+        assert_eq!(clusters[1].label, "Nitroplus");
+        assert_eq!(clusters[1].indices, vec![2]);
+        assert!(clusters[2].is_unknown);
+        assert_eq!(clusters[2].label, UNKNOWN_STUDIO_LABEL);
+        assert_eq!(clusters[2].indices, vec![3]);
+
+        // Filtering composes tag_filter + studio_filter + query cleanly.
+        let tag_filter = TagFilter::Tags(vec!["催泪".into()]);
+        let mut studio_filter = StudioFilter::All;
+        studio_filter.toggle_studio("KEY");
+        assert_eq!(
+            filter_indices_with_filters(&games, "", &tag_filter, &studio_filter, 0, false),
+            vec![0]
+        );
+        assert_eq!(
+            filter_indices_with_filters(&games, "", &TagFilter::All, &StudioFilter::Unknown, 0, false),
+            vec![3]
+        );
+    }
+
+    #[test]
+    fn pull_reveal_ignores_mid_page_momentum_and_opens_on_second_pull_at_top() {
+        let mut pull = PullRevealState::default();
+        let t0 = Instant::now();
+
+        // First gesture: scrolling up from mid-page to reach the top does NOT open.
+        let r1 = pull.on_wheel(35.0, -120.0, PullWheelPhase::Started, t0, false);
+        assert!(!r1.opened);
+        let r2 = pull.on_wheel(50.0, 0.0, PullWheelPhase::Moved, t0 + Duration::from_millis(16), false);
+        assert!(!r2.opened);
+        assert!(!pull.is_open());
+        let r3 = pull.on_wheel(0.0, 0.0, PullWheelPhase::Ended, t0 + Duration::from_millis(32), false);
+        assert!(!r3.opened);
+        // Trackpad momentum packets right after Ended stay blocked.
+        let r4 = pull.on_wheel(60.0, 0.0, PullWheelPhase::Moved, t0 + Duration::from_millis(48), false);
+        assert!(!r4.opened);
+        assert!(!pull.is_open());
+
+        // Second gesture starting while already at top arms and pulls the drawer open.
+        let t1 = t0 + Duration::from_millis(120);
+        pull.on_wheel(0.0, 0.0, PullWheelPhase::Started, t1, false);
+        let partial = pull.on_wheel(20.0, 0.0, PullWheelPhase::Moved, t1 + Duration::from_millis(16), false);
+        assert!(partial.consume && !partial.opened);
+        assert!((pull.pull_fraction() - 0.5).abs() < 0.01);
+
+        let opened = pull.on_wheel(24.0, 0.0, PullWheelPhase::Moved, t1 + Duration::from_millis(32), false);
+        assert!(opened.opened && opened.consume);
+        assert!(pull.is_open());
+
+        // Scrolling down closes when no filter is active, but stays open while filtering.
+        let keep = pull.on_wheel(-45.0, 0.0, PullWheelPhase::Moved, t1 + Duration::from_millis(90), true);
+        assert!(!keep.closed);
+        assert!(pull.is_open());
+
+        let close = pull.on_wheel(-45.0, 0.0, PullWheelPhase::Moved, t1 + Duration::from_millis(120), false);
+        assert!(close.closed && !close.consume);
+        assert!(!pull.is_open());
+    }
+
+    #[test]
+    fn pull_reveal_mouse_wheel_pause_arms_and_idle_resets() {
+        let mut pull = PullRevealState::default();
+        let t0 = Instant::now();
+
+        // Discrete wheel reaching top blocks immediate overscroll packets.
+        pull.on_wheel(25.0, -40.0, PullWheelPhase::Moved, t0, false);
+        pull.on_wheel(50.0, 0.0, PullWheelPhase::Moved, t0 + Duration::from_millis(50), false);
+        assert!(!pull.is_open());
+
+        // After pausing >= PULL_GESTURE_PAUSE_MS at top, discrete wheel arms on second pull.
+        let t1 = t0 + Duration::from_millis(50 + PULL_GESTURE_PAUSE_MS + 40);
+        let notch1 = pull.on_wheel(16.0, 0.0, PullWheelPhase::Moved, t1, false);
+        assert!(notch1.needs_idle_reset && !notch1.opened);
+        assert!(pull.pull_fraction() > 0.0);
+
+        // Idle reset collapses half-pulled state cleanly; otherwise consecutive notches open it.
+        assert!(pull.reset_idle_pull());
+        assert_eq!(pull.pull_fraction(), 0.0);
+
+        let t2 = t1 + Duration::from_millis(400);
+        pull.on_wheel(22.0, 0.0, PullWheelPhase::Moved, t2, false);
+        let notch2 = pull.on_wheel(22.0, 0.0, PullWheelPhase::Moved, t2 + Duration::from_millis(40), false);
+        assert!(notch2.opened);
+        assert!(pull.is_open());
     }
 }

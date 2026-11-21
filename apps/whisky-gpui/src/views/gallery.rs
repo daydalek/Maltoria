@@ -101,25 +101,98 @@ impl WhiskyApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let heading: SharedString = if self.selected_bottle.is_some() {
-            self.bottle_name().to_owned().into()
-        } else {
-            "全部游戏".into()
-        };
-        let mut grid = col().w_full().flex_shrink_0().gap(px(12.));
-        for strip_indices in indices.chunks(layout.columns) {
-            let mut strip = row().items_start().gap(px(12.));
-            for &index in strip_indices {
-                strip = strip.child(self.gallery_card(
-                    index,
-                    index == selected,
-                    layout.card_width,
-                    layout.card_height,
-                    window,
-                    cx,
-                ));
+        let mut parts: Vec<String> = Vec::new();
+        if self.selected_bottle.is_some() {
+            parts.push(self.bottle_name().to_owned());
+        }
+        if self.studio_filter.is_active() {
+            parts.push(format!("厂商：{}", self.studio_filter.display_label()));
+        }
+        if self.tag_filter.is_active() {
+            parts.push(self.tag_filter.display_label());
+        }
+        let heading: SharedString = if parts.is_empty() {
+            if self.group_by_studio {
+                "按厂商聚类".into()
+            } else {
+                "全部游戏".into()
             }
-            grid = grid.child(strip);
+        } else {
+            parts.join(" · ").into()
+        };
+        let mut grid = col().w_full().flex_shrink_0().gap(px(if self.group_by_studio { 18. } else { 12. }));
+        if self.group_by_studio {
+            for (ci, cluster) in crate::library_view::group_indices_by_studio(self.games(), indices)
+                .into_iter()
+                .enumerate()
+            {
+                let mut cluster_col = col().w_full().flex_shrink_0().gap(px(10.));
+                let is_filtered = if cluster.is_unknown {
+                    self.studio_filter == crate::library_view::StudioFilter::Unknown
+                } else {
+                    self.studio_filter.is_studio(&cluster.label)
+                };
+                let filter_label = if is_filtered { "全部厂商" } else { "仅看此厂商" };
+                let cluster_label = cluster.label.clone();
+                let is_unknown = cluster.is_unknown;
+                cluster_col = cluster_col.child(
+                    row()
+                        .items_center()
+                        .gap(px(8.))
+                        .child(icon("building-2", 14.).text_color(rgb(accent_fg())))
+                        .child(
+                            div()
+                                .text_size(px(14.))
+                                .font_weight(FontWeight::BOLD)
+                                .child(cluster.label.clone()),
+                        )
+                        .child(muted(format!("{} 款", cluster.indices.len())).text_size(px(11.)))
+                        .child(div().flex_1())
+                        .child(crate::controls::selectable_pill(
+                            ("gallery-studio-filter", ci),
+                            filter_label,
+                            is_filtered,
+                            false,
+                            cx.listener(move |this, _, _, cx| {
+                                if is_unknown {
+                                    this.toggle_unknown_studio_filter(cx);
+                                } else {
+                                    this.click_studio_filter(&cluster_label, cx);
+                                }
+                            }),
+                        )),
+                );
+                for strip_indices in cluster.indices.chunks(layout.columns) {
+                    let mut strip = row().items_start().gap(px(12.));
+                    for &index in strip_indices {
+                        strip = strip.child(self.gallery_card(
+                            index,
+                            index == selected,
+                            layout.card_width,
+                            layout.card_height,
+                            window,
+                            cx,
+                        ));
+                    }
+                    cluster_col = cluster_col.child(strip);
+                }
+                grid = grid.child(cluster_col);
+            }
+        } else {
+            for strip_indices in indices.chunks(layout.columns) {
+                let mut strip = row().items_start().gap(px(12.));
+                for &index in strip_indices {
+                    strip = strip.child(self.gallery_card(
+                        index,
+                        index == selected,
+                        layout.card_width,
+                        layout.card_height,
+                        window,
+                        cx,
+                    ));
+                }
+                grid = grid.child(strip);
+            }
         }
         col()
             .w_full()
@@ -281,14 +354,6 @@ impl WhiskyApp {
         let hero_height = ((width - 32.) * 0.60).clamp(150., 300.);
         let artwork = self.artwork(index);
         let (ph_start, ph_end) = placeholder_gradient();
-        let mut meta: Vec<String> = Vec::new();
-        let studio = game.studio();
-        if !studio.is_empty() {
-            meta.push(studio.to_owned());
-        }
-        if let Some(year) = game.year() {
-            meta.push(year.to_owned());
-        }
         let bottle = if game.bottle > 0 {
             let name = self.bottle_name_at(game.bottle);
             if name.is_empty() {
@@ -369,10 +434,97 @@ impl WhiskyApp {
                     .line_clamp(3)
                     .child(game.title.clone()),
             )
-            .when(!meta.is_empty(), |d| {
-                d.child(muted(meta.join(" · ")).truncate())
+            .when(game.studio_name().is_some() || game.year().is_some(), |d| {
+                let studio_opt = game.studio_name();
+                let year_opt = game.year().map(str::to_owned);
+                let mut meta_row = row().flex_wrap().items_center().gap(px(6.));
+                if let Some(studio_name) = studio_opt {
+                    let active = self.studio_filter.is_studio(&studio_name);
+                    let studio_click = studio_name.clone();
+                    meta_row = meta_row.child(
+                        row()
+                            .id(("gallery-studio-link", index))
+                            .items_center()
+                            .gap(px(4.))
+                            .px(px(7.))
+                            .py(px(2.))
+                            .rounded_full()
+                            .bg(rgba(if active {
+                                accent_subtle_bg()
+                            } else {
+                                card_bg()
+                            }))
+                            .border_1()
+                            .border_color(rgba(if active {
+                                accent_subtle_border()
+                            } else {
+                                card_border()
+                            }))
+                            .cursor_pointer()
+                            .hover(|s| s.bg(rgba(hover())))
+                            .tooltip(move |_, cx| {
+                                cx.new(|_| Tooltip::new("点击按此厂商筛选")).into()
+                            })
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.click_studio_filter(&studio_click, cx);
+                            }))
+                            .child(icon("building-2", 11.).text_color(rgb(if active {
+                                accent_fg()
+                            } else {
+                                muted_color()
+                            })))
+                            .child(
+                                div()
+                                    .text_size(px(11.5))
+                                    .text_color(rgb(if active {
+                                        accent_fg()
+                                    } else {
+                                        muted_color()
+                                    }))
+                                    .child(studio_name),
+                            ),
+                    );
+                }
+                if let Some(year) = year_opt {
+                    meta_row = meta_row.child(muted(year));
+                }
+                d.child(meta_row)
             })
             .child(badges)
+            .when(!self.demo && (!game.tags.is_empty() || !game.is_launcher), |d| {
+                let mut tag_row = row().flex_shrink_0().flex_wrap().items_center().gap(px(6.));
+                for (ti, tag) in game.tags.iter().enumerate() {
+                    let tag_click = tag.clone();
+                    let active = self.tag_filter.contains(&tag_click);
+                    tag_row = tag_row.child(crate::controls::tag_chip(
+                        ("gallery-summary-tag", index * 64 + ti),
+                        tag.clone(),
+                        active,
+                        None,
+                        cx.listener(move |this, event: &ClickEvent, _, cx| {
+                            this.click_tag_filter(
+                                &tag_click,
+                                event.modifiers().platform || event.modifiers().shift,
+                                cx,
+                            );
+                        }),
+                    ));
+                }
+                tag_row = tag_row.child(crate::controls::selectable_pill(
+                    ("gallery-edit-tags", index),
+                    if game.tags.is_empty() {
+                        "+ 标签"
+                    } else {
+                        "编辑标签"
+                    },
+                    false,
+                    false,
+                    cx.listener(move |this, _, _, cx| {
+                        this.open_game_tags_sheet(index, cx);
+                    }),
+                ));
+                d.child(tag_row)
+            })
             .when_some(game.description.clone(), |d, description| {
                 d.child(
                     div()

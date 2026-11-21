@@ -268,6 +268,52 @@ pub(crate) struct HiddenReplyDto {
     pub(crate) hidden: bool,
 }
 
+/// `entry.tags` reply.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct EntryTagsReplyDto {
+    #[serde(rename = "entryID")]
+    pub(crate) entry_id: String,
+    #[serde(default)]
+    pub(crate) tags: Vec<String>,
+}
+
+/// `entry.launchOptions` reply.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LaunchOptionsReplyDto {
+    #[serde(rename = "entryID")]
+    pub(crate) entry_id: String,
+    #[serde(default)]
+    pub(crate) multi_executable: bool,
+    #[serde(default)]
+    pub(crate) executables: Vec<String>,
+    #[serde(default)]
+    pub(crate) last_executable: Option<String>,
+}
+
+/// `library.tags.rename` reply.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TagRenameReplyDto {
+    #[serde(default)]
+    pub(crate) updated: u64,
+    #[serde(default)]
+    pub(crate) old_tag: String,
+    #[serde(default)]
+    pub(crate) new_tag: String,
+}
+
+/// `library.tags.delete` reply.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TagDeleteReplyDto {
+    #[serde(default)]
+    pub(crate) updated: u64,
+    #[serde(default)]
+    pub(crate) tag: String,
+}
+
 /// `folders.read` and every `folders.*` mutation reply
 /// (`Service+Folders.encodeFolders`).
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -355,6 +401,7 @@ pub(crate) struct CandidateDto {
 impl CandidateDto {
     /// Where the file sits inside the folder, which is what distinguishes two
     /// installs that both ship `game.exe`.
+    #[cfg(test)]
     pub(crate) fn location(&self, folder: &str) -> String {
         let path = std::path::Path::new(&self.path);
         let base = std::path::Path::new(folder);
@@ -362,6 +409,28 @@ impl CandidateDto {
             .map(|rest| rest.to_string_lossy().to_string())
             .unwrap_or_else(|_| self.name.clone())
     }
+}
+
+/// Human-friendly relative directory label for `.exe` paths in pickers & choosers.
+/// Returns `(label, is_root)` where root files map to `("根目录", true)`.
+pub(crate) fn relative_directory_label(path: &str, folder: &str) -> (String, bool) {
+    let file_path = std::path::Path::new(path);
+    let base_path = std::path::Path::new(folder);
+    let parent = file_path.parent();
+    if parent == Some(base_path) {
+        return ("根目录".to_owned(), true);
+    }
+    let rel = parent
+        .and_then(|dir| dir.strip_prefix(base_path).ok())
+        .map(|dir| dir.to_string_lossy().to_string())
+        .filter(|text| !text.is_empty())
+        .unwrap_or_else(|| {
+            parent
+                .and_then(|dir| dir.file_name())
+                .map(|name| name.to_string_lossy().to_string())
+                .unwrap_or_else(|| "根目录".to_owned())
+        });
+    (rel, false)
 }
 
 /// One `processes.list` row (`ProcessRecord` in `ProcessService.swift`).
@@ -756,6 +825,14 @@ pub(crate) struct EntryDto {
     #[serde(default)]
     pub(crate) is_launcher: bool,
     #[serde(default)]
+    pub(crate) tags: Vec<String>,
+    #[serde(default)]
+    pub(crate) multi_executable: bool,
+    #[serde(default)]
+    pub(crate) launch_executables: Vec<String>,
+    #[serde(default)]
+    pub(crate) last_executable: Option<String>,
+    #[serde(default)]
     pub(crate) metadata: Option<MetadataDto>,
     #[serde(default)]
     pub(crate) character_images: std::collections::BTreeMap<String, String>,
@@ -945,6 +1022,10 @@ impl EntryDto {
             last_session_ended_at: self.activity.last_session_ended_at(),
             is_launcher: self.is_launcher,
             identity: self.identity.unwrap_or_default(),
+            tags: crate::library_view::normalize_tags(self.tags),
+            multi_executable: self.multi_executable,
+            launch_executables: self.launch_executables,
+            last_executable: self.last_executable,
         }
     }
 }
@@ -1399,6 +1480,10 @@ mod tests {
             icon: Some("/definitely/missing-icon.png".into()),
             hidden: false,
             is_launcher: false,
+            tags: Vec::new(),
+            multi_executable: false,
+            launch_executables: Vec::new(),
+            last_executable: None,
             metadata: None,
             character_images: Default::default(),
             activity: ActivityDto::default(),
@@ -1790,6 +1875,60 @@ mod game_reference_tests {
             .expect("empty selection");
         assert!(empty.engine_id.is_empty());
         assert!(empty.features.is_empty());
+    }
+
+    #[test]
+    fn entry_dto_decodes_tags_and_multi_exe_fields_and_defaults_legacy_records() {
+        let modern: EntryDto = serde_json::from_value(serde_json::json!({
+            "id": "folder:/bottle:/Games/Multi",
+            "name": "Multi",
+            "container": "/bottle",
+            "source": "folder",
+            "folder": "/Games/Multi",
+            "executable": "/Games/Multi/Game.exe",
+            "needsExecutable": false,
+            "tags": ["RPG", "rpg", "  Visual   Novel "],
+            "multiExecutable": true,
+            "launchExecutables": ["/Games/Multi/Game.exe", "/Games/Multi/bin/Config.exe"],
+            "lastExecutable": "/Games/Multi/bin/Config.exe"
+        }))
+        .expect("modern entry");
+        let game = modern.into_game(1);
+        assert_eq!(game.tags, vec!["RPG", "Visual Novel"]);
+        assert!(game.multi_executable);
+        assert_eq!(
+            game.launch_executables,
+            vec!["/Games/Multi/Game.exe", "/Games/Multi/bin/Config.exe"]
+        );
+        assert_eq!(
+            game.last_executable.as_deref(),
+            Some("/Games/Multi/bin/Config.exe")
+        );
+
+        let legacy: EntryDto = serde_json::from_value(serde_json::json!({
+            "id": "pinned:/Games/Single.exe",
+            "name": "Single",
+            "source": "pinned",
+            "executable": "/Games/Single.exe"
+        }))
+        .expect("legacy entry");
+        let legacy_game = legacy.into_game(1);
+        assert!(legacy_game.tags.is_empty());
+        assert!(!legacy_game.multi_executable);
+        assert!(legacy_game.launch_executables.is_empty());
+        assert_eq!(legacy_game.last_executable, None);
+    }
+
+    #[test]
+    fn relative_directory_label_formats_root_and_subdirectories() {
+        assert_eq!(
+            super::relative_directory_label("/Games/Work/Game.exe", "/Games/Work"),
+            ("根目录".to_owned(), true)
+        );
+        assert_eq!(
+            super::relative_directory_label("/Games/Work/bin/Config.exe", "/Games/Work"),
+            ("bin".to_owned(), false)
+        );
     }
 }
 

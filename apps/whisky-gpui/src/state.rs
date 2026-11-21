@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::Duration;
 
 use gpui_kit::base::Transition;
-use gpui_kit::component::input::InputState;
+use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::{prelude::*, *};
 use serde_json::json;
 
@@ -91,6 +91,7 @@ pub(crate) struct ScanState {
 /// `folders.candidates` reply, so the sheet lists them as they arrive.
 #[derive(Clone)]
 pub(crate) struct ExecutablePickerState {
+    pub(crate) game_index: usize,
     pub(crate) container: String,
     pub(crate) entry_id: String,
     pub(crate) title: String,
@@ -98,9 +99,26 @@ pub(crate) struct ExecutablePickerState {
     pub(crate) folder: String,
     /// Play starts the game afterwards; the card menu only records the choice.
     pub(crate) launch_after: bool,
+    pub(crate) multi_select: bool,
+    pub(crate) selected: Vec<String>,
+    pub(crate) return_to_run_settings: bool,
+    pub(crate) terminal: bool,
     pub(crate) loading: bool,
     pub(crate) error: Option<String>,
     pub(crate) candidates: Vec<CandidateDto>,
+}
+
+/// Launch entry chooser shown on launch when a work has multiple `.exe` entry points.
+#[derive(Clone)]
+pub(crate) struct LaunchChooserState {
+    pub(crate) game_index: usize,
+    pub(crate) container: String,
+    pub(crate) entry_id: String,
+    pub(crate) title: String,
+    pub(crate) folder: String,
+    pub(crate) executables: Vec<String>,
+    pub(crate) last_executable: Option<String>,
+    pub(crate) terminal: bool,
 }
 
 impl ScanState {
@@ -159,6 +177,10 @@ pub(crate) enum PreviewSheet {
     Graphics,
     /// Online metadata, custom cover and GameDB recommendations for a card.
     GameInfo(usize),
+    /// Custom tag assignment sheet for one library entry.
+    GameTags(usize),
+    /// Global tag manager across loaded bottles.
+    ManageTags,
 }
 
 /// One `entry.move` request while its target picker is open.
@@ -589,6 +611,8 @@ impl PreviewState {
 #[derive(Clone, PartialEq, Eq)]
 struct ViewKey {
     query: String,
+    tag_filter: library_view::TagFilter,
+    studio_filter: library_view::StudioFilter,
     slot: usize,
     show_hidden: bool,
     revision: u64,
@@ -779,6 +803,31 @@ pub(crate) struct WhiskyApp {
     /// Last committed value per entry, for rolling back optimistic edits.
     rating_edits: PendingEdits<Option<u8>>,
     hidden_edits: PendingEdits<bool>,
+    tag_edits: PendingEdits<Vec<String>>,
+    launch_options_edits: PendingEdits<(bool, Vec<String>, Option<String>)>,
+    pub(crate) tag_filter: library_view::TagFilter,
+    pub(crate) studio_filter: library_view::StudioFilter,
+    pub(crate) group_by_studio: bool,
+    pub(crate) collapsed_studios: BTreeSet<String>,
+    pub(crate) sidebar_studios_expanded: bool,
+    pub(crate) filter_bar_tab: crate::ui_state::FilterBarTab,
+    pub(crate) tag_bar_mode: crate::ui_state::TagBarMode,
+    pub(crate) tag_bar_hint_seen: bool,
+    pub(crate) tag_bar_hint_peeking: bool,
+    tag_bar_hint_generation: u64,
+    tag_bar_hint_scheduled: bool,
+    pub(crate) pull_reveal: library_view::PullRevealState,
+    pull_idle_generation: u64,
+    pub(crate) launch_chooser: Option<LaunchChooserState>,
+    pub(crate) tag_input: Entity<InputState>,
+    tag_input_subscription: Subscription,
+    pub(crate) tag_input_fill: Option<String>,
+    pub(crate) tag_input_refocus: bool,
+    pub(crate) tag_manager_rename_target: Option<String>,
+    pub(crate) tag_manager_input: Entity<InputState>,
+    tag_manager_input_subscription: Subscription,
+    pub(crate) tag_manager_fill: Option<String>,
+    pub(crate) run_settings_target_exe: Option<String>,
     /// The library sidebar's presentation; `Hidden` leaves the toolbar's
     /// reveal button as the way back.
     pub(crate) sidebar: SidebarMode,
@@ -918,9 +967,23 @@ impl WhiskyApp {
         window.focus(&focus_handle, cx);
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("搜索游戏…"));
         let subscription = cx.observe(&search, |_, _, cx| cx.notify());
-        let preview = PreviewState::new(window, cx);
+        let mut preview = PreviewState::new(window, cx);
+        let library_ui = crate::ui_state::load_library_ui_prefs();
+        preview
+            .choices
+            .insert("tag-bar-mode", library_ui.tag_bar_mode.wire().into());
+        let tag_bar_hint_seen = library_ui.tag_bar_hint_seen
+            || demo
+            || crate::ui_state::capture_mode_active();
+        let mut pull_reveal = library_view::PullRevealState::default();
+        if library_ui.tag_bar_mode == crate::ui_state::TagBarMode::AlwaysVisible {
+            pull_reveal.set_open(true);
+        }
         let dependency_search = preview.inputs["dependency-search"].clone();
         let dependency_subscription = cx.observe(&dependency_search, |_, _, cx| cx.notify());
+        let (tag_input, tag_input_subscription) = Self::new_tag_input(String::new(), window, cx);
+        let (tag_manager_input, tag_manager_input_subscription) =
+            Self::new_tag_manager_input(String::new(), window, cx);
         // Polling pauses in the background, so the worker starts from the real
         // activation state rather than assuming the window is focused.
         bridge.set_active(window.is_window_active());
@@ -1051,6 +1114,31 @@ impl WhiskyApp {
             env_fill: None,
             rating_edits: PendingEdits::default(),
             hidden_edits: PendingEdits::default(),
+            tag_edits: PendingEdits::default(),
+            launch_options_edits: PendingEdits::default(),
+            tag_filter: library_view::TagFilter::All,
+            studio_filter: library_view::StudioFilter::All,
+            group_by_studio: library_ui.group_by_studio,
+            collapsed_studios: BTreeSet::new(),
+            sidebar_studios_expanded: false,
+            filter_bar_tab: library_ui.filter_bar_tab,
+            tag_bar_mode: library_ui.tag_bar_mode,
+            tag_bar_hint_seen,
+            tag_bar_hint_peeking: false,
+            tag_bar_hint_generation: 0,
+            tag_bar_hint_scheduled: false,
+            pull_reveal,
+            pull_idle_generation: 0,
+            launch_chooser: None,
+            tag_input,
+            tag_input_subscription,
+            tag_input_fill: None,
+            tag_input_refocus: false,
+            tag_manager_rename_target: None,
+            tag_manager_input,
+            tag_manager_input_subscription,
+            tag_manager_fill: None,
+            run_settings_target_exe: None,
             sidebar: SidebarMode::Expanded,
             sidebar_dirty: false,
             sidebar_collapsed_style: SidebarMode::Icons,
@@ -1151,7 +1239,11 @@ impl WhiskyApp {
         self.game_info = None;
         if matches!(
             self.preview.sheet,
-            Some(PreviewSheet::MoveEntry(_) | PreviewSheet::GameInfo(_))
+            Some(
+                PreviewSheet::MoveEntry(_)
+                    | PreviewSheet::GameInfo(_)
+                    | PreviewSheet::GameTags(_)
+            )
         ) {
             self.preview.sheet = None;
             self.preview.sheet_history.clear();
@@ -1167,6 +1259,11 @@ impl WhiskyApp {
         // `launcher_autostarted` survives: a reconnect must not relaunch what
         // the session already started.
         self.executable_picker = None;
+        self.launch_chooser = None;
+        self.run_settings_target_exe = None;
+        self.tag_manager_rename_target = None;
+        self.tag_edits.clear();
+        self.launch_options_edits.clear();
         self.environments.clear();
         self.environment_error.clear();
         self.env_original = None;
@@ -1593,6 +1690,7 @@ impl WhiskyApp {
                         .collect();
                     self.bottle_entries.insert(container.clone(), games);
                     self.rebuild_entries();
+                    self.maybe_start_tag_bar_hint(cx);
                     self.pending.remove(&index);
                     self.failures.remove(&index);
                     self.maybe_auto_sync_metadata(&container);
@@ -1664,7 +1762,10 @@ impl WhiskyApp {
                 match result {
                     Ok(values) => {
                         self.apply_preferences(&values);
-                        if onboarding { self.onboarding = None; }
+                        if onboarding {
+                            self.onboarding = None;
+                            self.maybe_start_tag_bar_hint(cx);
+                        }
                     }
                     Err(error) => {
                         if onboarding && let Some(state) = &mut self.onboarding {
@@ -1710,6 +1811,90 @@ impl WhiskyApp {
                     self.hidden_edits.succeed(&key);
                     self.update_entry(&container, &entry_id, |game| game.hidden = hidden);
                     self.rebuild_entries();
+                }
+            }
+            BridgeEvent::EntryTagsSaved {
+                container,
+                entry_id,
+                tags,
+            } => {
+                if !self.demo {
+                    let key = entry_key(&container, &entry_id);
+                    self.tag_edits.succeed(&key);
+                    let normalized = library_view::normalize_tags(tags);
+                    self.update_entry(&container, &entry_id, |game| {
+                        game.tags = normalized.clone();
+                    });
+                    self.rebuild_entries();
+                }
+            }
+            BridgeEvent::EntryLaunchOptionsSaved {
+                container,
+                entry_id,
+                multi_executable,
+                executables,
+                last_executable,
+            } => {
+                if !self.demo {
+                    let key = entry_key(&container, &entry_id);
+                    self.launch_options_edits.succeed(&key);
+                    self.update_entry(&container, &entry_id, |game| {
+                        game.multi_executable = multi_executable;
+                        game.launch_executables = executables.clone();
+                        game.last_executable = last_executable.clone();
+                        if !executables.is_empty() {
+                            game.needs_executable = false;
+                            let current_is_valid = game.executable.as_ref().is_some_and(|path| {
+                                path.extension()
+                                    .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
+                            });
+                            if !current_is_valid {
+                                let fallback = last_executable
+                                    .as_deref()
+                                    .unwrap_or(&executables[0]);
+                                game.executable = Some(std::path::PathBuf::from(fallback));
+                            }
+                        }
+                    });
+                    if let Some(chooser) = self.launch_chooser.as_mut()
+                        && chooser.container == container
+                        && chooser.entry_id == entry_id
+                    {
+                        chooser.executables = executables.clone();
+                        chooser.last_executable = last_executable.clone();
+                    }
+                    self.rebuild_entries();
+                }
+            }
+            BridgeEvent::TagRenamed {
+                old_tag,
+                new_tag,
+                updated,
+            } => {
+                if !self.demo {
+                    self.apply_local_tag_rename(&old_tag, &new_tag);
+                    self.rebuild_entries();
+                    if updated > 0 {
+                        self.show_notice(
+                            format!("已将标签「{old_tag}」重命名为「{new_tag}」"),
+                            cx,
+                        );
+                    }
+                }
+            }
+            BridgeEvent::TagDeleted { tag, updated } => {
+                if !self.demo {
+                    self.apply_local_tag_delete(&tag);
+                    self.rebuild_entries();
+                    if updated > 0 {
+                        self.show_notice(format!("已删除标签「{tag}」"), cx);
+                    }
+                }
+            }
+            BridgeEvent::TagOperationFailed { reason } => {
+                if !self.demo {
+                    self.show_notice(reason, cx);
+                    self.refresh_library(cx);
                 }
             }
             BridgeEvent::EntryFailed {
@@ -3036,6 +3221,20 @@ impl WhiskyApp {
                     self.update_entry(container, entry_id, |game| game.hidden = previous);
                 }
             }
+            EntryMutation::Tags => {
+                if let Some(previous) = self.tag_edits.fail(&key) {
+                    self.update_entry(container, entry_id, |game| game.tags = previous.clone());
+                }
+            }
+            EntryMutation::LaunchOptions => {
+                if let Some((multi, exes, last)) = self.launch_options_edits.fail(&key) {
+                    self.update_entry(container, entry_id, |game| {
+                        game.multi_executable = multi;
+                        game.launch_executables = exes.clone();
+                        game.last_executable = last.clone();
+                    });
+                }
+            }
         }
         self.rebuild_entries();
     }
@@ -3326,13 +3525,15 @@ impl WhiskyApp {
     fn view_key(&self, cx: &App) -> ViewKey {
         ViewKey {
             query: self.search.read(cx).value().trim().to_lowercase(),
+            tag_filter: self.tag_filter.clone(),
+            studio_filter: self.studio_filter.clone(),
             slot: self.bottle_slot(),
             show_hidden: self.show_hidden,
             revision: self.library_revision,
         }
     }
 
-    /// Filtered indices, memoised per `(query, scope, hidden filter, revision)`.
+    /// Filtered indices, memoised per `(query, tag_filter, studio_filter, scope, hidden filter, revision)`.
     pub(crate) fn filtered(&self, cx: &App) -> Vec<usize> {
         let key = self.view_key(cx);
         {
@@ -3343,9 +3544,11 @@ impl WhiskyApp {
                 return indices.clone();
             }
         }
-        let indices = library_view::filter_indices(
+        let indices = library_view::filter_indices_with_filters(
             self.games(),
             &key.query,
+            &key.tag_filter,
+            &key.studio_filter,
             key.slot,
             key.show_hidden,
         );
@@ -3569,6 +3772,14 @@ impl WhiskyApp {
                     self.show_notice("请先在侧边栏选择一个容器", cx);
                 }
             }
+            Command::EditTags(i) => self.open_game_tags_sheet(i, cx),
+            Command::ManageTags => self.open_manage_tags_sheet(cx),
+            Command::FilterStudio(i) => {
+                if let Some(studio) = self.game(i).and_then(|game| game.studio_name()) {
+                    self.click_studio_filter(&studio, cx);
+                }
+            }
+            Command::ReplayTagBarHint => self.replay_tag_bar_hint(cx),
             Command::InstallWineRuntime => self.install_wine_runtime(cx),
             Command::InstallRosetta => self.install_rosetta(cx),
             Command::DismissSetup => self.dismiss_setup(cx),
@@ -4389,6 +4600,26 @@ impl WhiskyApp {
                 self.invalidate_view();
                 self.reversed
             }
+            "group-by-studio" => {
+                self.toggle_group_by_studio(cx);
+                return;
+            }
+            "tag-bar-pull-down" => {
+                let next = match self.tag_bar_mode {
+                    crate::ui_state::TagBarMode::PullDown => {
+                        crate::ui_state::TagBarMode::AlwaysVisible
+                    }
+                    crate::ui_state::TagBarMode::AlwaysVisible => {
+                        crate::ui_state::TagBarMode::PullDown
+                    }
+                };
+                self.set_tag_bar_mode(next, cx);
+                return;
+            }
+            "toggle-tag-drawer" => {
+                self.set_tag_drawer_open(!self.pull_reveal.is_open(), cx);
+                return;
+            }
             _ => {
                 let slot = self.preview.toggles.entry(key).or_default();
                 *slot = !*slot;
@@ -4478,6 +4709,10 @@ impl WhiskyApp {
                 self.persist(preferences::COVER_UPSCALE_ENGINE, json!(value), cx);
             }
             "detail-layout" => self.persist(preferences::DETAIL_LAYOUT_STYLE, json!(value), cx),
+            "tag-bar-mode" => {
+                self.set_tag_bar_mode(crate::ui_state::TagBarMode::from_wire(value), cx);
+                return;
+            }
             _ => {}
         }
         cx.notify();
@@ -6122,20 +6357,64 @@ impl WhiskyApp {
         let Some(game) = self.game(index).cloned() else {
             return;
         };
-        let executable = game
-            .executable
-            .as_ref()
-            .filter(|path| {
-                path.extension()
-                    .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
-            })
-            .map(|path| path.to_string_lossy().into_owned());
-        let Some(executable) = executable.filter(|_| !game.container.is_empty()) else {
+        if game.is_steam() || game.container.is_empty() {
+            self.run_settings_target_exe = None;
             self.program_settings = ProgramSettingsPage::default();
             self.program_settings.title = game.title;
             self.program_settings.loading = false;
             self.program_settings.error =
                 Some("该条目没有可用的 .exe，无法编辑程序设置。".to_owned());
+            cx.notify();
+            return;
+        }
+        let valid_exes: Vec<String> = {
+            let mut list: Vec<String> = game
+                .launch_executables
+                .iter()
+                .filter(|path| {
+                    std::path::Path::new(path)
+                        .extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
+                })
+                .cloned()
+                .collect();
+            if let Some(primary) = game
+                .executable
+                .as_ref()
+                .filter(|path| {
+                    path.extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
+                })
+                .map(|path| path.to_string_lossy().into_owned())
+            {
+                if list.is_empty() || !game.multi_executable {
+                    if !list.iter().any(|p| p == &primary) {
+                        list.insert(0, primary);
+                    }
+                }
+            }
+            list
+        };
+        let preferred = self
+            .run_settings_target_exe
+            .as_ref()
+            .filter(|target| valid_exes.iter().any(|p| p == *target))
+            .cloned()
+            .or_else(|| {
+                game.last_executable
+                    .as_ref()
+                    .filter(|target| valid_exes.iter().any(|p| p == *target))
+                    .cloned()
+            })
+            .or_else(|| valid_exes.first().cloned());
+        self.run_settings_target_exe = preferred.clone();
+        let Some(executable) = preferred else {
+            self.program_settings = ProgramSettingsPage::default();
+            self.program_settings.container = Some(game.container);
+            self.program_settings.title = game.title;
+            self.program_settings.loading = false;
+            self.program_settings.history_loading = false;
+            self.program_settings.error = None;
             cx.notify();
             return;
         };
@@ -6152,6 +6431,16 @@ impl WhiskyApp {
             self.bridge.load_engine_selection(&game.container);
         }
         cx.notify();
+    }
+
+    pub(crate) fn select_run_settings_executable(
+        &mut self,
+        index: usize,
+        executable: String,
+        cx: &mut Context<Self>,
+    ) {
+        self.run_settings_target_exe = Some(executable);
+        self.open_program_settings(index, cx);
     }
 
     /// Retry both reads after the sheet failed to open.
@@ -7304,7 +7593,16 @@ impl WhiskyApp {
     /// only reaches this for a folder that has none. `launch_after` starts the
     /// game once a choice is made, which is what Play does; the card menu
     /// records the choice only.
-    fn open_executable_picker(&mut self, index: usize, launch_after: bool, cx: &mut Context<Self>) {
+    pub(crate) fn open_executable_picker(
+        &mut self,
+        index: usize,
+        launch_after: bool,
+        cx: &mut Context<Self>,
+    ) {
+        if self.game(index).is_some_and(|game| game.multi_executable) {
+            self.open_multi_executable_picker(index, launch_after, false, false, cx);
+            return;
+        }
         let details = self.game(index).map(|game| {
             (
                 game.container.clone(),
@@ -7322,16 +7620,73 @@ impl WhiskyApp {
         }
         let folder = folder.to_string_lossy().to_string();
         self.executable_picker = Some(ExecutablePickerState {
+            game_index: index,
             container: container.clone(),
             entry_id,
             title,
             folder: folder.clone(),
             launch_after,
+            multi_select: false,
+            selected: Vec::new(),
+            return_to_run_settings: false,
+            terminal: false,
             loading: true,
             error: None,
             candidates: Vec::new(),
         });
         self.bridge.load_candidates(&container, &folder);
+        self.open_preview_sheet(PreviewSheet::Executable, cx);
+    }
+
+    pub(crate) fn open_multi_executable_picker(
+        &mut self,
+        index: usize,
+        launch_after: bool,
+        return_to_run_settings: bool,
+        terminal: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(game) = self.game(index).cloned() else {
+            return;
+        };
+        if self.demo || game.container.is_empty() {
+            self.show_notice(DEMO_NOTICE, cx);
+            return;
+        }
+        if !game.supports_multi_executable() {
+            self.show_notice("该条目不支持配置多个 .exe 入口", cx);
+            return;
+        }
+        let Some(folder) = game.game_directory() else {
+            self.show_notice("游戏目录不可用，请刷新游戏库后重试。", cx);
+            return;
+        };
+        let mut selected = game.launch_executables.clone();
+        if selected.is_empty()
+            && let Some(exe) = game.executable.as_ref().filter(|path| {
+                path.extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
+            })
+        {
+            selected.push(exe.to_string_lossy().into_owned());
+        }
+        let folder = folder.to_string_lossy().to_string();
+        self.executable_picker = Some(ExecutablePickerState {
+            game_index: index,
+            container: game.container.clone(),
+            entry_id: game.id.clone(),
+            title: game.title.clone(),
+            folder: folder.clone(),
+            launch_after,
+            multi_select: true,
+            selected,
+            return_to_run_settings,
+            terminal,
+            loading: true,
+            error: None,
+            candidates: Vec::new(),
+        });
+        self.bridge.load_candidates(&game.container, &folder);
         self.open_preview_sheet(PreviewSheet::Executable, cx);
     }
 
@@ -7485,6 +7840,16 @@ impl WhiskyApp {
                 // re-registered or the helper rejects it as not_configured.
                 let _ = self.configured.ensure(&container);
                 self.bridge.configure_runtime(&container);
+                if let Some(game) = self.game(index).cloned()
+                    && game.multi_executable
+                {
+                    if game.launch_executables.is_empty() {
+                        self.open_multi_executable_picker(index, true, false, false, cx);
+                    } else {
+                        self.open_launch_chooser(index, false, cx);
+                    }
+                    return;
+                }
                 if self.needs_executable(index) {
                     self.open_executable_picker(index, true, cx);
                     return;
@@ -7717,6 +8082,13 @@ impl WhiskyApp {
         if let PreviewSheet::MoveEntry(index) = sheet {
             self.prepare_move_entry(index, cx);
         }
+        if matches!(sheet, PreviewSheet::GameTags(_)) {
+            self.tag_input_fill = Some(String::new());
+        }
+        if sheet == PreviewSheet::ManageTags {
+            self.tag_manager_rename_target = None;
+            self.tag_manager_fill = Some(String::new());
+        }
         if sheet == PreviewSheet::CreateBottle {
             if self
                 .create_bottle
@@ -7758,7 +8130,23 @@ impl WhiskyApp {
             };
         }
         match self.preview.page {
-            PreviewPage::Library => "游戏库".into(),
+            PreviewPage::Library => {
+                if self.tag_bar_mode == crate::ui_state::TagBarMode::PullDown
+                    && !self.pull_reveal.is_open()
+                    && self.has_active_library_filter()
+                {
+                    let mut parts = Vec::new();
+                    if self.studio_filter.is_active() {
+                        parts.push(format!("厂商：{}", self.studio_filter.display_label()));
+                    }
+                    if self.tag_filter.is_active() {
+                        parts.push(format!("标签：{}", self.tag_filter.display_label()));
+                    }
+                    format!("游戏库 · {}", parts.join(" · ")).into()
+                } else {
+                    "游戏库".into()
+                }
+            }
             PreviewPage::Statistics => "游玩统计".into(),
             PreviewPage::Launchers => "启动器".into(),
             PreviewPage::Bottle => self.bottle_name().to_owned().into(),
@@ -7837,6 +8225,8 @@ impl WhiskyApp {
         self.preview.sheet_history.clear();
         // A dismissed picker chose nothing, so nothing is recorded or launched.
         self.executable_picker = None;
+        self.tag_manager_rename_target = None;
+        self.tag_input_refocus = false;
         self.open_file = None;
         self.game_info = None;
         cx.notify();
@@ -7854,6 +8244,1083 @@ impl WhiskyApp {
                 (slot == 0 || game.bottle == slot) && game.hidden && !game.is_launcher
             })
             .count()
+    }
+
+    fn new_tag_input(
+        value: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> (Entity<InputState>, Subscription) {
+        let input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("添加标签，回车确认…")
+                .default_value(value)
+        });
+        let sub = cx.subscribe(&input, |this, _, event: &InputEvent, cx| {
+            if matches!(event, InputEvent::PressEnter { .. }) {
+                this.submit_tag_input(None, cx);
+            } else if matches!(event, InputEvent::Change) {
+                cx.notify();
+            }
+        });
+        (input, sub)
+    }
+
+    fn new_tag_manager_input(
+        value: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> (Entity<InputState>, Subscription) {
+        let input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("输入新的标签名称…")
+                .default_value(value)
+        });
+        let sub = cx.subscribe(&input, |this, _, event: &InputEvent, cx| {
+            if matches!(event, InputEvent::PressEnter { .. }) {
+                this.confirm_rename_library_tag(None, cx);
+            } else if matches!(event, InputEvent::Change) {
+                cx.notify();
+            }
+        });
+        (input, sub)
+    }
+
+    pub(crate) fn apply_pending_tag_inputs(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(value) = self.tag_input_fill.take() {
+            let (input, sub) = Self::new_tag_input(value, window, cx);
+            self.tag_input = input;
+            self.tag_input_subscription = sub;
+            if std::mem::take(&mut self.tag_input_refocus) {
+                let handle = self.tag_input.read(cx).focus_handle(cx);
+                window.focus(&handle, cx);
+            }
+        }
+        if let Some(value) = self.tag_manager_fill.take() {
+            let (input, sub) = Self::new_tag_manager_input(value, window, cx);
+            self.tag_manager_input = input;
+            self.tag_manager_input_subscription = sub;
+        }
+    }
+
+    pub(crate) fn set_tag_filter(
+        &mut self,
+        filter: library_view::TagFilter,
+        cx: &mut Context<Self>,
+    ) {
+        if self.tag_filter != filter {
+            self.tag_filter = filter;
+            if self.tag_filter.is_active() {
+                self.filter_bar_tab = crate::ui_state::FilterBarTab::Tags;
+                self.dismiss_tag_bar_hint_state();
+                self.pull_reveal.set_open(true);
+                self.save_library_ui_prefs();
+            }
+            self.hovered = None;
+            self.invalidate_view();
+            cx.notify();
+        }
+    }
+
+    pub(crate) fn click_tag_filter(&mut self, tag: &str, multi: bool, cx: &mut Context<Self>) {
+        if multi {
+            self.tag_filter.toggle_multi(tag);
+        } else {
+            self.tag_filter.toggle_single(tag);
+        }
+        if self.tag_filter.is_active() {
+            self.filter_bar_tab = crate::ui_state::FilterBarTab::Tags;
+            self.dismiss_tag_bar_hint_state();
+            self.pull_reveal.set_open(true);
+            self.save_library_ui_prefs();
+        }
+        if self.settings || self.preview.page != PreviewPage::Library {
+            self.settings = false;
+            self.preview.page = PreviewPage::Library;
+        }
+        self.hovered = None;
+        self.invalidate_view();
+        cx.notify();
+    }
+
+    pub(crate) fn clear_tag_filter(&mut self, cx: &mut Context<Self>) {
+        self.set_tag_filter(library_view::TagFilter::All, cx);
+    }
+
+    fn save_library_ui_prefs(&self) {
+        if self.demo {
+            return;
+        }
+        crate::ui_state::save_library_ui_prefs(&crate::ui_state::LibraryUiPrefs {
+            tag_bar_mode: self.tag_bar_mode,
+            tag_bar_hint_seen: self.tag_bar_hint_seen,
+            group_by_studio: self.group_by_studio,
+            filter_bar_tab: self.filter_bar_tab,
+        });
+    }
+
+    pub(crate) fn has_active_library_filter(&self) -> bool {
+        self.tag_filter.is_active() || self.studio_filter.is_active()
+    }
+
+    pub(crate) fn has_filter_bar_content(&self) -> bool {
+        if self.has_active_library_filter() {
+            return true;
+        }
+        let games = self.games();
+        let show_hidden = self.show_hidden();
+        !library_view::collect_tag_counts(games, show_hidden).is_empty()
+            || !library_view::collect_studio_counts(games, self.bottle_slot(), show_hidden)
+                .is_empty()
+    }
+
+    pub(crate) fn effective_filter_bar_tab(
+        &self,
+        has_tags: bool,
+        has_studios: bool,
+    ) -> crate::ui_state::FilterBarTab {
+        match self.filter_bar_tab {
+            crate::ui_state::FilterBarTab::Tags => {
+                if !has_tags && !self.tag_filter.is_active() && has_studios {
+                    crate::ui_state::FilterBarTab::Studios
+                } else {
+                    crate::ui_state::FilterBarTab::Tags
+                }
+            }
+            crate::ui_state::FilterBarTab::Studios => {
+                if !has_studios && !self.studio_filter.is_active() && has_tags {
+                    crate::ui_state::FilterBarTab::Tags
+                } else {
+                    crate::ui_state::FilterBarTab::Studios
+                }
+            }
+        }
+    }
+
+    pub(crate) fn has_library_overlay_open(&self) -> bool {
+        self.detail_open
+            || self.preview.sheet.is_some()
+            || self.settings
+            || self.bridge_dialog
+            || self.bottle_dialog.is_some()
+            || self.engine_dialog.is_some()
+            || self.launch_chooser.is_some()
+            || self.clipboard_prompt.is_some()
+            || self.legacy_fullscreen_prompt.is_some()
+            || self.setup_dialog
+            || self.about
+            || self.onboarding.is_some()
+            || self.capture.panel_open
+    }
+
+    pub(crate) fn filter_bar_target_fraction(&self) -> f32 {
+        if !self.has_filter_bar_content() {
+            return 0.0;
+        }
+        if self.tag_bar_mode == crate::ui_state::TagBarMode::AlwaysVisible {
+            return 1.0;
+        }
+        if self.pull_reveal.is_open() {
+            return 1.0;
+        }
+        let pull = self.pull_reveal.pull_fraction();
+        if pull > 0.0 {
+            return pull;
+        }
+        if self.tag_bar_hint_peeking {
+            return 0.56;
+        }
+        0.0
+    }
+
+    pub(crate) fn set_studio_filter(
+        &mut self,
+        filter: library_view::StudioFilter,
+        cx: &mut Context<Self>,
+    ) {
+        let changed = self.studio_filter != filter;
+        self.studio_filter = filter;
+        if self.studio_filter.is_active() {
+            self.filter_bar_tab = crate::ui_state::FilterBarTab::Studios;
+            self.dismiss_tag_bar_hint_state();
+            self.pull_reveal.set_open(true);
+            self.save_library_ui_prefs();
+        }
+        if changed {
+            self.hovered = None;
+            self.invalidate_view();
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn click_studio_filter(&mut self, studio: &str, cx: &mut Context<Self>) {
+        self.studio_filter.toggle_studio(studio);
+        if self.studio_filter.is_active() {
+            self.filter_bar_tab = crate::ui_state::FilterBarTab::Studios;
+            self.dismiss_tag_bar_hint_state();
+            self.pull_reveal.set_open(true);
+            self.save_library_ui_prefs();
+        }
+        if self.settings || self.preview.page != PreviewPage::Library {
+            self.settings = false;
+            self.preview.page = PreviewPage::Library;
+        }
+        self.hovered = None;
+        self.invalidate_view();
+        cx.notify();
+    }
+
+    pub(crate) fn toggle_unknown_studio_filter(&mut self, cx: &mut Context<Self>) {
+        self.studio_filter.toggle_unknown();
+        if self.studio_filter.is_active() {
+            self.filter_bar_tab = crate::ui_state::FilterBarTab::Studios;
+            self.dismiss_tag_bar_hint_state();
+            self.pull_reveal.set_open(true);
+            self.save_library_ui_prefs();
+        }
+        if self.settings || self.preview.page != PreviewPage::Library {
+            self.settings = false;
+            self.preview.page = PreviewPage::Library;
+        }
+        self.hovered = None;
+        self.invalidate_view();
+        cx.notify();
+    }
+
+    pub(crate) fn clear_studio_filter(&mut self, cx: &mut Context<Self>) {
+        self.set_studio_filter(library_view::StudioFilter::All, cx);
+    }
+
+    pub(crate) fn clear_all_library_filters(&mut self, cx: &mut Context<Self>) {
+        let changed = self.tag_filter.is_active() || self.studio_filter.is_active();
+        self.tag_filter = library_view::TagFilter::All;
+        self.studio_filter = library_view::StudioFilter::All;
+        if changed {
+            self.hovered = None;
+            self.invalidate_view();
+            cx.notify();
+        }
+    }
+
+    pub(crate) fn toggle_group_by_studio(&mut self, cx: &mut Context<Self>) {
+        self.group_by_studio = !self.group_by_studio;
+        self.save_library_ui_prefs();
+        self.hovered = None;
+        self.invalidate_view();
+        cx.notify();
+    }
+
+    pub(crate) fn toggle_studio_collapsed(&mut self, key: &str, cx: &mut Context<Self>) {
+        if !self.collapsed_studios.remove(key) {
+            self.collapsed_studios.insert(key.to_owned());
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn set_filter_bar_tab(
+        &mut self,
+        tab: crate::ui_state::FilterBarTab,
+        cx: &mut Context<Self>,
+    ) {
+        if self.filter_bar_tab != tab {
+            self.filter_bar_tab = tab;
+            self.save_library_ui_prefs();
+            cx.notify();
+        }
+    }
+
+    pub(crate) fn set_tag_bar_mode(
+        &mut self,
+        mode: crate::ui_state::TagBarMode,
+        cx: &mut Context<Self>,
+    ) {
+        self.tag_bar_mode = mode;
+        self.preview.choices.insert("tag-bar-mode", mode.wire().into());
+        self.dismiss_tag_bar_hint_state();
+        match mode {
+            crate::ui_state::TagBarMode::AlwaysVisible => {
+                self.pull_reveal.set_open(true);
+            }
+            crate::ui_state::TagBarMode::PullDown => {
+                self.pull_reveal.set_open(self.has_active_library_filter());
+            }
+        }
+        self.save_library_ui_prefs();
+        cx.notify();
+    }
+
+    pub(crate) fn set_tag_drawer_open(&mut self, open: bool, cx: &mut Context<Self>) {
+        if open {
+            self.dismiss_tag_bar_hint_state();
+            self.tag_bar_hint_seen = true;
+        }
+        self.pull_reveal.set_open(open);
+        self.save_library_ui_prefs();
+        cx.notify();
+    }
+
+    fn dismiss_tag_bar_hint_state(&mut self) {
+        self.tag_bar_hint_generation = self.tag_bar_hint_generation.wrapping_add(1);
+        self.tag_bar_hint_peeking = false;
+    }
+
+    pub(crate) fn dismiss_tag_bar_hint(&mut self, open_drawer: bool, cx: &mut Context<Self>) {
+        self.dismiss_tag_bar_hint_state();
+        self.tag_bar_hint_seen = true;
+        if open_drawer {
+            self.pull_reveal.set_open(true);
+        }
+        self.save_library_ui_prefs();
+        cx.notify();
+    }
+
+    pub(crate) fn handle_library_pull_wheel(
+        &mut self,
+        delta_y: f32,
+        phase: library_view::PullWheelPhase,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if self.tag_bar_mode != crate::ui_state::TagBarMode::PullDown
+            || !self.has_filter_bar_content()
+            || self.has_library_overlay_open()
+            || self.preview.page != PreviewPage::Library
+        {
+            return false;
+        }
+        let handle_index = self.mode.min(self.library_scroll.len() - 1);
+        let scroll_y = f32::from(self.library_scroll[handle_index].offset().y);
+        let now = cx.background_executor().now();
+        let outcome = self.pull_reveal.on_wheel(
+            delta_y,
+            scroll_y,
+            phase,
+            now,
+            self.has_active_library_filter(),
+        );
+        if outcome.opened || (outcome.changed && self.pull_reveal.pull_fraction() > 0.0) {
+            let need_save = !self.tag_bar_hint_seen;
+            if self.tag_bar_hint_peeking || !self.tag_bar_hint_seen {
+                self.dismiss_tag_bar_hint_state();
+                self.tag_bar_hint_seen = true;
+                if need_save {
+                    self.save_library_ui_prefs();
+                }
+            }
+        }
+        if outcome.needs_idle_reset {
+            self.pull_idle_generation = self.pull_idle_generation.wrapping_add(1);
+            let generation = self.pull_idle_generation;
+            cx.spawn(async move |this, cx| {
+                cx.background_executor()
+                    .timer(Duration::from_millis(360))
+                    .await;
+                let _ = this.update(cx, |this, cx| {
+                    if !this.quitting
+                        && this.pull_idle_generation == generation
+                        && this.pull_reveal.reset_idle_pull()
+                    {
+                        cx.notify();
+                    }
+                });
+            })
+            .detach();
+        }
+        if outcome.changed {
+            cx.notify();
+        }
+        outcome.consume
+    }
+
+    pub(crate) fn maybe_start_tag_bar_hint(&mut self, cx: &mut Context<Self>) {
+        if self.demo
+            || crate::ui_state::capture_mode_active()
+            || self.tag_bar_mode != crate::ui_state::TagBarMode::PullDown
+            || self.tag_bar_hint_seen
+            || self.tag_bar_hint_scheduled
+            || self.pull_reveal.is_open()
+            || self.has_library_overlay_open()
+            || self.preview.page != PreviewPage::Library
+            || !self.has_filter_bar_content()
+        {
+            return;
+        }
+        self.tag_bar_hint_scheduled = true;
+        self.launch_tag_bar_hint_sequence(Duration::from_millis(450), cx);
+    }
+
+    pub(crate) fn replay_tag_bar_hint(&mut self, cx: &mut Context<Self>) {
+        self.settings = false;
+        self.preview.page = PreviewPage::Library;
+        if self.tag_bar_mode != crate::ui_state::TagBarMode::PullDown {
+            self.tag_bar_mode = crate::ui_state::TagBarMode::PullDown;
+            self.preview.choices.insert(
+                "tag-bar-mode",
+                crate::ui_state::TagBarMode::PullDown.wire().into(),
+            );
+        }
+        self.pull_reveal.set_open(false);
+        self.dismiss_tag_bar_hint_state();
+        self.tag_bar_hint_scheduled = true;
+        self.save_library_ui_prefs();
+        if !self.has_filter_bar_content() {
+            self.show_notice("当前游戏库暂无标签或厂商信息", cx);
+            cx.notify();
+            return;
+        }
+        self.launch_tag_bar_hint_sequence(Duration::from_millis(220), cx);
+        cx.notify();
+    }
+
+    fn launch_tag_bar_hint_sequence(
+        &mut self,
+        initial_delay: Duration,
+        cx: &mut Context<Self>,
+    ) {
+        self.tag_bar_hint_generation = self.tag_bar_hint_generation.wrapping_add(1);
+        let generation = self.tag_bar_hint_generation;
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(initial_delay).await;
+            let started = this
+                .update(cx, |this, cx| {
+                    if this.quitting
+                        || this.tag_bar_hint_generation != generation
+                        || this.tag_bar_mode != crate::ui_state::TagBarMode::PullDown
+                        || this.pull_reveal.is_open()
+                        || this.has_library_overlay_open()
+                        || this.preview.page != PreviewPage::Library
+                        || !this.has_filter_bar_content()
+                    {
+                        return false;
+                    }
+                    this.tag_bar_hint_peeking = true;
+                    cx.notify();
+                    true
+                })
+                .unwrap_or(false);
+            if !started {
+                return;
+            }
+            cx.background_executor()
+                .timer(Duration::from_millis(2800))
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                if this.quitting || this.tag_bar_hint_generation != generation {
+                    return;
+                }
+                this.tag_bar_hint_peeking = false;
+                this.tag_bar_hint_seen = true;
+                this.save_library_ui_prefs();
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub(crate) fn set_game_tags(
+        &mut self,
+        index: usize,
+        tags: Vec<String>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(game) = self.game(index).cloned() else {
+            return;
+        };
+        if self.demo || game.container.is_empty() {
+            self.show_notice(DEMO_NOTICE, cx);
+            return;
+        }
+        let normalized = library_view::normalize_tags(tags);
+        let key = entry_key(&game.container, &game.id);
+        self.tag_edits.begin(&key, game.tags);
+        self.update_entry(&game.container, &game.id, |entry| {
+            entry.tags = normalized.clone();
+        });
+        if !self.bottle_entries.contains_key(&game.container) {
+            for entry in self
+                .entries
+                .iter_mut()
+                .filter(|e| e.container == game.container && e.id == game.id)
+            {
+                entry.tags = normalized.clone();
+            }
+            self.invalidate_view();
+        } else {
+            self.rebuild_entries();
+        }
+        self.bridge.set_tags(&game.container, &game.id, normalized);
+        cx.notify();
+    }
+
+    pub(crate) fn toggle_game_tag(&mut self, index: usize, tag: &str, cx: &mut Context<Self>) {
+        let Some(clean) = library_view::normalize_tag(tag) else {
+            return;
+        };
+        let Some(game) = self.game(index).cloned() else {
+            return;
+        };
+        let mut next = game.tags.clone();
+        if game.has_tag(&clean) {
+            let needle = clean.to_lowercase();
+            next.retain(|item| item.to_lowercase() != needle);
+        } else {
+            next.push(clean);
+        }
+        self.set_game_tags(index, next, cx);
+    }
+
+    pub(crate) fn add_game_tags_from_text(
+        &mut self,
+        index: usize,
+        raw: &str,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let parsed: Vec<String> = raw
+            .split([',', '，', '、'])
+            .filter_map(library_view::normalize_tag)
+            .collect();
+        if parsed.is_empty() {
+            return false;
+        }
+        let Some(game) = self.game(index).cloned() else {
+            return false;
+        };
+        let mut next = game.tags;
+        next.extend(parsed);
+        self.set_game_tags(index, next, cx);
+        true
+    }
+
+    pub(crate) fn submit_tag_input(
+        &mut self,
+        window: Option<&mut Window>,
+        cx: &mut Context<Self>,
+    ) {
+        let target_index = match self.preview.sheet {
+            Some(PreviewSheet::GameTags(idx)) => Some(idx),
+            _ if self.detail_open => self.detail,
+            _ => None,
+        };
+        let Some(index) = target_index else {
+            return;
+        };
+        let raw = self.tag_input.read(cx).value().to_string();
+        if self.add_game_tags_from_text(index, &raw, cx) {
+            if let Some(window) = window {
+                self.tag_input
+                    .update(cx, |state, cx| state.set_value(String::new(), window, cx));
+            } else {
+                self.tag_input_fill = Some(String::new());
+                self.tag_input_refocus = true;
+            }
+            cx.notify();
+        }
+    }
+
+    pub(crate) fn open_game_tags_sheet(&mut self, index: usize, cx: &mut Context<Self>) {
+        if self.demo {
+            self.show_notice(DEMO_NOTICE, cx);
+            return;
+        }
+        if self.game(index).is_some() {
+            self.open_preview_sheet(PreviewSheet::GameTags(index), cx);
+        }
+    }
+
+    pub(crate) fn open_manage_tags_sheet(&mut self, cx: &mut Context<Self>) {
+        if self.demo {
+            self.show_notice(DEMO_NOTICE, cx);
+            return;
+        }
+        self.open_preview_sheet(PreviewSheet::ManageTags, cx);
+    }
+
+    pub(crate) fn begin_rename_library_tag(
+        &mut self,
+        tag: &str,
+        window: Option<&mut Window>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(clean) = library_view::normalize_tag(tag) else {
+            return;
+        };
+        self.tag_manager_rename_target = Some(clean.clone());
+        if let Some(window) = window {
+            self.tag_manager_input
+                .update(cx, |state, cx| state.set_value(clean, window, cx));
+        } else {
+            self.tag_manager_fill = Some(clean);
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn cancel_rename_library_tag(&mut self, cx: &mut Context<Self>) {
+        self.tag_manager_rename_target = None;
+        self.tag_manager_fill = Some(String::new());
+        cx.notify();
+    }
+
+    pub(crate) fn confirm_rename_library_tag(
+        &mut self,
+        window: Option<&mut Window>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(old_tag) = self.tag_manager_rename_target.clone() else {
+            return;
+        };
+        let new_tag = self.tag_manager_input.read(cx).value().to_string();
+        self.rename_library_tag(&old_tag, &new_tag, cx);
+        if let Some(window) = window {
+            self.tag_manager_input
+                .update(cx, |state, cx| state.set_value(String::new(), window, cx));
+        } else {
+            self.tag_manager_fill = Some(String::new());
+        }
+    }
+
+    pub(crate) fn rename_library_tag(
+        &mut self,
+        old_tag: &str,
+        new_tag: &str,
+        cx: &mut Context<Self>,
+    ) {
+        if self.demo {
+            self.show_notice(DEMO_NOTICE, cx);
+            return;
+        }
+        let Some(old_clean) = library_view::normalize_tag(old_tag) else {
+            return;
+        };
+        let Some(new_clean) = library_view::normalize_tag(new_tag) else {
+            self.show_notice("标签名不能为空", cx);
+            return;
+        };
+        self.tag_manager_rename_target = None;
+        self.apply_local_tag_rename(&old_clean, &new_clean);
+        if self.bottle_entries.is_empty() {
+            self.invalidate_view();
+        } else {
+            self.rebuild_entries();
+        }
+        self.bridge.rename_tag(None, &old_clean, &new_clean);
+        cx.notify();
+    }
+
+    pub(crate) fn delete_library_tag(&mut self, tag: &str, cx: &mut Context<Self>) {
+        if self.demo {
+            self.show_notice(DEMO_NOTICE, cx);
+            return;
+        }
+        let Some(clean) = library_view::normalize_tag(tag) else {
+            return;
+        };
+        if self
+            .tag_manager_rename_target
+            .as_ref()
+            .is_some_and(|target| target.to_lowercase() == clean.to_lowercase())
+        {
+            self.tag_manager_rename_target = None;
+        }
+        self.apply_local_tag_delete(&clean);
+        if self.bottle_entries.is_empty() {
+            self.invalidate_view();
+        } else {
+            self.rebuild_entries();
+        }
+        self.bridge.delete_tag(None, &clean);
+        cx.notify();
+    }
+
+    fn apply_local_tag_rename(&mut self, old_tag: &str, new_tag: &str) {
+        let Some(old_clean) = library_view::normalize_tag(old_tag) else {
+            return;
+        };
+        let Some(new_clean) = library_view::normalize_tag(new_tag) else {
+            return;
+        };
+        let old_key = old_clean.to_lowercase();
+        let update_tags = |tags: &mut Vec<String>| {
+            if tags.iter().any(|t| t.to_lowercase() == old_key) {
+                let mapped: Vec<String> = tags
+                    .iter()
+                    .map(|t| {
+                        if t.to_lowercase() == old_key {
+                            new_clean.clone()
+                        } else {
+                            t.clone()
+                        }
+                    })
+                    .collect();
+                *tags = library_view::normalize_tags(mapped);
+            }
+        };
+        for games in self.bottle_entries.values_mut() {
+            for game in games.iter_mut() {
+                update_tags(&mut game.tags);
+            }
+        }
+        for game in &mut self.entries {
+            update_tags(&mut game.tags);
+        }
+        if let library_view::TagFilter::Tags(active) = &mut self.tag_filter
+            && active.iter().any(|t| t.to_lowercase() == old_key)
+        {
+            let mapped: Vec<String> = active
+                .iter()
+                .map(|t| {
+                    if t.to_lowercase() == old_key {
+                        new_clean.clone()
+                    } else {
+                        t.clone()
+                    }
+                })
+                .collect();
+            let normalized = library_view::normalize_tags(mapped);
+            if normalized.is_empty() {
+                self.tag_filter = library_view::TagFilter::All;
+            } else {
+                *active = normalized;
+            }
+        }
+    }
+
+    fn apply_local_tag_delete(&mut self, tag: &str) {
+        let Some(clean) = library_view::normalize_tag(tag) else {
+            return;
+        };
+        let target_key = clean.to_lowercase();
+        for games in self.bottle_entries.values_mut() {
+            for game in games.iter_mut() {
+                game.tags.retain(|t| t.to_lowercase() != target_key);
+            }
+        }
+        for game in &mut self.entries {
+            game.tags.retain(|t| t.to_lowercase() != target_key);
+        }
+        if let library_view::TagFilter::Tags(active) = &mut self.tag_filter {
+            active.retain(|t| t.to_lowercase() != target_key);
+            if active.is_empty() {
+                self.tag_filter = library_view::TagFilter::All;
+            }
+        }
+    }
+
+    pub(crate) fn set_multi_executable(
+        &mut self,
+        index: usize,
+        enabled: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(game) = self.game(index).cloned() else {
+            return;
+        };
+        if self.demo || game.container.is_empty() {
+            self.show_notice(DEMO_NOTICE, cx);
+            return;
+        }
+        if !game.supports_multi_executable() {
+            self.show_notice("Steam 条目或缺少目录的游戏不支持多 exe 入口", cx);
+            return;
+        }
+        let key = entry_key(&game.container, &game.id);
+        self.launch_options_edits.begin(
+            &key,
+            (
+                game.multi_executable,
+                game.launch_executables.clone(),
+                game.last_executable.clone(),
+            ),
+        );
+        self.update_entry(&game.container, &game.id, |entry| {
+            entry.multi_executable = enabled;
+        });
+        if !self.bottle_entries.contains_key(&game.container) {
+            for entry in self
+                .entries
+                .iter_mut()
+                .filter(|e| e.container == game.container && e.id == game.id)
+            {
+                entry.multi_executable = enabled;
+            }
+            self.invalidate_view();
+        } else {
+            self.rebuild_entries();
+        }
+        if let Some(picker) = self.executable_picker.as_mut()
+            && picker.container == game.container
+            && picker.entry_id == game.id
+        {
+            picker.multi_select = enabled;
+            if enabled && picker.selected.is_empty() {
+                if !game.launch_executables.is_empty() {
+                    picker.selected = game.launch_executables.clone();
+                } else if let Some(exe) = game.executable.as_ref().filter(|path| {
+                    path.extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
+                }) {
+                    picker.selected.push(exe.to_string_lossy().into_owned());
+                }
+            }
+        }
+        self.bridge.set_launch_options(
+            &game.container,
+            &game.id,
+            enabled,
+            game.launch_executables,
+            None,
+        );
+        cx.notify();
+    }
+
+    pub(crate) fn toggle_picker_executable(&mut self, path: &str, cx: &mut Context<Self>) {
+        let Some(picker) = self.executable_picker.as_mut() else {
+            return;
+        };
+        if !picker.multi_select {
+            return;
+        }
+        if let Some(pos) = picker.selected.iter().position(|item| item == path) {
+            picker.selected.remove(pos);
+        } else {
+            picker.selected.push(path.to_owned());
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn cancel_executable_picker(&mut self, cx: &mut Context<Self>) {
+        let return_index = self
+            .executable_picker
+            .as_ref()
+            .filter(|picker| picker.return_to_run_settings)
+            .map(|picker| picker.game_index);
+        self.executable_picker = None;
+        if let Some(index) = return_index {
+            self.preview.sheet = Some(PreviewSheet::RunSettings(index));
+            self.preview.sheet_history.clear();
+            self.open_program_settings(index, cx);
+        } else {
+            self.preview.sheet = None;
+            self.preview.sheet_history.clear();
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn confirm_multi_executable_picker(&mut self, cx: &mut Context<Self>) {
+        let Some(picker) = self.executable_picker.as_ref() else {
+            return;
+        };
+        if !picker.multi_select {
+            return;
+        }
+        let mut seen = std::collections::HashSet::new();
+        let selected: Vec<String> = picker
+            .selected
+            .iter()
+            .filter(|path| seen.insert((*path).clone()))
+            .cloned()
+            .collect();
+        if selected.is_empty() {
+            self.show_notice("请至少勾选一个 .exe 启动入口", cx);
+            return;
+        }
+        let picker = self.executable_picker.take().unwrap();
+        let prev = self.game(picker.game_index).map(|g| {
+            (
+                g.multi_executable,
+                g.launch_executables.clone(),
+                g.last_executable.clone(),
+            )
+        });
+        let key = entry_key(&picker.container, &picker.entry_id);
+        if let Some(prev) = prev {
+            self.launch_options_edits.begin(&key, prev);
+        }
+        let next_last = self
+            .game(picker.game_index)
+            .and_then(|g| g.last_executable.clone())
+            .filter(|last| selected.iter().any(|item| item == last));
+        let fallback_exe = next_last.clone().unwrap_or_else(|| selected[0].clone());
+        let apply_game = |entry: &mut Game| {
+            entry.multi_executable = true;
+            entry.launch_executables = selected.clone();
+            entry.last_executable = next_last.clone();
+            entry.needs_executable = false;
+            let current_valid = entry.executable.as_ref().is_some_and(|path| {
+                let text = path.to_string_lossy();
+                selected.iter().any(|item| item == text.as_ref())
+            });
+            if !current_valid {
+                entry.executable = Some(std::path::PathBuf::from(&fallback_exe));
+            }
+        };
+        self.update_entry(&picker.container, &picker.entry_id, apply_game);
+        if !self.bottle_entries.contains_key(&picker.container) {
+            for entry in self
+                .entries
+                .iter_mut()
+                .filter(|e| e.container == picker.container && e.id == picker.entry_id)
+            {
+                apply_game(entry);
+            }
+            self.invalidate_view();
+        } else {
+            self.rebuild_entries();
+        }
+        self.bridge.set_launch_options(
+            &picker.container,
+            &picker.entry_id,
+            true,
+            selected.clone(),
+            None,
+        );
+        if picker.return_to_run_settings {
+            self.preview.sheet = Some(PreviewSheet::RunSettings(picker.game_index));
+            self.preview.sheet_history.clear();
+            self.open_program_settings(picker.game_index, cx);
+            cx.notify();
+            return;
+        }
+        self.preview.sheet = None;
+        self.preview.sheet_history.clear();
+        if picker.launch_after {
+            let _ = self.configured.ensure(&picker.container);
+            self.bridge.configure_runtime(&picker.container);
+            if selected.len() == 1 {
+                self.launch_entry_directly(
+                    &picker.container,
+                    &picker.entry_id,
+                    &picker.title,
+                    &selected[0],
+                    cx,
+                );
+            } else {
+                self.launch_chooser = Some(LaunchChooserState {
+                    game_index: picker.game_index,
+                    container: picker.container,
+                    entry_id: picker.entry_id,
+                    title: picker.title,
+                    folder: picker.folder,
+                    executables: selected,
+                    last_executable: next_last,
+                    terminal: picker.terminal,
+                });
+            }
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn open_launch_chooser(
+        &mut self,
+        index: usize,
+        terminal: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(game) = self.game(index).cloned() else {
+            return;
+        };
+        if game.launch_executables.is_empty() {
+            self.open_multi_executable_picker(index, true, false, terminal, cx);
+            return;
+        }
+        let folder = game
+            .game_directory()
+            .map(|dir| dir.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        self.launch_chooser = Some(LaunchChooserState {
+            game_index: index,
+            container: game.container,
+            entry_id: game.id,
+            title: game.title,
+            folder,
+            executables: game.launch_executables,
+            last_executable: game.last_executable,
+            terminal,
+        });
+        self.hovered = None;
+        cx.notify();
+    }
+
+    pub(crate) fn dismiss_launch_chooser(&mut self, cx: &mut Context<Self>) {
+        self.launch_chooser = None;
+        cx.notify();
+    }
+
+    pub(crate) fn edit_launch_chooser_executables(&mut self, cx: &mut Context<Self>) {
+        let Some(chooser) = self.launch_chooser.take() else {
+            return;
+        };
+        self.open_multi_executable_picker(chooser.game_index, true, false, chooser.terminal, cx);
+    }
+
+    pub(crate) fn launch_selected_entry(
+        &mut self,
+        executable: String,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(chooser) = self.launch_chooser.take() else {
+            return;
+        };
+        let _ = self.configured.ensure(&chooser.container);
+        self.bridge.configure_runtime(&chooser.container);
+        let apply_last = |entry: &mut Game| {
+            entry.last_executable = Some(executable.clone());
+            entry.needs_executable = false;
+        };
+        self.update_entry(&chooser.container, &chooser.entry_id, apply_last);
+        if !self.bottle_entries.contains_key(&chooser.container) {
+            for entry in self
+                .entries
+                .iter_mut()
+                .filter(|e| e.container == chooser.container && e.id == chooser.entry_id)
+            {
+                apply_last(entry);
+            }
+            self.invalidate_view();
+        } else {
+            self.rebuild_entries();
+        }
+        self.launch_entry_directly(
+            &chooser.container,
+            &chooser.entry_id,
+            &chooser.title,
+            &executable,
+            cx,
+        );
+        cx.notify();
+    }
+
+    fn launch_entry_directly(
+        &mut self,
+        container: &str,
+        entry_id: &str,
+        title: &str,
+        executable: &str,
+        cx: &mut Context<Self>,
+    ) {
+        let exe_name = std::path::Path::new(executable)
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_else(|| executable.to_owned());
+        self.show_notice(format!("正在启动 {title} · {exe_name}"), cx);
+        self.runtime.set_state(entry_id, RuntimeState::Preparing);
+        self.bridge.launch(container, entry_id, Some(executable));
+        if !cfg!(target_os = "linux")
+            && self.capture.panel_open
+            && self
+                .capture
+                .context
+                .as_ref()
+                .is_some_and(|c| c.0 == container && c.1 == entry_id)
+        {
+            self.capture.on_game_launched(
+                &self.bridge,
+                self.translation_page.provider_probe_pending(),
+                cx,
+            );
+        }
     }
 }
 

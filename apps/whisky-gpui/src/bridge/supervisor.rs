@@ -29,15 +29,14 @@ use super::{
     dto::{
         ActivityDto, AudioResultDto, BottleOperationResultDto, BridgeFailureDto, CandidatesDto,
         ChecksReplyDto, ConfigChangeDto, Container, ContainerList, DescribeResponse,
-        DiagnosticsReportDto,
-        EntryDto, EntryList, FoldersDto, GameConfigApplyReplyDto, GameConfigMatchReplyDto,
-        GptkStatusDto, HiddenReplyDto, JobDto, JobStartDto, KillReplyDto, LaunchReplyDto,
-        LaunchersDto, LibraryPageDto,
-        MetadataSearchGroupDto, MetadataSearchReplyDto, MetadataSyncReplyDto, PathReplyDto,
-        PreferencesSchemaDto, SetupStatusDto,
-        ProcessDto, ProgramDto, RUNTIME_METHODS, RUNTIME_SESSION_METHODS, RuntimeEntryDto,
-        RuntimeEventBatchDto, RuntimeEventPayloadDto, RuntimeSnapshotDto, ScanResultDto,
-        SystemInfoDto, WineEngineListDto, WineEngineSelectionDto,
+        DiagnosticsReportDto, EntryDto, EntryList, EntryTagsReplyDto, FoldersDto,
+        GameConfigApplyReplyDto, GameConfigMatchReplyDto, GptkStatusDto, HiddenReplyDto, JobDto,
+        JobStartDto, KillReplyDto, LaunchOptionsReplyDto, LaunchReplyDto, LaunchersDto,
+        LibraryPageDto, MetadataSearchGroupDto, MetadataSearchReplyDto, MetadataSyncReplyDto,
+        PathReplyDto, PreferencesSchemaDto, ProcessDto, ProgramDto, RUNTIME_METHODS,
+        RUNTIME_SESSION_METHODS, RuntimeEntryDto, RuntimeEventBatchDto, RuntimeEventPayloadDto,
+        RuntimeSnapshotDto, ScanResultDto, SetupStatusDto, SystemInfoDto, TagDeleteReplyDto,
+        TagRenameReplyDto, WineEngineListDto, WineEngineSelectionDto,
     },
 };
 use crate::config::{self, ConfigField};
@@ -77,6 +76,8 @@ const PARK: Duration = Duration::from_secs(3_600);
 pub(crate) enum EntryMutation {
     Rating,
     Hidden,
+    Tags,
+    LaunchOptions,
 }
 
 /// Which `programs.*` write a `ProgramFailed` event names, so the UI rolls
@@ -482,6 +483,35 @@ pub(crate) enum BridgeEvent {
         entry_id: String,
         hidden: bool,
     },
+    /// `entry.tags` reply.
+    EntryTagsSaved {
+        container: String,
+        entry_id: String,
+        tags: Vec<String>,
+    },
+    /// `entry.launchOptions` reply.
+    EntryLaunchOptionsSaved {
+        container: String,
+        entry_id: String,
+        multi_executable: bool,
+        executables: Vec<String>,
+        last_executable: Option<String>,
+    },
+    /// `library.tags.rename` reply.
+    TagRenamed {
+        old_tag: String,
+        new_tag: String,
+        updated: u64,
+    },
+    /// `library.tags.delete` reply.
+    TagDeleted {
+        tag: String,
+        updated: u64,
+    },
+    /// `library.tags.rename` or `library.tags.delete` failure.
+    TagOperationFailed {
+        reason: String,
+    },
     /// A per-entry mutation was rejected; the UI rolls back its optimistic
     /// value and reuses the toast for `reason`.
     EntryFailed {
@@ -761,6 +791,27 @@ enum Command {
         container: String,
         entry_id: String,
         hidden: bool,
+    },
+    SetTags {
+        container: String,
+        entry_id: String,
+        tags: Vec<String>,
+    },
+    RenameTag {
+        container: Option<String>,
+        old_tag: String,
+        new_tag: String,
+    },
+    DeleteTag {
+        container: Option<String>,
+        tag: String,
+    },
+    SetLaunchOptions {
+        container: String,
+        entry_id: String,
+        multi_executable: bool,
+        executables: Vec<String>,
+        last_executable: Option<Option<String>>,
     },
     LoadPreferences,
     SaveMetadataPreferences { values: serde_json::Value, onboarding: bool },
@@ -1211,6 +1262,46 @@ impl BridgeSupervisor {
             container: container.to_owned(),
             entry_id: entry_id.to_owned(),
             hidden,
+        });
+    }
+
+    pub(crate) fn set_tags(&self, container: &str, entry_id: &str, tags: Vec<String>) {
+        let _ = self.commands.send(Command::SetTags {
+            container: container.to_owned(),
+            entry_id: entry_id.to_owned(),
+            tags,
+        });
+    }
+
+    pub(crate) fn rename_tag(&self, container: Option<&str>, old_tag: &str, new_tag: &str) {
+        let _ = self.commands.send(Command::RenameTag {
+            container: container.map(str::to_owned),
+            old_tag: old_tag.to_owned(),
+            new_tag: new_tag.to_owned(),
+        });
+    }
+
+    pub(crate) fn delete_tag(&self, container: Option<&str>, tag: &str) {
+        let _ = self.commands.send(Command::DeleteTag {
+            container: container.map(str::to_owned),
+            tag: tag.to_owned(),
+        });
+    }
+
+    pub(crate) fn set_launch_options(
+        &self,
+        container: &str,
+        entry_id: &str,
+        multi_executable: bool,
+        executables: Vec<String>,
+        last_executable: Option<Option<String>>,
+    ) {
+        let _ = self.commands.send(Command::SetLaunchOptions {
+            container: container.to_owned(),
+            entry_id: entry_id.to_owned(),
+            multi_executable,
+            executables,
+            last_executable,
         });
     }
 
@@ -2760,6 +2851,7 @@ fn run_with_spawner_and_backoff<F, B>(
                     let mut params = json!({ "container": container, "entryID": entry_id });
                     if let Some(executable) = &executable {
                         params["executable"] = json!(executable);
+                        cache = None;
                     }
                     if let Err(failure) = runtime_launch(
                         &mut client,
@@ -2899,6 +2991,174 @@ fn run_with_spawner_and_backoff<F, B>(
                             &events,
                             BridgeEvent::EntryFailed {
                                 mutation: EntryMutation::Hidden,
+                                container,
+                                entry_id,
+                                reason,
+                            },
+                        ),
+                        Err(CallFailure::Session(reason)) => reconnect = Some(reason),
+                    }
+                }
+                Some(Command::SetTags {
+                    container,
+                    entry_id,
+                    tags,
+                }) => {
+                    let params = json!({
+                        "container": container,
+                        "entryID": entry_id,
+                        "tags": tags,
+                    });
+                    match client.call("entry.tags", params).map_err(classify) {
+                        Ok(value) => match serde_json::from_value::<EntryTagsReplyDto>(value) {
+                            Ok(reply) => {
+                                cache = None;
+                                emit_event(
+                                    &events,
+                                    BridgeEvent::EntryTagsSaved {
+                                        container,
+                                        entry_id: reply.entry_id,
+                                        tags: reply.tags,
+                                    },
+                                );
+                            }
+                            Err(error) => emit_event(
+                                &events,
+                                BridgeEvent::EntryFailed {
+                                    mutation: EntryMutation::Tags,
+                                    container,
+                                    entry_id,
+                                    reason: format!("invalid tags payload: {error}"),
+                                },
+                            ),
+                        },
+                        Err(CallFailure::Remote(reason)) => emit_event(
+                            &events,
+                            BridgeEvent::EntryFailed {
+                                mutation: EntryMutation::Tags,
+                                container,
+                                entry_id,
+                                reason,
+                            },
+                        ),
+                        Err(CallFailure::Session(reason)) => reconnect = Some(reason),
+                    }
+                }
+                Some(Command::RenameTag {
+                    container,
+                    old_tag,
+                    new_tag,
+                }) => {
+                    let mut params = json!({
+                        "oldTag": old_tag,
+                        "newTag": new_tag,
+                    });
+                    if let Some(container) = container {
+                        params["container"] = json!(container);
+                    }
+                    match client.call("library.tags.rename", params).map_err(classify) {
+                        Ok(value) => match serde_json::from_value::<TagRenameReplyDto>(value) {
+                            Ok(reply) => {
+                                cache = None;
+                                emit_event(
+                                    &events,
+                                    BridgeEvent::TagRenamed {
+                                        old_tag: reply.old_tag,
+                                        new_tag: reply.new_tag,
+                                        updated: reply.updated,
+                                    },
+                                );
+                            }
+                            Err(error) => emit_event(
+                                &events,
+                                BridgeEvent::TagOperationFailed {
+                                    reason: format!("invalid rename tag payload: {error}"),
+                                },
+                            ),
+                        },
+                        Err(CallFailure::Remote(reason)) => {
+                            emit_event(&events, BridgeEvent::TagOperationFailed { reason })
+                        }
+                        Err(CallFailure::Session(reason)) => reconnect = Some(reason),
+                    }
+                }
+                Some(Command::DeleteTag { container, tag }) => {
+                    let mut params = json!({ "tag": tag });
+                    if let Some(container) = container {
+                        params["container"] = json!(container);
+                    }
+                    match client.call("library.tags.delete", params).map_err(classify) {
+                        Ok(value) => match serde_json::from_value::<TagDeleteReplyDto>(value) {
+                            Ok(reply) => {
+                                cache = None;
+                                emit_event(
+                                    &events,
+                                    BridgeEvent::TagDeleted {
+                                        tag: reply.tag,
+                                        updated: reply.updated,
+                                    },
+                                );
+                            }
+                            Err(error) => emit_event(
+                                &events,
+                                BridgeEvent::TagOperationFailed {
+                                    reason: format!("invalid delete tag payload: {error}"),
+                                },
+                            ),
+                        },
+                        Err(CallFailure::Remote(reason)) => {
+                            emit_event(&events, BridgeEvent::TagOperationFailed { reason })
+                        }
+                        Err(CallFailure::Session(reason)) => reconnect = Some(reason),
+                    }
+                }
+                Some(Command::SetLaunchOptions {
+                    container,
+                    entry_id,
+                    multi_executable,
+                    executables,
+                    last_executable,
+                }) => {
+                    let mut params = json!({
+                        "container": container,
+                        "entryID": entry_id,
+                        "multiExecutable": multi_executable,
+                        "executables": executables,
+                    });
+                    if let Some(last) = last_executable {
+                        params["lastExecutable"] = json!(last);
+                    }
+                    match client.call("entry.launchOptions", params).map_err(classify) {
+                        Ok(value) => {
+                            match serde_json::from_value::<LaunchOptionsReplyDto>(value) {
+                                Ok(reply) => {
+                                    cache = None;
+                                    emit_event(
+                                        &events,
+                                        BridgeEvent::EntryLaunchOptionsSaved {
+                                            container,
+                                            entry_id: reply.entry_id,
+                                            multi_executable: reply.multi_executable,
+                                            executables: reply.executables,
+                                            last_executable: reply.last_executable,
+                                        },
+                                    );
+                                }
+                                Err(error) => emit_event(
+                                    &events,
+                                    BridgeEvent::EntryFailed {
+                                        mutation: EntryMutation::LaunchOptions,
+                                        container,
+                                        entry_id,
+                                        reason: format!("invalid launch options payload: {error}"),
+                                    },
+                                ),
+                            }
+                        }
+                        Err(CallFailure::Remote(reason)) => emit_event(
+                            &events,
+                            BridgeEvent::EntryFailed {
+                                mutation: EntryMutation::LaunchOptions,
                                 container,
                                 entry_id,
                                 reason,

@@ -80,6 +80,10 @@ fn make_test_game(
         container: format!("/bottles/bottle-{}", bottle),
         last_session_ended_at: last_session,
         is_launcher,
+        tags: Vec::new(),
+        multi_executable: false,
+        launch_executables: Vec::new(),
+        last_executable: None,
     }
 }
 
@@ -2357,4 +2361,487 @@ fn toolbar_tab_enters_library_view_then_enter_opens_detail_and_enter_runs_game(
             );
         })
         .unwrap();
+}
+
+#[gpui_kit::test]
+fn custom_tags_assign_filter_rename_and_delete_round_trip(cx: &mut gpui_kit::TestAppContext) {
+    cx.update(|app| {
+        gpui_kit::init(app);
+        crate::bind_shortcuts(app);
+    });
+    let (_events_tx, events_rx) = smol::channel::unbounded();
+    let bridge = crate::bridge::BridgeSupervisor::disconnected_for_tests();
+    let app_handle = cx.add_window(|window, cx| {
+        let view = cx.new(|cx| {
+            let mut app =
+                crate::state::WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, false);
+            app.apply_bridge_event(
+                crate::bridge::BridgeEvent::Containers(vec![crate::bridge::dto::Container {
+                    path: "/bottles/alpha".into(),
+                    name: "Alpha".into(),
+                    available: true,
+                }]),
+                cx,
+            );
+            let e1: crate::bridge::dto::EntryDto = serde_json::from_value(serde_json::json!({
+                "id": "entry:1",
+                "name": "Alpha Work",
+                "executable": "/games/a/game.exe"
+            }))
+            .unwrap();
+            let e2: crate::bridge::dto::EntryDto = serde_json::from_value(serde_json::json!({
+                "id": "entry:2",
+                "name": "Beta Work",
+                "executable": "/games/b/game.exe"
+            }))
+            .unwrap();
+            app.apply_bridge_event(
+                crate::bridge::BridgeEvent::Entries {
+                    container: "/bottles/alpha".into(),
+                    entries: vec![e1, e2],
+                },
+                cx,
+            );
+            app
+        });
+        gpui_kit::base::Root::new(view, window, cx)
+    });
+
+    app_handle
+        .update(cx, |root, _, cx| {
+            let view = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap();
+            view.update(cx, |app, cx| {
+                assert!(app.add_game_tags_from_text(0, "RPG,  日系  ", cx));
+                assert!(app.add_game_tags_from_text(1, "RPG", cx));
+                assert_eq!(app.games()[0].tags, vec!["RPG", "日系"]);
+                assert_eq!(app.games()[1].tags, vec!["RPG"]);
+
+                app.click_tag_filter("RPG", false, cx);
+                assert_eq!(app.filtered(cx), vec![0, 1]);
+
+                app.click_tag_filter("日系", true, cx);
+                assert_eq!(app.filtered(cx), vec![0]);
+
+                app.open_manage_tags_sheet(cx);
+                app.rename_library_tag("RPG", "JRPG", cx);
+                assert_eq!(app.games()[0].tags, vec!["JRPG", "日系"]);
+                assert_eq!(
+                    app.tag_filter,
+                    crate::library_view::TagFilter::Tags(vec!["JRPG".into(), "日系".into()])
+                );
+                assert_eq!(app.filtered(cx), vec![0]);
+
+                app.delete_library_tag("日系", cx);
+                assert_eq!(app.games()[0].tags, vec!["JRPG"]);
+                assert_eq!(
+                    app.tag_filter,
+                    crate::library_view::TagFilter::Tags(vec!["JRPG".into()])
+                );
+                app.delete_library_tag("JRPG", cx);
+                assert_eq!(app.tag_filter, crate::library_view::TagFilter::All);
+            });
+        })
+        .unwrap();
+
+    cx.update_window(app_handle.into(), |_, window, cx| {
+        window.draw(cx).clear(cx);
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn multi_executable_first_launch_picks_entries_and_subsequent_launch_shows_chooser(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    cx.update(|app| {
+        gpui_kit::init(app);
+        crate::bind_shortcuts(app);
+    });
+    let (_events_tx, events_rx) = smol::channel::unbounded();
+    let bridge = crate::bridge::BridgeSupervisor::disconnected_for_tests();
+    let app_handle = cx.add_window(|window, cx| {
+        let view = cx.new(|cx| {
+            let mut app =
+                crate::state::WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, false);
+            app.apply_bridge_event(
+                crate::bridge::BridgeEvent::Containers(vec![crate::bridge::dto::Container {
+                    path: "/bottles/alpha".into(),
+                    name: "Alpha".into(),
+                    available: true,
+                }]),
+                cx,
+            );
+            let folder_entry: crate::bridge::dto::EntryDto = serde_json::from_value(serde_json::json!({
+                "id": "folder:/bottles/alpha:/games/dual",
+                "name": "Dual Exe Work",
+                "source": "folder",
+                "folder": "/games/dual",
+                "executable": "/games/dual",
+                "needsExecutable": true
+            }))
+            .unwrap();
+            app.apply_bridge_event(
+                crate::bridge::BridgeEvent::Entries {
+                    container: "/bottles/alpha".into(),
+                    entries: vec![folder_entry],
+                },
+                cx,
+            );
+            app
+        });
+        gpui_kit::base::Root::new(view, window, cx)
+    });
+
+    app_handle
+        .update(cx, |root, _, cx| {
+            let view = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap();
+            view.update(cx, |app, cx| {
+                // Opening RunSettings on an unconfigured folder game must stay non-blocking.
+                app.open_preview_sheet(crate::state::PreviewSheet::RunSettings(0), cx);
+                assert!(app.program_settings.error.is_none());
+
+                app.set_multi_executable(0, true, cx);
+                assert!(app.games()[0].multi_executable);
+                app.preview_dismiss(cx);
+
+                // First launch click opens multi-select ExecutablePicker.
+                app.perform_runtime_action(0, Some(crate::runtime::RuntimeAction::Launch), cx);
+                assert!(matches!(
+                    app.preview.sheet,
+                    Some(crate::state::PreviewSheet::Executable)
+                ));
+                let picker = app.executable_picker.as_ref().unwrap();
+                assert!(picker.multi_select);
+                assert!(picker.launch_after);
+
+                app.apply_bridge_event(
+                    crate::bridge::BridgeEvent::Candidates {
+                        candidates: crate::bridge::dto::CandidatesDto {
+                            folder: "/games/dual".into(),
+                            candidates: vec![
+                                crate::bridge::dto::CandidateDto {
+                                    path: "/games/dual/Game.exe".into(),
+                                    name: "Game.exe".into(),
+                                },
+                                crate::bridge::dto::CandidateDto {
+                                    path: "/games/dual/bin/Config.exe".into(),
+                                    name: "Config.exe".into(),
+                                },
+                            ],
+                        },
+                    },
+                    cx,
+                );
+                app.toggle_picker_executable("/games/dual/Game.exe", cx);
+                app.toggle_picker_executable("/games/dual/bin/Config.exe", cx);
+                app.confirm_multi_executable_picker(cx);
+
+                assert_eq!(
+                    app.games()[0].launch_executables,
+                    vec![
+                        "/games/dual/Game.exe".to_owned(),
+                        "/games/dual/bin/Config.exe".to_owned(),
+                    ]
+                );
+                assert!(!app.games()[0].needs_executable);
+                assert!(app.launch_chooser.is_some());
+
+                // Dismiss and launch again: every subsequent launch opens Launch Chooser.
+                app.dismiss_launch_chooser(cx);
+                app.perform_runtime_action(0, Some(crate::runtime::RuntimeAction::Launch), cx);
+                assert!(app.launch_chooser.is_some());
+            });
+        })
+        .unwrap();
+
+    // Render with launch_chooser visible, then choose Config.exe and verify last_executable.
+    cx.update_window(app_handle.into(), |_, window, cx| {
+        window.draw(cx).clear(cx);
+    })
+    .unwrap();
+
+    app_handle
+        .update(cx, |root, _, cx| {
+            let view = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap();
+            view.update(cx, |app, cx| {
+                app.launch_selected_entry("/games/dual/bin/Config.exe".into(), cx);
+                assert!(app.launch_chooser.is_none());
+                assert_eq!(
+                    app.games()[0].last_executable.as_deref(),
+                    Some("/games/dual/bin/Config.exe")
+                );
+            });
+        })
+        .unwrap();
+}
+
+#[gpui_kit::test]
+fn studio_filter_and_clustering_compose_with_tags(cx: &mut gpui_kit::TestAppContext) {
+    cx.update(|app| {
+        gpui_kit::init(app);
+        crate::bind_shortcuts(app);
+    });
+    let (_events_tx, events_rx) = smol::channel::unbounded();
+    let bridge = crate::bridge::BridgeSupervisor::disconnected_for_tests();
+    let app_handle = cx.add_window(|window, cx| {
+        let view = cx.new(|cx| {
+            let mut app =
+                crate::state::WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, false);
+            app.apply_bridge_event(
+                crate::bridge::BridgeEvent::Containers(vec![crate::bridge::dto::Container {
+                    path: "/bottles/alpha".into(),
+                    name: "Alpha".into(),
+                    available: true,
+                }]),
+                cx,
+            );
+            let make_entry = |id: &str, title: &str, developer: Option<&str>, tags: &[&str]| {
+                serde_json::from_value::<crate::bridge::dto::EntryDto>(serde_json::json!({
+                    "id": id,
+                    "name": title,
+                    "source": "pinned",
+                    "executable": format!("/games/{id}.exe"),
+                    "tags": tags,
+                    "metadata": {
+                        "title": title,
+                        "developer": developer,
+                    }
+                }))
+                .unwrap()
+            };
+            app.apply_bridge_event(
+                crate::bridge::BridgeEvent::Entries {
+                    container: "/bottles/alpha".into(),
+                    entries: vec![
+                        make_entry("g0", "Clannad", Some("Key"), &["感人", "经典"]),
+                        make_entry("g1", "Air", Some("key"), &["经典"]),
+                        make_entry("g2", "Saya", Some("Nitroplus"), &["感人"]),
+                        make_entry("g3", "NoStudioWork", None, &[]),
+                    ],
+                },
+                cx,
+            );
+            app
+        });
+        gpui_kit::base::Root::new(view, window, cx)
+    });
+
+    app_handle
+        .update(cx, |root, _, cx| {
+            let view = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap();
+            view.update(cx, |app, cx| {
+                // Turn on studio clustering and verify timeline + staggered grouping order.
+                app.toggle_group_by_studio(cx);
+                assert!(app.group_by_studio);
+                let ordered = app.timeline_ordered(cx);
+                assert_eq!(ordered, vec![1, 0, 2, 3]);
+                assert_eq!(app.staggered_group_label(0, 0).as_deref(), Some("Key"));
+                assert_eq!(
+                    app.staggered_group_label(3, 3).as_deref(),
+                    Some(crate::library_view::UNKNOWN_STUDIO_LABEL)
+                );
+
+                // Filter by studio and compose with tag filter.
+                app.click_studio_filter("Key", cx);
+                assert_eq!(
+                    app.studio_filter,
+                    crate::library_view::StudioFilter::Studio("Key".into())
+                );
+                assert_eq!(app.filtered(cx), vec![0, 1]);
+                assert_eq!(app.filter_bar_tab, crate::ui_state::FilterBarTab::Studios);
+                assert!(app.pull_reveal.is_open());
+
+                app.click_tag_filter("感人", false, cx);
+                assert_eq!(app.filtered(cx), vec![0]);
+
+                app.toggle_unknown_studio_filter(cx);
+                assert_eq!(
+                    app.studio_filter,
+                    crate::library_view::StudioFilter::Unknown
+                );
+                assert!(app.filtered(cx).is_empty());
+
+                app.clear_all_library_filters(cx);
+                assert_eq!(app.filtered(cx), vec![0, 1, 2, 3]);
+            });
+        })
+        .unwrap();
+
+    // Render all affected presentations with studio clustering enabled.
+    for mode in [0usize, 1, 2, 3, 4, crate::preferences::STAGGERED_MODE] {
+        app_handle
+            .update(cx, |root, _, cx| {
+                let view = root
+                    .view()
+                    .clone()
+                    .downcast::<crate::state::WhiskyApp>()
+                    .unwrap();
+                view.update(cx, |app, cx| app.set_mode(mode, cx));
+            })
+            .unwrap();
+        cx.update_window(app_handle.into(), |_, window, cx| {
+            window.draw(cx).clear(cx);
+        })
+        .unwrap();
+    }
+}
+
+#[gpui_kit::test]
+fn pull_down_tag_bar_gesture_hint_and_mode_switching(cx: &mut gpui_kit::TestAppContext) {
+    cx.update(|app| {
+        gpui_kit::init(app);
+        crate::bind_shortcuts(app);
+    });
+    let (_events_tx, events_rx) = smol::channel::unbounded();
+    let bridge = crate::bridge::BridgeSupervisor::disconnected_for_tests();
+    let app_handle = cx.add_window(|window, cx| {
+        let view = cx.new(|cx| {
+            let mut app =
+                crate::state::WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, false);
+            app.apply_bridge_event(
+                crate::bridge::BridgeEvent::Containers(vec![crate::bridge::dto::Container {
+                    path: "/bottles/alpha".into(),
+                    name: "Alpha".into(),
+                    available: true,
+                }]),
+                cx,
+            );
+            let entry: crate::bridge::dto::EntryDto = serde_json::from_value(serde_json::json!({
+                "id": "g0",
+                "name": "Clannad",
+                "source": "pinned",
+                "executable": "/games/g0.exe",
+                "tags": ["经典"],
+                "metadata": { "title": "Clannad", "developer": "Key" }
+            }))
+            .unwrap();
+            app.apply_bridge_event(
+                crate::bridge::BridgeEvent::Entries {
+                    container: "/bottles/alpha".into(),
+                    entries: vec![entry],
+                },
+                cx,
+            );
+            app
+        });
+        gpui_kit::base::Root::new(view, window, cx)
+    });
+
+    app_handle
+        .update(cx, |root, _, cx| {
+            let view = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap();
+            view.update(cx, |app, cx| {
+                assert_eq!(app.tag_bar_mode, crate::ui_state::TagBarMode::PullDown);
+                assert!(!app.pull_reveal.is_open());
+                assert_eq!(app.filter_bar_target_fraction(), 0.0);
+
+                // Replay the onboarding peek sequence.
+                app.replay_tag_bar_hint(cx);
+            });
+        })
+        .unwrap();
+
+    // Advance past initial delay -> bar peeks at ~56% to expose half of the bar.
+    cx.background_executor
+        .advance_clock(std::time::Duration::from_millis(300));
+    cx.run_until_parked();
+
+    app_handle
+        .update(cx, |root, _, cx| {
+            let view = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap();
+            view.update(cx, |app, _cx| {
+                assert!(app.tag_bar_hint_peeking);
+                assert!((app.filter_bar_target_fraction() - 0.56).abs() < 0.01);
+            });
+        })
+        .unwrap();
+
+    // Draw once while peeking so hint overlay renders cleanly without panicking.
+    cx.update_window(app_handle.into(), |_, window, cx| {
+        window.draw(cx).clear(cx);
+    })
+    .unwrap();
+
+    // Advance past hold timeout -> peek settles closed and is marked seen.
+    cx.background_executor
+        .advance_clock(std::time::Duration::from_millis(2900));
+    cx.run_until_parked();
+
+    app_handle
+        .update(cx, |root, _, cx| {
+            let view = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap();
+            view.update(cx, |app, cx| {
+                assert!(!app.tag_bar_hint_peeking);
+                assert!(app.tag_bar_hint_seen);
+                assert_eq!(app.filter_bar_target_fraction(), 0.0);
+
+                // Pull down at top opens the drawer to 100%.
+                assert!(app.handle_library_pull_wheel(
+                    0.0,
+                    crate::library_view::PullWheelPhase::Started,
+                    cx
+                ) || !app.pull_reveal.is_open());
+                assert!(app.handle_library_pull_wheel(
+                    24.0,
+                    crate::library_view::PullWheelPhase::Moved,
+                    cx
+                ));
+                assert!(!app.pull_reveal.is_open());
+                assert!(app.handle_library_pull_wheel(
+                    24.0,
+                    crate::library_view::PullWheelPhase::Moved,
+                    cx
+                ));
+                assert!(app.pull_reveal.is_open());
+                assert_eq!(app.filter_bar_target_fraction(), 1.0);
+
+                // Scrolling back down into content closes when no filter is active.
+                assert!(!app.handle_library_pull_wheel(
+                    -40.0,
+                    crate::library_view::PullWheelPhase::Moved,
+                    cx
+                ));
+                assert!(!app.pull_reveal.is_open());
+
+                // Switching to AlwaysVisible pins the bar open.
+                app.set_tag_bar_mode(crate::ui_state::TagBarMode::AlwaysVisible, cx);
+                assert_eq!(app.filter_bar_target_fraction(), 1.0);
+                app.set_tag_bar_mode(crate::ui_state::TagBarMode::PullDown, cx);
+                assert_eq!(app.filter_bar_target_fraction(), 0.0);
+            });
+        })
+        .unwrap();
+
+    cx.update_window(app_handle.into(), |_, window, cx| {
+        window.draw(cx).clear(cx);
+    })
+    .unwrap();
 }

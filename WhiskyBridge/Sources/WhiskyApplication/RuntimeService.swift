@@ -217,7 +217,7 @@ public final class RuntimeService {
         let capabilities = runtime.capabilities(for: entry)
         switch method {
         case "runtime.launch":
-            return try await launch(entry: entry, capabilities: capabilities, params: params)
+            return try await launch(entry: entry, capabilities: capabilities, params: params, workspace: workspace)
         case "runtime.cancel":
             guard capabilities.contains(.cancelLaunch) else { throw BridgeFailure(
                 "capability_unavailable",
@@ -237,7 +237,8 @@ public final class RuntimeService {
     private func launch(
         entry: LibraryEntry,
         capabilities: LibraryRuntimeCapabilities,
-        params: [String: JSONValue]
+        params: [String: JSONValue],
+        workspace: ApplicationWorkspace
     ) async throws -> JSONValue {
         guard capabilities.contains(.launch) else { throw BridgeFailure(
             "capability_unavailable",
@@ -256,6 +257,9 @@ public final class RuntimeService {
         }
         beforeLaunch?(entry)
         let executable = params["executable"] == nil ? nil : try params.path("executable")
+        if let executable {
+            try? workspace.recordLastExecutable(executable, entry: entry)
+        }
         runtime.launch(.init(
             entry: entry,
             executableURL: executable,

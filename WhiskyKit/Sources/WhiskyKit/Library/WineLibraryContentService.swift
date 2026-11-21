@@ -99,6 +99,31 @@ public final class WineLibraryContentService: LibraryContentProviding {
         )
         try await store.perform { try $0.copy(from: entry, to: moved) }
         _ = try setHidden(hidden, for: moved)
+        let sourceTags = try LibraryTags.load(bottleURL: entry.bottleURL)
+        let tags = sourceTags.tags(for: entry)
+        if !tags.isEmpty {
+            var targetTags = try LibraryTags.load(bottleURL: containerURL)
+            targetTags.setTags(tags, for: moved)
+            try targetTags.save(bottleURL: containerURL)
+        }
+        let sourceLaunch = try LibraryLaunchOptions.load(bottleURL: entry.bottleURL)
+        let launch = sourceLaunch.options(for: entry)
+        if !launch.isDefault {
+            var targetLaunch = try LibraryLaunchOptions.load(bottleURL: containerURL)
+            let rekeyed = EntryLaunchOptions(
+                multiExecutable: launch.multiExecutable,
+                executables: launch.executables.map { key in
+                    let resolved = FolderGameLibrary.url(for: key, bottleURL: entry.bottleURL)
+                    return FolderGameLibrary.key(for: resolved, bottleURL: containerURL)
+                },
+                lastExecutable: launch.lastExecutable.map { key in
+                    let resolved = FolderGameLibrary.url(for: key, bottleURL: entry.bottleURL)
+                    return FolderGameLibrary.key(for: resolved, bottleURL: containerURL)
+                }
+            )
+            targetLaunch.setOptions(rekeyed, for: moved)
+            try targetLaunch.save(bottleURL: containerURL)
+        }
         return moved
     }
 

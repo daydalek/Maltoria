@@ -172,9 +172,112 @@ pub(crate) fn save_appearance(mode: AppearanceMode) {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum TagBarMode {
+    #[default]
+    PullDown,
+    AlwaysVisible,
+}
+
+impl TagBarMode {
+    pub(crate) fn wire(self) -> &'static str {
+        match self {
+            Self::PullDown => "pull-down",
+            Self::AlwaysVisible => "always",
+        }
+    }
+
+    pub(crate) fn from_wire(raw: &str) -> Self {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "always" => Self::AlwaysVisible,
+            _ => Self::PullDown,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum FilterBarTab {
+    #[default]
+    Tags,
+    Studios,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default)]
+pub(crate) struct LibraryUiPrefs {
+    pub(crate) tag_bar_mode: TagBarMode,
+    pub(crate) tag_bar_hint_seen: bool,
+    pub(crate) group_by_studio: bool,
+    pub(crate) filter_bar_tab: FilterBarTab,
+}
+
+pub(crate) fn capture_mode_active() -> bool {
+    std::env::var_os("WHISKY_DEMO_CAPTURE").is_some()
+        || std::env::var_os("WHISKY_MOTION_CAPTURE").is_some()
+}
+
+fn library_ui_state_path() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("WHISKY_GPUI_LIBRARY_UI_STATE") {
+        return Some(PathBuf::from(path));
+    }
+    if cfg!(test) {
+        return None;
+    }
+    Some(state_path()?.with_file_name("gpui-library-ui.json"))
+}
+
+fn load_library_ui_prefs_from(path: &std::path::Path) -> LibraryUiPrefs {
+    let Ok(data) = std::fs::read(path) else {
+        return LibraryUiPrefs::default();
+    };
+    serde_json::from_slice::<LibraryUiPrefs>(&data).unwrap_or_default()
+}
+
+fn save_library_ui_prefs_to(path: &std::path::Path, prefs: &LibraryUiPrefs) {
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(data) = serde_json::to_vec(prefs) {
+        let _ = std::fs::write(path, data);
+    }
+}
+
+pub(crate) fn load_library_ui_prefs() -> LibraryUiPrefs {
+    let Some(path) = library_ui_state_path() else {
+        return LibraryUiPrefs::default();
+    };
+    load_library_ui_prefs_from(&path)
+}
+
+pub(crate) fn save_library_ui_prefs(prefs: &LibraryUiPrefs) {
+    let Some(path) = library_ui_state_path() else {
+        return;
+    };
+    save_library_ui_prefs_to(&path, prefs);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn library_ui_prefs_round_trip_through_json_file() {
+        let dir = std::env::temp_dir().join(format!("maltoria-ui-prefs-{}", uuid::Uuid::new_v4()));
+        let path = dir.join("gpui-library-ui.json");
+        let prefs = LibraryUiPrefs {
+            tag_bar_mode: TagBarMode::AlwaysVisible,
+            tag_bar_hint_seen: true,
+            group_by_studio: true,
+            filter_bar_tab: FilterBarTab::Studios,
+        };
+        save_library_ui_prefs_to(&path, &prefs);
+        assert_eq!(load_library_ui_prefs_from(&path), prefs);
+        assert_eq!(TagBarMode::from_wire("always"), TagBarMode::AlwaysVisible);
+        assert_eq!(TagBarMode::from_wire("pull-down"), TagBarMode::PullDown);
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
     #[test]
     fn frames_below_the_window_minimum_are_not_restored() {

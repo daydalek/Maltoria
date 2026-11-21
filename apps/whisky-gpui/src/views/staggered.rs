@@ -89,6 +89,13 @@ impl WhiskyApp {
     /// pair of groups; real entries group by the last-played date the library
     /// already records, and unplayed entries tail into their own group.
     pub(crate) fn staggered_group_label(&self, index: usize, position: usize) -> Option<String> {
+        if self.group_by_studio {
+            return Some(
+                self.game(index)?
+                    .studio_name()
+                    .unwrap_or_else(|| crate::library_view::UNKNOWN_STUDIO_LABEL.to_owned()),
+            );
+        }
         if self.demo {
             return Some(if position < 4 { "今天" } else { "更早" }.to_owned());
         }
@@ -304,6 +311,31 @@ impl WhiskyApp {
             }
             if let Some(label) = crate::model::format_play_time(g.play_time) {
                 meta = meta.child(badge("clock-3", label));
+            }
+            if !g.tags.is_empty() {
+                for (ti, tag) in g.tags.iter().take(2).enumerate() {
+                    let tag_click = tag.clone();
+                    meta = meta.child(
+                        crate::controls::tag_badge_subtle(tag.clone())
+                            .id(("staggered-tag", index * 16 + ti))
+                            .cursor_pointer()
+                            .hover(|s| s.bg(rgba(hover())))
+                            .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
+                                this.click_tag_filter(
+                                    &tag_click,
+                                    event.modifiers().platform || event.modifiers().shift,
+                                    cx,
+                                );
+                                cx.stop_propagation();
+                            })),
+                    );
+                }
+                if g.tags.len() > 2 {
+                    meta = meta.child(crate::controls::tag_badge_subtle(format!(
+                        "+{}",
+                        g.tags.len() - 2
+                    )));
+                }
             }
         }
         if let Some(state) = self.runtime_state(index) {
