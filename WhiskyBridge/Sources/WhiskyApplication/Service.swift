@@ -629,7 +629,7 @@ extension ApplicationService {
         let lastPatch: ApplicationWorkspace.LastExecutablePatch = switch params["lastExecutable"] {
         case nil: .preserveIfValid
         case .null: .clear
-        case .some: .set(try params.path("lastExecutable"))
+        case .some: try .set(params.path("lastExecutable"))
         }
         let result = try workspace.setLaunchOptions(
             multiExecutable: multiExecutable,
@@ -647,7 +647,7 @@ extension ApplicationService {
 
     private func tagTargetContainers(_ params: [String: JSONValue]) throws -> [URL] {
         if params["container"] != nil {
-            return [try workspace.resolve(params)]
+            return try [workspace.resolve(params)]
         }
         return try workspace.containers().filter {
             (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
@@ -663,10 +663,12 @@ extension ApplicationService {
             throw BridgeFailure("invalid_params", "Expected valid non-empty tag names")
         }
         var updatedCount = 0
-        for container in try tagTargetContainers(params) {
-            if try workspace.renameTag(from: oldTag, to: newTag, in: container) {
-                updatedCount += 1
-            }
+        for container in try tagTargetContainers(params) where try workspace.renameTag(
+            from: oldTag,
+            to: newTag,
+            in: container
+        ) {
+            updatedCount += 1
         }
         return .object([
             "updated": .integer(Int64(updatedCount)),
@@ -681,10 +683,8 @@ extension ApplicationService {
             throw BridgeFailure("invalid_params", "Expected a valid non-empty tag name")
         }
         var updatedCount = 0
-        for container in try tagTargetContainers(params) {
-            if try workspace.deleteTag(tag, in: container) {
-                updatedCount += 1
-            }
+        for container in try tagTargetContainers(params) where try workspace.deleteTag(tag, in: container) {
+            updatedCount += 1
         }
         return .object([
             "updated": .integer(Int64(updatedCount)),

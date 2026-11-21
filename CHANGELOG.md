@@ -7,10 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-11-22
+
 ### Added
+- Game library tags, studio grouping and keyboard navigation across launch dialogs.
+- Multiple executable entries per game, each with independent arguments, graphics and legacy fullscreen settings.
+- Managed local PLaMo 3 translation through `llama-server`.
 - Bottle setting "ASF/WMV Timestamp Sync" (Auto, First, Legacy) sets `WINE_DMO_ASF_TIMESTAMP_BASE` to fix playback sync and stutter in ASF/WMV opening movies; Auto leaves the variable unset.
 
 ### Fixed
+- Moving games between bottles preserves settings for their configured executables.
+- Folder metadata matching handles more title aliases and filename variants.
 - WhiskyBridge builds on Linux again: `LibraryMetadataService+Sync.swift` now imports `FoundationNetworking` for `URLSession`.
 
 ## [0.6.1] - 2026-11-16

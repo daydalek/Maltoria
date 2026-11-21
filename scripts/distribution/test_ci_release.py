@@ -15,6 +15,11 @@ COMMIT = 'a' * 40
 
 
 class CIReleaseTests(unittest.TestCase):
+    def test_changelog_excerpt_uses_the_exact_release_section(self):
+        changelog = '## [Unreleased]\n\nNext\n\n## [0.6.2] - 2026-11-22\n\n### Added\n- Tags\n\n## [0.6.1]\n\nOld\n'
+        self.assertEqual('### Added\n- Tags', release.changelog_entry(changelog, '0.6.2'))
+        self.assertEqual('', release.changelog_entry(changelog, '0.6.3'))
+
     def test_only_successful_same_repository_packaging_runs_can_publish(self):
         run = dict(status='completed', conclusion='success', event='workflow_dispatch', head_branch='main',
                    path='.github/workflows/CI.yml', head_sha=COMMIT,

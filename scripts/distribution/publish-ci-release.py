@@ -50,6 +50,12 @@ def validate_run(run, repository):
     return ref if release_tag else None
 
 
+def changelog_entry(changelog, version):
+    heading = rf'^## \[{re.escape(version)}\][^\r\n]*\r?\n'
+    match = re.search(heading + r'(.*?)(?=^## |\Z)', changelog, re.MULTILINE | re.DOTALL)
+    return match[1].strip() if match else ''
+
+
 def verify_file(directory, name, expected):
     if not name or Path(name).name != name or name in ('.', '..'):
         raise ValueError('Unsafe artifact filename')
@@ -160,14 +166,16 @@ def publish(repository, run_id):
             gh('run', 'download', run_id, '--repo', repository, '--name', artifact,
                '--dir', str(root / folder))
         assets = prepare_assets(root, version, commit)
+        changelog = api(f'repos/{repository}/contents/CHANGELOG.md?ref={commit}')
+        changes = changelog_entry(base64.b64decode(changelog['content']).decode(), version)
         notes = root / 'notes.md'
         notes.write_text(
             f'{MARKER}\nMaltoria {version} (prerelease).\n\n'
+            + (changes + '\n\n' if changes else '')
+            + '### Downloads\n\n'
             '- macOS: Apple Silicon ZIP, ad-hoc signed.\n'
             '- Linux amd64: deb (Ubuntu 24.04), rpm (Fedora 44), and AppImage.\n'
             '- Linux baseline: glibc 2.39 or newer; Wine downloads separately.\n'
-            '- Custom Wine engines, feature gating and folder executable discovery improvements.\n'
-            '- Fixes for engine lease races, process termination timeouts and game folder classification.\n'
             '- Sources, package reports and platform-specific SHA256SUMS are attached.\n\n'
             f'Source: `{commit}`\n\nVerified CI: {run["html_url"]}\n'
         )
