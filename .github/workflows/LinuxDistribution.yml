@@ -70,6 +70,7 @@ jobs:
           # toolchain that provides it is installed only in a later step.
           case "$GITHUB_REF" in
             refs/tags/linux-v*) value="${RELEASE_REF#linux-v}" ;;
+            refs/tags/v*) value="${RELEASE_REF#v}" ;;
             *)
               value="$INPUT_VERSION"
               if [ -z "$value" ]; then
@@ -123,6 +124,7 @@ jobs:
           path: /tmp/linux-release-task/artifacts/maltoria-linux-*.tar.gz
           compression-level: 0
           if-no-files-found: error
+          retention-days: 7
       - name: Preserve build and ABI diagnostics
         if: always()
         uses: actions/upload-artifact@v7.0.2
@@ -135,6 +137,7 @@ jobs:
             /tmp/linux-release-checks/*.log
             /tmp/linux-release-checks/report.json
           if-no-files-found: ignore
+          retention-days: 7
 
   package:
     name: deb / rpm / AppImage from one payload
@@ -178,6 +181,7 @@ jobs:
             packages/SHA256SUMS
           compression-level: 0
           if-no-files-found: error
+          retention-days: 7
       - uses: actions/upload-artifact@v7.0.2
         with:
           name: linux-rpm
@@ -188,6 +192,7 @@ jobs:
             packages/SHA256SUMS
           compression-level: 0
           if-no-files-found: error
+          retention-days: 7
       - uses: actions/upload-artifact@v7.0.2
         with:
           name: linux-appimage
@@ -198,6 +203,7 @@ jobs:
             packages/SHA256SUMS
           compression-level: 0
           if-no-files-found: error
+          retention-days: 7
       - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
@@ -206,6 +212,7 @@ jobs:
             packages/*.json
             packages/SHA256SUMS
           if-no-files-found: ignore
+          retention-days: 7
 
   smoke:
     name: ${{ matrix.target }} / install and production window

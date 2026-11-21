@@ -35,17 +35,15 @@ The shared development package version comes from
 [`apps/whisky-gpui/version.env`](../apps/whisky-gpui/version.env). Update it when
 preparing a new version. Linux tag builds still derive their version from
 `linux-vX.Y.Z`; an explicit manual version overrides the development default.
-Pull requests run the existing validation jobs; automatic distribution packages
-are produced on `main` pushes and explicit CI dispatches.
+Main pushes and pull requests run validation. CI builds distribution packages
+for `vX.Y.Z` tag pushes and manual runs, with artifacts retained for seven days.
+Tag builds take the package version from the tag.
 
-After a successful `main` push CI, [PublishCIRelease.yml](../.github/workflows/PublishCIRelease.yml)
-automatically promotes that run's verified artifacts into a unified `vX.Y.Z` GitHub
-prerelease. It verifies both platforms' versions, source commits and checksums,
-then creates the tag at the exact tested commit. Published versions are immutable:
-subsequent pushes with the same version leave them intact. Bump `version.env` to
-publish the next version. A failed CI, pull request or manual build cannot publish.
-The workflow's explicit `run_id` dispatch can recover publication from an already
-successful main-push CI without rebuilding or uploading files by hand.
+To publish a unified GitHub prerelease, run [PublishCIRelease.yml](../.github/workflows/PublishCIRelease.yml)
+with the `run_id` of a successful version-tag push or manual `main` CI run.
+The workflow verifies both platforms' versions, source commits and checksums.
+For a manual run it creates the version tag at the tested commit when needed.
+Published versions are immutable.
 
 The platform-specific tag workflows below remain available for separate releases.
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Promote verified main-branch CI artifacts to an immutable prerelease."""
+"""Promote verified CI packages to an immutable prerelease."""
 import argparse
 import base64
 import hashlib
@@ -36,13 +36,18 @@ def api(path, missing=False, **fields):
 
 
 def validate_run(run, repository):
+    event = run['event']
+    ref = run['head_branch']
+    release_tag = event == 'push' and re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', ref or '')
+    manual_main = event == 'workflow_dispatch' and ref == 'main'
     if not (run['status'] == 'completed' and run['conclusion'] == 'success'
-            and run['event'] == 'push' and run['head_branch'] == 'main'
+            and (release_tag or manual_main)
             and run['path'] == '.github/workflows/CI.yml'
             and run['repository']['full_name'] == repository
             and run['head_repository']['full_name'] == repository
             and re.fullmatch(r'[0-9a-f]{40}', run['head_sha'])):
-        raise ValueError('Only a successful CI push from this repository main branch can publish')
+        raise ValueError('Publishing requires successful CI from a version-tag push or manual main run in this repository')
+    return ref if release_tag else None
 
 
 def verify_file(directory, name, expected):
@@ -123,20 +128,25 @@ def publish(repository, run_id):
     if not re.fullmatch(r'[\w.-]+/[\w.-]+', repository) or not run_id.isdigit():
         raise ValueError('Invalid repository or CI run ID')
     run = api(f'repos/{repository}/actions/runs/{run_id}')
-    validate_run(run, repository)
+    release_tag = validate_run(run, repository)
     commit = run['head_sha']
-    source = api(f'repos/{repository}/contents/apps/whisky-gpui/version.env?ref={commit}')
-    versions = re.findall(r'^WHISKY_DEFAULT_VERSION=([0-9]+\.[0-9]+\.[0-9]+)$',
-                          base64.b64decode(source['content']).decode(), re.MULTILINE)
-    if len(versions) != 1:
-        raise ValueError('CI source must declare exactly one package version')
-    version, = versions
+    if release_tag:
+        version = release_tag[1:]
+    else:
+        source = api(f'repos/{repository}/contents/apps/whisky-gpui/version.env?ref={commit}')
+        versions = re.findall(r'^WHISKY_DEFAULT_VERSION=([0-9]+\.[0-9]+\.[0-9]+)$',
+                              base64.b64decode(source['content']).decode(), re.MULTILINE)
+        if len(versions) != 1:
+            raise ValueError('CI source must declare exactly one package version')
+        version, = versions
     tag = 'v' + version
     existing = api(f'repos/{repository}/releases/tags/{tag}', missing=True)
     if existing and not existing['draft']:
         print(f'::notice::Release {tag} is already published; bump version.env for the next release')
         return
     tag_ref = api(f'repos/{repository}/git/ref/tags/{tag}', missing=True)
+    if release_tag and not tag_ref:
+        raise ValueError('The CI version tag must still exist')
     target = api(f'repos/{repository}/commits/{tag}') if tag_ref else None
     if target and target['sha'] != commit:
         raise ValueError('Release tag points to a different source; refusing to move it')

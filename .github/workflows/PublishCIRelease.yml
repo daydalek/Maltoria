@@ -1,13 +1,9 @@
 name: Publish verified CI packages
 on:
-  workflow_run:
-    workflows: [CI]
-    branches: [main]
-    types: [completed]
   workflow_dispatch:
     inputs:
       run_id:
-        description: Successful main push CI run to publish
+        description: Successful version-tag push or manual main CI run to publish
         required: true
         type: string
 permissions:
@@ -17,7 +13,6 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -31,5 +26,5 @@ jobs:
       - name: Publish immutable packages from successful CI
         env:
           GH_TOKEN: ${{ github.token }}
-          CI_RUN_ID: ${{ inputs.run_id || github.event.workflow_run.id }}
+          CI_RUN_ID: ${{ inputs.run_id }}
         run: python3 scripts/distribution/publish-ci-release.py --repository "$GITHUB_REPOSITORY" --run-id "$CI_RUN_ID"

@@ -2,10 +2,7 @@ name: Native LunaHook builds
 
 on:
   push:
-    branches: ['devin/**', main]
-    tags: ['v*']
-  pull_request:
-    branches: [main]
+    tags: ['v*', 'app-v*', 'vn-v*', 'linux-v*']
   workflow_call:
   workflow_dispatch:
 
@@ -48,3 +45,4 @@ jobs:
           name: Maltoria-LunaHook-${{ matrix.arch }}
           path: ${{ runner.temp }}/MaltoriaNative
           if-no-files-found: error
+          retention-days: 7

@@ -15,13 +15,14 @@ COMMIT = 'a' * 40
 
 
 class CIReleaseTests(unittest.TestCase):
-    def test_only_successful_same_repository_main_push_can_publish(self):
-        run = dict(status='completed', conclusion='success', event='push', head_branch='main',
+    def test_only_successful_same_repository_packaging_runs_can_publish(self):
+        run = dict(status='completed', conclusion='success', event='workflow_dispatch', head_branch='main',
                    path='.github/workflows/CI.yml', head_sha=COMMIT,
                    repository={'full_name': 'owner/repo'}, head_repository={'full_name': 'owner/repo'})
-        release.validate_run(run, 'owner/repo')
+        self.assertIsNone(release.validate_run(run, 'owner/repo'))
+        self.assertEqual('v0.6.0', release.validate_run(dict(run, event='push', head_branch='v0.6.0'), 'owner/repo'))
         for key, value in [('conclusion', 'failure'), ('event', 'pull_request'),
-                           ('event', 'workflow_dispatch'), ('head_branch', 'feature'),
+                           ('event', 'push'), ('head_branch', 'feature'), ('head_branch', 'v0.6.0'),
                            ('head_repository', {'full_name': 'fork/repo'}), ('path', 'other.yml')]:
             with self.subTest(key=key, value=value), self.assertRaises(ValueError):
                 release.validate_run(dict(run, **{key: value}), 'owner/repo')

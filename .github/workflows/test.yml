@@ -2,16 +2,7 @@ name: Test Infrastructure CI
 
 on:
   push:
-    branches: [main]
-    paths-ignore: &docs-paths
-      - '**.md'
-      - 'docs/**'
-      - 'dist/pages/**'
-      - 'images/**'
-      - 'LICENSE'
-  pull_request:
-    branches: [main]
-    paths-ignore: *docs-paths
+    tags: ['v*', 'app-v*', 'vn-v*', 'linux-v*']
   workflow_dispatch:
 
 concurrency:
@@ -132,6 +123,7 @@ jobs:
             build/reliability/**/report.json
             build/reliability/**/build-report.json
           if-no-files-found: ignore
+          retention-days: 7
 
   linux-release-acceptance:
     name: Ubuntu 24.04 - Foundation, X11/Wayland Acceptance
@@ -274,3 +266,4 @@ jobs:
             build/reliability/**/build-report.json
             build/reliability/evidence-*/**
           if-no-files-found: ignore
+          retention-days: 7
