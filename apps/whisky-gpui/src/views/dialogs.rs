@@ -288,7 +288,7 @@ impl WhiskyApp {
             return self.demo_run_settings(index, cx);
         }
         let mut sections = Vec::new();
-        if let Some(launch_section) = self.launch_entry_section(index, cx) {
+        if let Some(launch_section) = self.launch_entry_section(index, window, cx) {
             sections.push(launch_section);
         }
         if self.program_settings.loading && self.program_settings.settings.is_none() {
@@ -373,7 +373,7 @@ impl WhiskyApp {
                 cx,
             ));
         }
-        sections.push(self.program_config_section(&settings, window, cx));
+        sections.push(self.program_config_section(index, &settings, window, cx));
         if let Some(translation_section) = self.program_translation_section(index, cx) {
             sections.push(translation_section);
         }
@@ -740,6 +740,7 @@ impl WhiskyApp {
 
     fn program_config_section(
         &mut self,
+        index: usize,
         settings: &ProgramSettingsDto,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -759,29 +760,48 @@ impl WhiskyApp {
             "locale",
             cx,
         );
-        self.section(
-            "program-config",
-            "程序配置",
-            vec![
-                self.info("程序", settings.program_name.clone()),
-                self.info(
-                    "可执行文件",
-                    if settings.available {
-                        "可用"
-                    } else {
-                        "文件已缺失"
-                    },
-                ),
-                self.program_choice_row("语言区域", locale),
-                col()
-                    .gap(px(7.))
-                    .py(px(8.))
-                    .child("启动参数")
-                    .child(Input::new(&arguments))
-                    .into_any_element(),
-            ],
-            cx,
-        )
+        let game = self.game(index);
+        let multi_exe = game.is_some_and(|g| g.multi_executable && g.launch_executables.len() >= 2);
+        let folder = game
+            .and_then(|g| g.game_directory())
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let mut rows = vec![self.info("程序", settings.program_name.clone())];
+        if multi_exe && !folder.is_empty() {
+            let (rel_dir, _) =
+                crate::bridge::dto::relative_directory_label(&settings.executable, &folder);
+            rows.push(self.info("相对路径", rel_dir));
+        }
+        rows.push(self.info(
+            "可执行文件",
+            if settings.available {
+                "可用"
+            } else {
+                "文件已缺失"
+            },
+        ));
+        rows.push(self.program_choice_row("语言区域", locale));
+        rows.push(
+            col()
+                .gap(px(7.))
+                .py(px(8.))
+                .child("启动参数")
+                .child(Input::new(&arguments))
+                .into_any_element(),
+        );
+        if multi_exe {
+            rows.push(
+                muted(format!(
+                    "当前仅编辑 {} 的独立运行设置（含旧版全屏兼容、图形、语言与参数）。",
+                    settings.program_name
+                ))
+                .text_size(px(11.5))
+                .line_height(relative(1.4))
+                .py(px(4.))
+                .into_any_element(),
+            );
+        }
+        self.section("program-config", "程序配置", rows, cx)
     }
 
     fn program_env_section(
@@ -850,8 +870,9 @@ impl WhiskyApp {
         on_click: impl Fn(&mut WhiskyApp, &mut Context<WhiskyApp>) + 'static,
         cx: &Context<Self>,
     ) -> AnyElement {
+        let element_id = SharedString::from(id);
         row()
-            .id(SharedString::from(id))
+            .id(element_id.clone())
             .gap(px(5.))
             .items_center()
             .h(px(26.))
@@ -869,6 +890,7 @@ impl WhiskyApp {
             })
             .child(label)
             .on_click(cx.listener(move |this, _, _, cx| on_click(this, cx)))
+            .key_focus(element_id)
             .into_any_element()
     }
 
@@ -1350,27 +1372,32 @@ impl WhiskyApp {
         let enabled = settings.display_enabled();
         let defaults = &settings.defaults;
         let overrides = settings.overrides.as_ref();
-        let mut children = vec![self.program_switch(
-            "ps-override-display".into(),
-            "覆盖显示设置",
-            enabled,
-            false,
-            |this, on, _cx| this.set_program_override_group("display", on),
-            cx,
-        )];
-        if enabled {
-            let emulate_modeset = overrides
-                .and_then(|value| value.emulate_modeset)
-                .or(defaults.emulate_modeset)
-                .unwrap_or(false);
-            children.push(self.program_switch(
+        let emulate_modeset = overrides
+            .and_then(|value| value.emulate_modeset)
+            .unwrap_or(false);
+        let mut children = vec![
+            self.program_switch(
                 "ps-emulate-modeset".into(),
                 "旧版全屏兼容",
                 emulate_modeset,
                 false,
                 |this, on, cx| this.set_program_override_bool("emulateModeset", on, cx),
                 cx,
-            ));
+            ),
+            muted("旧游戏在低分辨率全屏切换显示模式失败时启用；仅作用于当前选中的 .exe。")
+                .text_size(px(11.))
+                .line_height(relative(1.4))
+                .into_any_element(),
+            self.program_switch(
+                "ps-override-display".into(),
+                "覆盖显示设置",
+                enabled,
+                false,
+                |this, on, _cx| this.set_program_override_group("display", on),
+                cx,
+            ),
+        ];
+        if enabled {
             let virtual_desktop = overrides
                 .and_then(|value| value.virtual_desktop_enabled)
                 .or(defaults.virtual_desktop_enabled)
@@ -2122,7 +2149,7 @@ impl WhiskyApp {
 
     /// Every `.exe` the helper found under the folder, newest section first.
     /// Choosing one records it; Play opened the picker, so it also starts.
-    fn executable_picker(&self, cx: &Context<Self>) -> AnyElement {
+    fn executable_picker(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let Some(picker) = self.executable_picker.as_ref() else {
             return self.form(
                 "executable-scroll",
@@ -2141,6 +2168,48 @@ impl WhiskyApp {
         let supports_multi = self
             .game(game_index)
             .is_some_and(crate::model::Game::supports_multi_executable);
+        let picker_container_handle = window
+            .use_keyed_state(
+                ("exe-picker-container", self.executable_picker_generation),
+                cx,
+                |_, cx| cx.focus_handle(),
+            )
+            .read(cx)
+            .clone();
+        let candidate_handles: Vec<FocusHandle> = (0..picker.candidates.len())
+            .map(|i| {
+                window
+                    .use_keyed_state(("exe-candidate", i), cx, |_, cx| {
+                        cx.focus_handle().tab_stop(true).tab_index(0)
+                    })
+                    .read(cx)
+                    .clone()
+            })
+            .collect();
+        if picker.loading || picker.candidates.is_empty() {
+            let loading_focused = window.use_keyed_state(
+                ("exe-picker-loading-autofocus", self.executable_picker_generation),
+                cx,
+                |_, _| std::cell::Cell::new(false),
+            );
+            if !loading_focused.read(cx).replace(true) {
+                window.focus(&picker_container_handle, cx);
+            }
+        } else {
+            let candidates_focused = window.use_keyed_state(
+                (
+                    "exe-picker-candidates-autofocus",
+                    self.executable_picker_generation,
+                ),
+                cx,
+                |_, _| std::cell::Cell::new(false),
+            );
+            if !candidates_focused.read(cx).replace(true) {
+                if let Some(first) = candidate_handles.first() {
+                    window.focus(first, cx);
+                }
+            }
+        }
         let mut rows: Vec<AnyElement> = Vec::new();
         if picker.loading {
             rows.push(
@@ -2159,7 +2228,6 @@ impl WhiskyApp {
         }
         for (i, candidate) in picker.candidates.iter().enumerate() {
             let path = candidate.path.clone();
-            let view = cx.entity().downgrade();
             let (location, is_root) =
                 crate::bridge::dto::relative_directory_label(&candidate.path, &folder);
             let is_checked = multi_select && selected.iter().any(|item| item == &path);
@@ -2167,6 +2235,7 @@ impl WhiskyApp {
             rows.push(
                 row()
                     .id(row_id)
+                    .track_focus(&candidate_handles[i])
                     .w_full()
                     .p(px(10.))
                     .my(px(3.))
@@ -2183,6 +2252,7 @@ impl WhiskyApp {
                     } else {
                         crate::theme::card_border()
                     }))
+                    .focus(|s| s.border_2().border_color(rgb(crate::theme::ACCENT)))
                     .cursor_pointer()
                     .hover(|d| {
                         d.bg(rgba(if is_checked {
@@ -2196,15 +2266,14 @@ impl WhiskyApp {
                             crate::theme::hover_strong()
                         }))
                     })
-                    .on_click(move |_, _, cx| {
-                        let _ = view.update(cx, |this, cx| {
-                            if multi_select {
-                                this.toggle_picker_executable(&path, cx);
-                            } else {
-                                this.choose_executable(&path, cx);
-                            }
-                        });
-                    })
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        if multi_select {
+                            this.toggle_picker_executable(&path, cx);
+                        } else {
+                            this.choose_executable(&path, cx);
+                            this.restore_preview_sheet_focus(window, cx);
+                        }
+                    }))
                     .when(multi_select, |d| {
                         d.child(
                             div()
@@ -2314,7 +2383,7 @@ impl WhiskyApp {
                             .child(div().text_size(px(13.)).child("多 exe 入口模式"))
                             .child(
                                 muted(if multi_select {
-                                    format!("已勾选 {} 个入口，每次启动将弹出快捷选择面板。", selected.len())
+                                    format!("已勾选 {} 个入口，每次启动将弹出快捷选择面板（↑↓ 移动，Space 勾选，Cmd/Ctrl+Enter 确认）。", selected.len())
                                 } else {
                                     "开启后可同时勾选多个 .exe 作为作品的启动入口。".to_owned()
                                 })
@@ -2331,22 +2400,71 @@ impl WhiskyApp {
                     .into_any_element(),
             );
         }
-        self.form(
-            "executable-scroll",
-            vec![
-                self.section("executable-folder", "游戏目录", info_rows, cx),
-                self.section(
-                    "executable-list",
-                    if multi_select {
-                        "勾选可执行程序（可多选）"
-                    } else {
-                        "选择可执行程序 (.exe)"
-                    },
-                    rows,
-                    cx,
-                ),
-            ],
-        )
+        div()
+            .id("executable-picker-root")
+            .size_full()
+            .track_focus(&picker_container_handle)
+            .on_key_down(cx.listener(move |this, event: &KeyDownEvent, window, cx| {
+                let mods = &event.keystroke.modifiers;
+                if mods.platform || mods.control {
+                    if event.keystroke.key == "enter"
+                        && this
+                            .executable_picker
+                            .as_ref()
+                            .is_some_and(|p| p.multi_select && !p.loading && !p.selected.is_empty())
+                    {
+                        this.confirm_multi_executable_picker(cx);
+                        if this.preview.sheet.is_none() && this.launch_chooser.is_none() {
+                            this.restore_preview_sheet_focus(window, cx);
+                        }
+                        cx.stop_propagation();
+                    }
+                    return;
+                }
+                if mods.modified() || candidate_handles.is_empty() {
+                    return;
+                }
+                let n = candidate_handles.len();
+                let current = candidate_handles.iter().position(|h| h.is_focused(window));
+                match event.keystroke.key.as_str() {
+                    "down" => {
+                        let next = current.map_or(0, |i| (i + 1) % n);
+                        candidate_handles[next].focus(window, cx);
+                        cx.stop_propagation();
+                    }
+                    "up" => {
+                        let prev = current.map_or(n - 1, |i| (i + n - 1) % n);
+                        candidate_handles[prev].focus(window, cx);
+                        cx.stop_propagation();
+                    }
+                    "home" => {
+                        candidate_handles[0].focus(window, cx);
+                        cx.stop_propagation();
+                    }
+                    "end" => {
+                        candidate_handles[n - 1].focus(window, cx);
+                        cx.stop_propagation();
+                    }
+                    _ => {}
+                }
+            }))
+            .child(self.form(
+                "executable-scroll",
+                vec![
+                    self.section("executable-folder", "游戏目录", info_rows, cx),
+                    self.section(
+                        "executable-list",
+                        if multi_select {
+                            "勾选可执行程序（可多选）"
+                        } else {
+                            "选择可执行程序 (.exe)"
+                        },
+                        rows,
+                        cx,
+                    ),
+                ],
+            ))
+            .into_any_element()
     }
 
     /// The live Winetricks sheet: catalog search, installed state and one
@@ -3504,6 +3622,12 @@ impl WhiskyApp {
         if !matches!(sheet, PreviewSheet::GameInfo(_)) {
             self.game_info = None;
         }
+        if matches!(sheet, PreviewSheet::RunSettings(_) | PreviewSheet::Executable)
+            && self.preview_sheet_return_captured_gen != self.preview_sheet_generation
+        {
+            self.preview_sheet_return_focus = window.focused(cx);
+            self.preview_sheet_return_captured_gen = self.preview_sheet_generation;
+        }
         let title = match sheet {
             PreviewSheet::RunSettings(_) => "运行设置",
             PreviewSheet::Scan => "管理扫描文件夹",
@@ -3537,7 +3661,7 @@ impl WhiskyApp {
             PreviewSheet::MoveEntry(_) => self.move_entry_sheet(cx),
             PreviewSheet::OpenFile => self.open_file_sheet(cx),
             PreviewSheet::Scan => self.scan_settings(window, cx),
-            PreviewSheet::Executable => self.executable_picker(cx),
+            PreviewSheet::Executable => self.executable_picker(window, cx),
             PreviewSheet::GameTags(i) => self.game_tags_sheet(i, cx),
             PreviewSheet::ManageTags => self.manage_tags_sheet(cx),
             PreviewSheet::Winetricks => self.winetricks_sheet(cx),
@@ -3894,13 +4018,17 @@ impl WhiskyApp {
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.preview.sheet = None;
                         this.preview.sheet_history.clear();
-                        this.focus_handle.focus(window, cx);
+                        this.preview_sheet_return_captured_gen = 0;
+                        this.program_settings.pending_switch = None;
+                        this.executable_picker = None;
+                        this.restore_preview_sheet_focus(window, cx);
                         cx.notify();
                     })),
             )
             .child(
                 col()
                     .id("preview-sheet-card")
+                    .tab_group()
                     .occlude()
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .absolute()
@@ -3940,10 +4068,12 @@ impl WhiskyApp {
                                 cx.listener(|this, _, window, cx| {
                                     this.preview.sheet = None;
                                     this.preview.sheet_history.clear();
+                                    this.preview_sheet_return_captured_gen = 0;
+                                    this.program_settings.pending_switch = None;
                                     this.executable_picker = None;
                                     this.tag_manager_rename_target = None;
                                     this.game_info = None;
-                                    this.focus_handle.focus(window, cx);
+                                    this.restore_preview_sheet_focus(window, cx);
                                     cx.notify();
                                 }),
                             )),
@@ -3968,7 +4098,9 @@ impl WhiskyApp {
                                     d.child(Button::new("executable-cancel").label("取消").on_click(
                                         cx.listener(|this, _, window, cx| {
                                             this.cancel_executable_picker(cx);
-                                            this.focus_handle.focus(window, cx);
+                                            if this.preview.sheet.is_none() {
+                                                this.restore_preview_sheet_focus(window, cx);
+                                            }
                                         }),
                                     ))
                                 },
@@ -3990,7 +4122,7 @@ impl WhiskyApp {
                                         .disabled(busy)
                                         .on_click(cx.listener(|this, _, window, cx| {
                                             this.preview_dismiss(cx);
-                                            this.focus_handle.focus(window, cx);
+                                            this.restore_preview_sheet_focus(window, cx);
                                         })))
                             })
                             .when(cfg!(target_os = "linux") && !self.demo
@@ -3999,7 +4131,7 @@ impl WhiskyApp {
                                     .label("导入已有容器…")
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.preview.sheet = None;
-                                        this.focus_handle.focus(window, cx);
+                                        this.restore_preview_sheet_focus(window, cx);
                                         this.begin_import_scan(None, cx);
                                         cx.notify();
                                     })))
@@ -4009,6 +4141,12 @@ impl WhiskyApp {
                                     PreviewSheet::RunSettings(index) => index,
                                     _ => 0,
                                 };
+                                let multi_apply_visible = !self.demo
+                                    && self
+                                        .game(index)
+                                        .is_some_and(|g| g.multi_executable && g.launch_executables.len() >= 2)
+                                    && self.program_settings.executable.is_some();
+                                let multi_apply_dirty = multi_apply_visible && self.program_settings_is_dirty(cx);
                                 d.when(
                                     self.demo || self.program_settings.executable.is_some(),
                                     |row| {
@@ -4033,6 +4171,21 @@ impl WhiskyApp {
                                         Command::OpenGameDirectory(index),
                                         cx,
                                     ))
+                                })
+                                .when(multi_apply_visible, |d| {
+                                    d.child(
+                                        Button::new("run-settings-apply")
+                                            .label("仅保存")
+                                            .disabled(
+                                                self.program_settings.loading
+                                                    || self.program_settings.saving
+                                                    || self.program_settings.settings.is_none()
+                                                    || !multi_apply_dirty,
+                                            )
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.save_program_settings_keep_open(cx);
+                                            })),
+                                    )
                                 })
                             })
                             .child(
@@ -4119,7 +4272,6 @@ impl WhiskyApp {
                                                 && self.winetricks.selected.is_none()),
                                     )
                                     .on_click(cx.listener(|this, _, window, cx| {
-                                        this.focus_handle.focus(window, cx);
                                         if matches!(this.preview.sheet, Some(PreviewSheet::GameInfo(_))) {
                                             this.save_metadata_editor(cx);
                                             return;
@@ -4128,6 +4280,9 @@ impl WhiskyApp {
                                             && this.executable_picker.as_ref().is_some_and(|p| p.multi_select)
                                         {
                                             this.confirm_multi_executable_picker(cx);
+                                            if this.preview.sheet.is_none() && this.launch_chooser.is_none() {
+                                                this.restore_preview_sheet_focus(window, cx);
+                                            }
                                             return;
                                         }
                                         if matches!(this.preview.sheet, Some(PreviewSheet::CreateBottle)) {
@@ -4141,6 +4296,7 @@ impl WhiskyApp {
                                                 this.create_bottle = None;
                                                 this.preview.sheet = None;
                                                 this.preview.sheet_history.clear();
+                                                this.preview_sheet_return_captured_gen = 0;
                                                 cx.notify();
                                             } else {
                                                 // Submit the form
@@ -4150,6 +4306,8 @@ impl WhiskyApp {
                                             if this.demo || this.program_settings.executable.is_none() {
                                                 this.preview.sheet = None;
                                                 this.preview.sheet_history.clear();
+                                                this.preview_sheet_return_captured_gen = 0;
+                                                this.restore_preview_sheet_focus(window, cx);
                                                 cx.notify();
                                                 return;
                                             }
@@ -4158,6 +4316,8 @@ impl WhiskyApp {
                                             if this.demo {
                                                 this.preview.sheet = None;
                                                 this.preview.sheet_history.clear();
+                                                this.preview_sheet_return_captured_gen = 0;
+                                                this.restore_preview_sheet_focus(window, cx);
                                                 cx.notify();
                                                 return;
                                             }
@@ -4168,12 +4328,16 @@ impl WhiskyApp {
                                                 this.winetricks.job = None;
                                                 this.preview.sheet = None;
                                                 this.preview.sheet_history.clear();
+                                                this.preview_sheet_return_captured_gen = 0;
                                                 cx.notify();
                                             } else {
                                                 this.start_winetricks_install(cx);
                                             }
                                         } else {
                                             this.preview_dismiss(cx);
+                                        }
+                                        if this.preview.sheet.is_none() && this.launch_chooser.is_none() {
+                                            this.restore_preview_sheet_focus(window, cx);
                                         }
                                     })),
                             ),
@@ -5848,7 +6012,12 @@ impl WhiskyApp {
             .into_any_element()
     }
 
-    fn launch_entry_section(&self, index: usize, cx: &Context<Self>) -> Option<AnyElement> {
+    fn launch_entry_section(
+        &self,
+        index: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
         let game = self.game(index)?;
         if !game.supports_multi_executable() {
             return None;
@@ -5940,8 +6109,72 @@ impl WhiskyApp {
             );
 
             if !executables.is_empty() {
-                let mut entries_list = col().w_full().gap(px(6.)).pb(px(8.));
-                for exe in &executables {
+                let is_dirty = self.program_settings_is_dirty(cx);
+                let active_idx = current_target
+                    .as_deref()
+                    .and_then(|target| executables.iter().position(|exe| exe == target))
+                    .unwrap_or(0);
+                let entry_handles: Vec<FocusHandle> = (0..executables.len())
+                    .map(|ei| {
+                        window
+                            .use_keyed_state(("run-settings-exe", ei), cx, |_, cx| {
+                                cx.focus_handle().tab_stop(true).tab_index(0)
+                            })
+                            .read(cx)
+                            .clone()
+                    })
+                    .collect();
+                let auto_focused = window.use_keyed_state(
+                    ("run-settings-autofocus", self.preview_sheet_generation),
+                    cx,
+                    |_, _| std::cell::Cell::new(false),
+                );
+                if !auto_focused.read(cx).replace(true) {
+                    if let Some(handle) = entry_handles.get(active_idx) {
+                        window.focus(handle, cx);
+                    }
+                }
+                rows.push(
+                    muted("点击或使用方向键选择下方入口，分别为每个 .exe 调整运行设置（切换入口会自动保存未保存的修改）")
+                        .text_size(px(11.5))
+                        .pt(px(2.))
+                        .into_any_element(),
+                );
+                let nav_handles = entry_handles.clone();
+                let mut entries_list = col()
+                    .id("run-settings-exe-list")
+                    .w_full()
+                    .gap(px(6.))
+                    .pb(px(8.))
+                    .on_key_down(cx.listener(move |_, event: &KeyDownEvent, window, cx| {
+                        if event.keystroke.modifiers.modified() || nav_handles.is_empty() {
+                            return;
+                        }
+                        let n = nav_handles.len();
+                        let current = nav_handles.iter().position(|h| h.is_focused(window));
+                        match event.keystroke.key.as_str() {
+                            "down" => {
+                                let next = current.map_or(0, |i| (i + 1) % n);
+                                nav_handles[next].focus(window, cx);
+                                cx.stop_propagation();
+                            }
+                            "up" => {
+                                let prev = current.map_or(n - 1, |i| (i + n - 1) % n);
+                                nav_handles[prev].focus(window, cx);
+                                cx.stop_propagation();
+                            }
+                            "home" => {
+                                nav_handles[0].focus(window, cx);
+                                cx.stop_propagation();
+                            }
+                            "end" => {
+                                nav_handles[n - 1].focus(window, cx);
+                                cx.stop_propagation();
+                            }
+                            _ => {}
+                        }
+                    }));
+                for (ei, exe) in executables.iter().enumerate() {
                     let name = std::path::Path::new(exe)
                         .file_name()
                         .map(|n| n.to_string_lossy().into_owned())
@@ -5949,31 +6182,74 @@ impl WhiskyApp {
                     let (rel_dir, _) =
                         crate::bridge::dto::relative_directory_label(exe, &folder);
                     let is_last = last_executable.as_deref() == Some(exe.as_str());
+                    let is_active = current_target.as_deref() == Some(exe.as_str());
+                    let exe_path = exe.clone();
                     entries_list = entries_list.child(
                         row()
+                            .id(("run-settings-exe", ei))
+                            .track_focus(&entry_handles[ei])
                             .w_full()
                             .px(px(10.))
-                            .py(px(6.))
+                            .py(px(7.))
                             .gap(px(8.))
                             .items_center()
-                            .rounded(px(7.))
-                            .bg(rgba(crate::theme::card_bg_subtle()))
+                            .rounded(px(8.))
+                            .bg(rgba(if is_active {
+                                crate::theme::accent_subtle_bg()
+                            } else {
+                                crate::theme::card_bg_subtle()
+                            }))
                             .border_1()
-                            .border_color(rgba(if is_last {
+                            .border_color(rgba(if is_active {
                                 crate::theme::accent_subtle_border()
                             } else {
                                 crate::theme::card_border()
                             }))
-                            .child(icon("play", 11.).text_color(rgb(if is_last {
-                                crate::theme::accent_fg()
-                            } else {
-                                crate::theme::muted_color()
-                            })))
+                            .focus(|s| s.border_2().border_color(rgb(crate::theme::ACCENT)))
+                            .cursor_pointer()
+                            .hover(|s| {
+                                s.bg(rgba(if is_active {
+                                    crate::theme::accent_subtle_hover()
+                                } else {
+                                    crate::theme::hover()
+                                }))
+                                .border_color(rgba(if is_active {
+                                    crate::theme::accent_subtle_border()
+                                } else {
+                                    crate::theme::hover_strong()
+                                }))
+                            })
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.select_run_settings_executable(index, exe_path.clone(), cx);
+                            }))
+                            .child(
+                                icon(
+                                    if is_active {
+                                        "sliders-horizontal"
+                                    } else {
+                                        "play"
+                                    },
+                                    12.,
+                                )
+                                .text_color(rgb(if is_active || is_last {
+                                    crate::theme::accent_fg()
+                                } else {
+                                    crate::theme::muted_color()
+                                })),
+                            )
                             .child(
                                 div()
                                     .text_size(px(12.))
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .text_color(rgb(crate::theme::text()))
+                                    .font_weight(if is_active {
+                                        FontWeight::SEMIBOLD
+                                    } else {
+                                        FontWeight::MEDIUM
+                                    })
+                                    .text_color(rgb(if is_active {
+                                        crate::theme::accent_fg()
+                                    } else {
+                                        crate::theme::text()
+                                    }))
                                     .child(name),
                             )
                             .child(
@@ -5983,6 +6259,31 @@ impl WhiskyApp {
                                     .truncate()
                                     .text_size(px(11.)),
                             )
+                            .when(is_active, |d| {
+                                d.child(
+                                    div()
+                                        .px(px(6.))
+                                        .py(px(1.))
+                                        .rounded(px(4.))
+                                        .bg(rgba(crate::theme::accent_subtle_hover()))
+                                        .text_size(px(10.))
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .text_color(rgb(crate::theme::accent_fg()))
+                                        .child("正在编辑"),
+                                )
+                            })
+                            .when(is_active && is_dirty, |d| {
+                                d.child(
+                                    div()
+                                        .px(px(6.))
+                                        .py(px(1.))
+                                        .rounded(px(4.))
+                                        .bg(rgba(0xf5a62328))
+                                        .text_size(px(10.))
+                                        .text_color(rgb(crate::theme::warning_fg()))
+                                        .child("未保存"),
+                                )
+                            })
                             .when(is_last, |d| {
                                 d.child(
                                     div()
@@ -5994,41 +6295,13 @@ impl WhiskyApp {
                                         .text_color(rgb(crate::theme::accent_fg()))
                                         .child("上次启动"),
                                 )
+                            })
+                            .when(!is_active, |d| {
+                                d.child(muted("切换配置 ›").text_size(px(11.)))
                             }),
                     );
                 }
                 rows.push(entries_list.into_any_element());
-            }
-
-            if executables.len() >= 2 {
-                let mut switcher = row().flex_wrap().gap(px(6.)).pb(px(6.));
-                for (ei, exe) in executables.iter().enumerate() {
-                    let name = std::path::Path::new(exe)
-                        .file_name()
-                        .map(|n| n.to_string_lossy().into_owned())
-                        .unwrap_or_else(|| exe.clone());
-                    let active = current_target.as_deref() == Some(exe.as_str());
-                    let exe_path = exe.clone();
-                    switcher = switcher.child(selectable_pill(
-                        ("run-settings-target", ei),
-                        name,
-                        active,
-                        false,
-                        cx.listener(move |this, _, _, cx| {
-                            this.select_run_settings_executable(index, exe_path.clone(), cx);
-                        }),
-                    ));
-                }
-                rows.push(
-                    col()
-                        .gap(px(6.))
-                        .pt(px(8.))
-                        .border_t_1()
-                        .border_color(rgba(crate::theme::divider()))
-                        .child(muted("当前编辑的程序配置目标").text_size(px(11.5)))
-                        .child(switcher)
-                        .into_any_element(),
-                );
             }
         } else if game.is_folder {
             let label = primary_exe
@@ -6065,15 +6338,16 @@ impl WhiskyApp {
     }
 
     pub(crate) fn launch_chooser_dialog(
-        &self,
+        &mut self,
         width: f32,
         height: f32,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let Some(chooser) = self.launch_chooser.as_ref() else {
+        let Some(chooser) = self.launch_chooser.as_ref().cloned() else {
             return div().into_any_element();
         };
-        let pw = 460_f32.min(width - 48.);
+        let pw = 500_f32.min(width - 48.);
         let ph = (210. + chooser.executables.len() as f32 * 58.)
             .clamp(270., 520.)
             .min(height - 48.);
@@ -6101,8 +6375,51 @@ impl WhiskyApp {
                 .into_any_element(),
         };
 
+        let list_scroll = window
+            .use_keyed_state("launch-chooser-scroll", cx, |_, _| ScrollHandle::new())
+            .read(cx)
+            .clone();
+        let entry_handles: Vec<FocusHandle> = (0..chooser.executables.len())
+            .map(|i| {
+                window
+                    .use_keyed_state(("launch-chooser-entry", i), cx, |_, cx| {
+                        cx.focus_handle().tab_stop(true).tab_index(0)
+                    })
+                    .read(cx)
+                    .clone()
+            })
+            .collect();
+        let settings_handles: Vec<FocusHandle> = (0..chooser.executables.len())
+            .map(|i| {
+                window
+                    .use_keyed_state(("launch-chooser-settings", i), cx, |_, cx| {
+                        cx.focus_handle().tab_stop(true).tab_index(0)
+                    })
+                    .read(cx)
+                    .clone()
+            })
+            .collect();
+        let default_idx = chooser
+            .last_executable
+            .as_deref()
+            .and_then(|last| chooser.executables.iter().position(|e| e == last))
+            .unwrap_or(0);
+        let auto_focused = window.use_keyed_state(
+            ("launch-chooser-autofocus", self.launch_chooser_generation),
+            cx,
+            |_, _| std::cell::Cell::new(false),
+        );
+        if !auto_focused.read(cx).replace(true) {
+            self.launch_chooser_return_focus = window.focused(cx);
+            if let Some(handle) = entry_handles.get(default_idx) {
+                window.focus(handle, cx);
+                list_scroll.scroll_to_item(default_idx);
+            }
+        }
+
         let mut list = col()
             .id("launch-chooser-list")
+            .track_scroll(&list_scroll)
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
@@ -6118,96 +6435,144 @@ impl WhiskyApp {
                 crate::bridge::dto::relative_directory_label(exe_path, &chooser.folder);
             let is_last = chooser.last_executable.as_deref() == Some(exe_path.as_str());
             let path_click = exe_path.clone();
+            let path_settings = exe_path.clone();
+            let game_index = chooser.game_index;
             list = list.child(
                 row()
-                    .id(("launch-chooser-entry", i))
                     .w_full()
-                    .p(px(10.))
-                    .gap(px(12.))
+                    .gap(px(6.))
                     .items_center()
-                    .rounded(px(10.))
-                    .bg(rgba(if is_last {
-                        crate::theme::accent_subtle_bg()
-                    } else {
-                        crate::theme::card_bg_subtle()
-                    }))
-                    .border_1()
-                    .border_color(rgba(if is_last {
-                        crate::theme::accent_subtle_border()
-                    } else {
-                        crate::theme::card_border()
-                    }))
-                    .cursor_pointer()
-                    .hover(|s| {
-                        s.bg(rgba(if is_last {
-                            crate::theme::accent_subtle_hover()
-                        } else {
-                            crate::theme::hover()
-                        }))
-                        .border_color(rgba(if is_last {
-                            crate::theme::accent_subtle_border()
-                        } else {
-                            crate::theme::hover_strong()
-                        }))
-                    })
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.launch_selected_entry(path_click.clone(), cx);
-                        this.focus_handle.focus(window, cx);
-                    }))
                     .child(
-                        div()
-                            .size(px(34.))
-                            .flex_shrink_0()
-                            .rounded(px(8.))
-                            .bg(rgba(if is_last {
-                                crate::theme::accent_subtle_hover()
-                            } else {
-                                crate::theme::card_bg()
-                            }))
-                            .border_1()
-                            .border_color(rgba(crate::theme::card_border()))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .child(icon("play", 14.).text_color(rgb(if is_last {
-                                crate::theme::accent_fg()
-                            } else {
-                                crate::theme::text()
-                            }))),
-                    )
-                    .child(
-                        col()
+                        row()
+                            .id(("launch-chooser-entry", i))
+                            .track_focus(&entry_handles[i])
                             .flex_1()
                             .min_w_0()
-                            .gap(px(2.))
+                            .p(px(10.))
+                            .gap(px(12.))
+                            .items_center()
+                            .rounded(px(10.))
+                            .bg(rgba(if is_last {
+                                crate::theme::accent_subtle_bg()
+                            } else {
+                                crate::theme::card_bg_subtle()
+                            }))
+                            .border_1()
+                            .border_color(rgba(if is_last {
+                                crate::theme::accent_subtle_border()
+                            } else {
+                                crate::theme::card_border()
+                            }))
+                            .focus(|s| s.border_2().border_color(rgb(crate::theme::ACCENT)))
+                            .cursor_pointer()
+                            .hover(|s| {
+                                s.bg(rgba(if is_last {
+                                    crate::theme::accent_subtle_hover()
+                                } else {
+                                    crate::theme::hover()
+                                }))
+                                .border_color(rgba(if is_last {
+                                    crate::theme::accent_subtle_border()
+                                } else {
+                                    crate::theme::hover_strong()
+                                }))
+                            })
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                this.launch_selected_entry(path_click.clone(), cx);
+                                this.restore_launch_chooser_focus(window, cx);
+                            }))
                             .child(
-                                row()
-                                    .gap(px(6.))
+                                div()
+                                    .size(px(34.))
+                                    .flex_shrink_0()
+                                    .rounded(px(8.))
+                                    .bg(rgba(if is_last {
+                                        crate::theme::accent_subtle_hover()
+                                    } else {
+                                        crate::theme::card_bg()
+                                    }))
+                                    .border_1()
+                                    .border_color(rgba(crate::theme::card_border()))
+                                    .flex()
                                     .items_center()
-                                    .child(
-                                        div()
-                                            .font_weight(FontWeight::SEMIBOLD)
-                                            .text_size(px(13.))
-                                            .text_color(rgb(crate::theme::text()))
-                                            .truncate()
-                                            .child(name),
-                                    )
-                                    .when(is_last, |d| {
-                                        d.child(
-                                            div()
-                                                .px(px(6.))
-                                                .py(px(1.))
-                                                .rounded(px(4.))
-                                                .bg(rgba(crate::theme::accent_subtle_hover()))
-                                                .text_size(px(10.))
-                                                .text_color(rgb(crate::theme::accent_fg()))
-                                                .child("上次启动"),
-                                        )
-                                    }),
+                                    .justify_center()
+                                    .child(icon("play", 14.).text_color(rgb(if is_last {
+                                        crate::theme::accent_fg()
+                                    } else {
+                                        crate::theme::text()
+                                    }))),
                             )
-                            .child(muted(location).text_size(px(11.)).truncate()),
+                            .child(
+                                col()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .gap(px(2.))
+                                    .child(
+                                        row()
+                                            .gap(px(6.))
+                                            .items_center()
+                                            .child(
+                                                div()
+                                                    .font_weight(FontWeight::SEMIBOLD)
+                                                    .text_size(px(13.))
+                                                    .text_color(rgb(crate::theme::text()))
+                                                    .truncate()
+                                                    .child(name),
+                                            )
+                                            .when(is_last, |d| {
+                                                d.child(
+                                                    div()
+                                                        .px(px(6.))
+                                                        .py(px(1.))
+                                                        .rounded(px(4.))
+                                                        .bg(rgba(crate::theme::accent_subtle_hover()))
+                                                        .text_size(px(10.))
+                                                        .text_color(rgb(crate::theme::accent_fg()))
+                                                        .child("上次启动"),
+                                                )
+                                            }),
+                                    )
+                                    .child(muted(location).text_size(px(11.)).truncate()),
+                            )
+                            .child(muted("启动 ›").text_size(px(12.))),
                     )
-                    .child(muted("启动 ›").text_size(px(12.))),
+                    .child(
+                        row()
+                            .id(("launch-chooser-settings", i))
+                            .track_focus(&settings_handles[i])
+                            .flex_shrink_0()
+                            .px(px(10.))
+                            .py(px(10.))
+                            .gap(px(5.))
+                            .items_center()
+                            .rounded(px(10.))
+                            .bg(rgba(crate::theme::card_bg_subtle()))
+                            .border_1()
+                            .border_color(rgba(crate::theme::card_border()))
+                            .focus(|s| s.border_2().border_color(rgb(crate::theme::ACCENT)))
+                            .cursor_pointer()
+                            .hover(|s| {
+                                s.bg(rgba(crate::theme::hover()))
+                                    .border_color(rgba(crate::theme::hover_strong()))
+                            })
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.open_run_settings_for_executable(
+                                    game_index,
+                                    path_settings.clone(),
+                                    cx,
+                                );
+                            }))
+                            .child(
+                                icon("sliders-horizontal", 13.)
+                                    .text_color(rgb(crate::theme::subtext())),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .text_color(rgb(crate::theme::text()))
+                                    .child("设置"),
+                            ),
+                    ),
             );
         }
 
@@ -6223,15 +6588,70 @@ impl WhiskyApp {
                     .absolute()
                     .inset_0()
                     .on_click(cx.listener(|this, _, window, cx| {
-                        this.dismiss_launch_chooser(cx);
-                        this.focus_handle.focus(window, cx);
+                        this.close_launch_chooser(window, cx);
                     })),
             )
             .child(
                 col()
                     .id("launch-chooser-card")
+                    .tab_group()
                     .occlude()
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .on_key_down(cx.listener(move |_, event: &KeyDownEvent, window, cx| {
+                        if event.keystroke.modifiers.modified() || entry_handles.is_empty() {
+                            return;
+                        }
+                        let n = entry_handles.len();
+                        let entry_idx = entry_handles.iter().position(|h| h.is_focused(window));
+                        let settings_idx =
+                            settings_handles.iter().position(|h| h.is_focused(window));
+                        match event.keystroke.key.as_str() {
+                            "down" => {
+                                let next = entry_idx.or(settings_idx).map_or(0, |i| (i + 1) % n);
+                                if settings_idx.is_some() {
+                                    settings_handles[next].focus(window, cx);
+                                } else {
+                                    entry_handles[next].focus(window, cx);
+                                }
+                                list_scroll.scroll_to_item(next);
+                                cx.stop_propagation();
+                            }
+                            "up" => {
+                                let prev =
+                                    entry_idx.or(settings_idx).map_or(n - 1, |i| (i + n - 1) % n);
+                                if settings_idx.is_some() {
+                                    settings_handles[prev].focus(window, cx);
+                                } else {
+                                    entry_handles[prev].focus(window, cx);
+                                }
+                                list_scroll.scroll_to_item(prev);
+                                cx.stop_propagation();
+                            }
+                            "right" => {
+                                if let Some(i) = entry_idx {
+                                    settings_handles[i].focus(window, cx);
+                                    cx.stop_propagation();
+                                }
+                            }
+                            "left" => {
+                                if let Some(i) = settings_idx {
+                                    entry_handles[i].focus(window, cx);
+                                    cx.stop_propagation();
+                                }
+                            }
+                            "home" => {
+                                entry_handles[0].focus(window, cx);
+                                list_scroll.scroll_to_item(0);
+                                cx.stop_propagation();
+                            }
+                            "end" => {
+                                entry_handles[n - 1].focus(window, cx);
+                                list_scroll.scroll_to_item(n - 1);
+                                cx.stop_propagation();
+                            }
+                            _ => {}
+                        }
+                    }))
                     .absolute()
                     .left(px((width - pw) / 2.))
                     .top(px((height - ph) / 2.))
@@ -6266,12 +6686,14 @@ impl WhiskyApp {
                                             .truncate()
                                             .child(chooser.title.clone()),
                                     )
-                                    .child(muted("选择此次要启动的可执行入口").text_size(px(11.5))),
+                                    .child(
+                                        muted("选择此次要启动的可执行入口（↑↓ 切换，Enter 启动，→ 调整设置）")
+                                            .text_size(px(11.5)),
+                                    ),
                             )
                             .child(Button::new("launch-chooser-close").label("×").ghost().on_click(
                                 cx.listener(|this, _, window, cx| {
-                                    this.dismiss_launch_chooser(cx);
-                                    this.focus_handle.focus(window, cx);
+                                    this.close_launch_chooser(window, cx);
                                 }),
                             )),
                     )
@@ -6296,8 +6718,7 @@ impl WhiskyApp {
                                 Button::new("launch-chooser-cancel")
                                     .label("取消")
                                     .on_click(cx.listener(|this, _, window, cx| {
-                                        this.dismiss_launch_chooser(cx);
-                                        this.focus_handle.focus(window, cx);
+                                        this.close_launch_chooser(window, cx);
                                     })),
                             ),
                     ),

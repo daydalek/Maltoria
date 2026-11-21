@@ -39,9 +39,17 @@ extension MacOSApplicationServices {
         switch method {
         case "programs.settings.read", "programs.settings.set":
             let target = try programTarget(params, workspace: workspace)
-            return try await ProgramSettingsService.call(
+            let result = try await ProgramSettingsService.call(
                 method, params: params, workspace: workspace, defaults: defaultsPayload(target.bottle)
             )
+            if method == "programs.settings.set",
+               let cached = target.bottle.programs.first(where: {
+                   $0.url.standardizedFileURL == target.executable.standardizedFileURL
+               }) {
+                let loaded = Program.loadSettings(for: target.executable, bottleURL: target.container)
+                cached.refreshLoadedSettings(loaded, expectedRevision: cached.settingsRevision)
+            }
+            return result
         case "programs.history.read", "programs.history.delete":
             return try ProgramHistoryService.call(
                 method, params: params, workspace: workspace, logsDirectory: Wine.logsFolder

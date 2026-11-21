@@ -242,13 +242,24 @@ impl Render for WhiskyApp {
                 } else if this.clipboard_prompt.is_some() {
                     this.dismiss_clipboard(cx);
                 } else if this.launch_chooser.is_some() {
-                    this.launch_chooser = None;
+                    this.close_launch_chooser(window, cx);
+                    return;
                 } else if this.setup_dialog && !this.setup_installing {
                     this.dismiss_setup(cx);
                 } else if this.about {
                     this.dismiss_about();
+                } else if this.preview.sheet == Some(crate::state::PreviewSheet::Executable)
+                    && this.executable_picker.is_some()
+                {
+                    this.cancel_executable_picker(cx);
+                    if this.preview.sheet.is_none() {
+                        this.restore_preview_sheet_focus(window, cx);
+                    }
+                    return;
                 } else if this.preview.sheet.is_some() {
                     this.preview_dismiss(cx);
+                    this.restore_preview_sheet_focus(window, cx);
+                    return;
                 } else if this.detail_open {
                     this.close_detail(window, cx);
                     return;
@@ -309,11 +320,16 @@ impl Render for WhiskyApp {
                 root = root.child(self.detail_panel(index, presence.progress, ww, wh, window, cx));
             }
         }
+        if self.preview.sheet.is_none() && self.launch_chooser.is_none() {
+            if let Some(handle) = self.preview_sheet_return_focus.take() {
+                handle.focus(window, cx);
+            }
+        }
         if let Some(sheet) = self.preview.sheet {
             root = root.child(self.preview_sheet(sheet, ww, wh, window, cx));
         }
         if self.launch_chooser.is_some() {
-            root = root.child(self.launch_chooser_dialog(ww, wh, cx));
+            root = root.child(self.launch_chooser_dialog(ww, wh, window, cx));
         }
         if self.clipboard_prompt.is_some() {
             root = root.child(self.clipboard_dialog(ww, wh, cx));

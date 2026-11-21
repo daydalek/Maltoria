@@ -1089,103 +1089,6 @@ impl WhiskyApp {
                 );
             }
         }
-        let sidebar_studios = crate::library_view::collect_studio_counts(
-            games,
-            self.bottle_slot(),
-            self.show_hidden(),
-        );
-        let sidebar_unknown_studios = crate::library_view::unknown_studio_count(
-            games,
-            self.bottle_slot(),
-            self.show_hidden(),
-        );
-        if !sidebar_studios.is_empty()
-            || sidebar_unknown_studios > 0
-            || self.studio_filter.is_active()
-        {
-            let expanded = self.sidebar_studios_expanded || self.studio_filter.is_active();
-            entries = entries.child(
-                row()
-                    .mt(px(17.))
-                    .mb(px(4.))
-                    .px(px(13.))
-                    .items_center()
-                    .justify_between()
-                    .child(
-                        row()
-                            .id("sidebar-studios-toggle")
-                            .gap(px(4.))
-                            .items_center()
-                            .cursor_pointer()
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.sidebar_studios_expanded = !this.sidebar_studios_expanded;
-                                cx.notify();
-                            }))
-                            .child(
-                                icon(
-                                    if expanded { "chevron-down" } else { "chevron-right" },
-                                    11.,
-                                )
-                                .text_color(rgb(muted_color())),
-                            )
-                            .child(muted("厂商").text_size(px(11.)).font_weight(FontWeight::SEMIBOLD)),
-                    )
-                    .child(
-                        div()
-                            .id("sidebar-group-by-studio")
-                            .px(px(6.))
-                            .py(px(1.))
-                            .rounded(px(4.))
-                            .text_size(px(10.5))
-                            .bg(if self.group_by_studio {
-                                rgba(accent_subtle_bg())
-                            } else {
-                                rgba(0x00000000)
-                            })
-                            .text_color(rgb(if self.group_by_studio {
-                                accent_fg()
-                            } else {
-                                muted_color()
-                            }))
-                            .cursor_pointer()
-                            .hover(|s| s.bg(rgba(hover())))
-                            .tooltip(text_tip("按厂商聚类展示"))
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.toggle_group_by_studio(cx);
-                            }))
-                            .child(if self.group_by_studio { "已聚类" } else { "聚类" }),
-                    ),
-            );
-            if expanded {
-                for (si, (studio, count)) in sidebar_studios.into_iter().take(12).enumerate() {
-                    let active = self.studio_filter.is_studio(&studio);
-                    let studio_click = studio.clone();
-                    entries = entries.child(
-                        sidebar_row(("sidebar-studio", si), &studio, "building-2", count, active)
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.click_studio_filter(&studio_click, cx);
-                            })),
-                    );
-                }
-                if sidebar_unknown_studios > 0
-                    || self.studio_filter == crate::library_view::StudioFilter::Unknown
-                {
-                    let active = self.studio_filter == crate::library_view::StudioFilter::Unknown;
-                    entries = entries.child(
-                        sidebar_row(
-                            "sidebar-studio-unknown",
-                            crate::library_view::UNKNOWN_STUDIO_LABEL,
-                            "building-2",
-                            sidebar_unknown_studios,
-                            active,
-                        )
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.toggle_unknown_studio_filter(cx);
-                        })),
-                    );
-                }
-            }
-        }
         let (grad_start, grad_end) = sidebar_gradient();
         col()
             .size_full()
@@ -2987,9 +2890,6 @@ impl WhiskyApp {
                                                     }),
                                             ),
                                     )
-                                    .when(!self.demo, |d| {
-                                        d.child(self.detail_tags_section(index, window, cx))
-                                    })
                                     .when_some(g.description.clone(), |d, description| {
                                         d.child(
                                             col()
@@ -3016,7 +2916,10 @@ impl WhiskyApp {
                                                 ),
                                         )
                                     })
-                                    .child(self.detail_character_cards(index, cx)),
+                                    .child(self.detail_character_cards(index, cx))
+                                    .when(!self.demo, |d| {
+                                        d.child(self.detail_tags_section(index, window, cx))
+                                    }),
                             ),
                         ),
                     );
@@ -3894,6 +3797,95 @@ impl WhiskyApp {
         let Some(game) = self.game(index).cloned() else {
             return div().into_any_element();
         };
+
+        if !self.detail_tags_expanded {
+            let mut summary = row()
+                .flex_1()
+                .min_w_0()
+                .flex_wrap()
+                .items_center()
+                .gap(px(6.));
+            if game.tags.is_empty() {
+                summary = summary.child(muted("暂无标签").text_size(px(12.)));
+            } else {
+                const PREVIEW_LIMIT: usize = 4;
+                for (ti, tag) in game.tags.iter().take(PREVIEW_LIMIT).enumerate() {
+                    let tag_filter = tag.clone();
+                    summary = summary.child(
+                        div()
+                            .id(("detail-tag-summary-chip", ti))
+                            .h(px(22.))
+                            .px(px(8.))
+                            .rounded_full()
+                            .flex()
+                            .items_center()
+                            .bg(rgba(accent_subtle_bg()))
+                            .border_1()
+                            .border_color(rgba(accent_subtle_border()))
+                            .text_size(px(11.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(rgb(accent_fg()))
+                            .cursor_pointer()
+                            .hover(|s| s.bg(rgba(accent_subtle_hover())))
+                            .on_click(cx.listener(move |this, event: &ClickEvent, window, cx| {
+                                this.click_tag_filter(
+                                    &tag_filter,
+                                    event.modifiers().platform || event.modifiers().shift,
+                                    cx,
+                                );
+                                this.close_detail(window, cx);
+                                cx.stop_propagation();
+                            }))
+                            .child(tag.clone()),
+                    );
+                }
+                if game.tags.len() > PREVIEW_LIMIT {
+                    summary = summary.child(
+                        muted(format!("+{}", game.tags.len() - PREVIEW_LIMIT)).text_size(px(11.)),
+                    );
+                }
+            }
+
+            return row()
+                .id("detail-tags-collapsed")
+                .flex_shrink_0()
+                .items_center()
+                .gap(px(10.))
+                .px(px(16.))
+                .py(px(11.))
+                .rounded(px(12.))
+                .bg(rgba(card_bg()))
+                .border_1()
+                .border_color(rgba(card_border()))
+                .cursor_pointer()
+                .hover(|s| s.bg(rgba(hover())))
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.detail_tags_expanded = true;
+                    cx.notify();
+                }))
+                .child(
+                    row()
+                        .flex_shrink_0()
+                        .items_center()
+                        .gap(px(6.))
+                        .child(icon("tag", 14.).text_color(rgb(accent_fg())))
+                        .child(div().font_weight(FontWeight::SEMIBOLD).child("标签")),
+                )
+                .child(summary)
+                .child(
+                    row()
+                        .flex_shrink_0()
+                        .items_center()
+                        .gap(px(4.))
+                        .child(
+                            muted(if game.tags.is_empty() { "添加" } else { "编辑" })
+                                .text_size(px(11.5)),
+                        )
+                        .child(icon("chevron-right", 14.).text_color(rgb(muted_color()))),
+                )
+                .into_any_element();
+        }
+
         let library_tags: Vec<(String, usize)> =
             crate::library_view::collect_tag_counts(self.games(), true)
                 .into_iter()
@@ -3959,22 +3951,29 @@ impl WhiskyApp {
         col()
             .flex_shrink_0()
             .gap(px(12.))
-            .p(px(20.))
+            .p(px(16.))
             .rounded(px(12.))
             .bg(rgba(card_bg()))
             .border_1()
             .border_color(rgba(card_border()))
             .child(
                 row()
+                    .id("detail-tags-header")
                     .items_center()
                     .justify_between()
                     .gap(px(8.))
+                    .cursor_pointer()
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.detail_tags_expanded = false;
+                        cx.notify();
+                    }))
                     .child(
                         row()
                             .items_center()
                             .gap(px(6.))
                             .child(icon("tag", 14.).text_color(rgb(accent_fg())))
-                            .child(div().font_weight(FontWeight::SEMIBOLD).child("标签")),
+                            .child(div().font_weight(FontWeight::SEMIBOLD).child("标签"))
+                            .child(icon("chevron-down", 14.).text_color(rgb(muted_color()))),
                     )
                     .child(
                         row()
@@ -3986,6 +3985,7 @@ impl WhiskyApp {
                                     .label("管理全部…")
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.open_manage_tags_sheet(cx);
+                                        cx.stop_propagation();
                                     })),
                             ),
                     ),

@@ -809,7 +809,6 @@ pub(crate) struct WhiskyApp {
     pub(crate) studio_filter: library_view::StudioFilter,
     pub(crate) group_by_studio: bool,
     pub(crate) collapsed_studios: BTreeSet<String>,
-    pub(crate) sidebar_studios_expanded: bool,
     pub(crate) filter_bar_tab: crate::ui_state::FilterBarTab,
     pub(crate) tag_bar_mode: crate::ui_state::TagBarMode,
     pub(crate) tag_bar_hint_seen: bool,
@@ -819,6 +818,12 @@ pub(crate) struct WhiskyApp {
     pub(crate) pull_reveal: library_view::PullRevealState,
     pull_idle_generation: u64,
     pub(crate) launch_chooser: Option<LaunchChooserState>,
+    pub(crate) launch_chooser_generation: u64,
+    pub(crate) launch_chooser_return_focus: Option<gpui_kit::FocusHandle>,
+    pub(crate) executable_picker_generation: u64,
+    pub(crate) preview_sheet_generation: u64,
+    pub(crate) preview_sheet_return_focus: Option<gpui_kit::FocusHandle>,
+    pub(crate) preview_sheet_return_captured_gen: u64,
     pub(crate) tag_input: Entity<InputState>,
     tag_input_subscription: Subscription,
     pub(crate) tag_input_fill: Option<String>,
@@ -904,6 +909,7 @@ pub(crate) struct WhiskyApp {
     pub(crate) detail_open_generation: u64,
     pub(crate) detail_return_focus: Option<gpui_kit::FocusHandle>,
     pub(crate) detail_character: Option<String>,
+    pub(crate) detail_tags_expanded: bool,
     pub(crate) appearance: crate::theme::AppearanceMode,
     /// The message on the existing toast; `None` hides it. Runtime and entry
     /// failures reuse the toast instead of introducing another surface.
@@ -912,6 +918,9 @@ pub(crate) struct WhiskyApp {
     pub(crate) runtime: RuntimeTable,
     /// Active graphics backend keyed by bridge entry id.
     pub(crate) active_backends: HashMap<String, String>,
+    /// Active executable path keyed by bridge entry id, tracked on launch so
+    /// post-exit legacy fullscreen probes inspect the exe that actually ran.
+    pub(crate) active_executables: HashMap<String, String>,
     /// The clipboard preflight awaiting a decision, if any.
     pub(crate) clipboard_prompt: Option<ClipboardPrompt>,
     /// The post-run legacy fullscreen suggestion awaiting a decision, if any.
@@ -1120,7 +1129,6 @@ impl WhiskyApp {
             studio_filter: library_view::StudioFilter::All,
             group_by_studio: library_ui.group_by_studio,
             collapsed_studios: BTreeSet::new(),
-            sidebar_studios_expanded: false,
             filter_bar_tab: library_ui.filter_bar_tab,
             tag_bar_mode: library_ui.tag_bar_mode,
             tag_bar_hint_seen,
@@ -1130,6 +1138,12 @@ impl WhiskyApp {
             pull_reveal,
             pull_idle_generation: 0,
             launch_chooser: None,
+            launch_chooser_generation: 0,
+            launch_chooser_return_focus: None,
+            executable_picker_generation: 0,
+            preview_sheet_generation: 0,
+            preview_sheet_return_focus: None,
+            preview_sheet_return_captured_gen: 0,
             tag_input,
             tag_input_subscription,
             tag_input_fill: None,
@@ -1183,10 +1197,12 @@ impl WhiskyApp {
             detail_open_generation: 0,
             detail_return_focus: None,
             detail_character: None,
+            detail_tags_expanded: false,
             appearance,
             notice: None,
             runtime: RuntimeTable::default(),
             active_backends: HashMap::new(),
+            active_executables: HashMap::new(),
             clipboard_prompt: None,
             legacy_fullscreen_prompt: None,
             bridge,
@@ -1215,6 +1231,7 @@ impl WhiskyApp {
         self.hidden_edits.clear();
         self.clipboard_prompt = None;
         self.legacy_fullscreen_prompt = None;
+        self.active_executables.clear();
         self.bottle_dialog = None;
         self.bottle_operation = None;
         self.pending_path_action = None;
@@ -1368,6 +1385,7 @@ impl WhiskyApp {
                     // gone; re-launching from the card gets a fresh one.
                     self.clipboard_prompt = None;
                     self.legacy_fullscreen_prompt = None;
+                    self.active_executables.clear();
                     if self.entries.is_empty() {
                         self.load_error = reason;
                     }
@@ -1561,10 +1579,14 @@ impl WhiskyApp {
                             .map(|entry| entry.id.clone())
                             .collect();
                         let container = update.container.clone();
-                        for entry in &update.entries {
-                            if entry.state == "idle" {
-                                self.active_backends.remove(&entry.id);
-                            }
+                        let idle_ids: Vec<String> = update
+                            .entries
+                            .iter()
+                            .filter(|entry| entry.state == "idle")
+                            .map(|entry| entry.id.clone())
+                            .collect();
+                        for entry_id in &idle_ids {
+                            self.active_backends.remove(entry_id);
                         }
                         self.runtime.apply(update);
                         // Each finished run re-reads its settings: the newest
@@ -1572,16 +1594,13 @@ impl WhiskyApp {
                         // flag, and the probe only prompts when the fix is
                         // neither applied nor permanently dismissed.
                         for entry_id in &exited_ids {
-                            let executable = self
-                                .entries
-                                .iter()
-                                .find(|entry| entry.id == *entry_id)
-                                .and_then(|entry| entry.executable.as_ref())
-                                .and_then(|path| path.to_str());
-                            if let Some(executable) = executable {
+                            if let Some(executable) = self.resolve_exited_executable(entry_id) {
                                 self.bridge
-                                    .probe_legacy_fullscreen(&container, executable, entry_id);
+                                    .probe_legacy_fullscreen(&container, &executable, entry_id);
                             }
+                        }
+                        for entry_id in &idle_ids {
+                            self.active_executables.remove(entry_id);
                         }
                         if !exited_ids.is_empty()
                             && self
@@ -2553,14 +2572,27 @@ impl WhiskyApp {
             }
             BridgeEvent::ProgramSettings { settings } => {
                 if self.program_target_matches(&settings.container, &settings.executable) {
+                    let was_saving = self.program_settings.saving;
                     let close = self.program_settings.close_after_save;
+                    let pending_switch = self.program_settings.pending_switch.take();
+                    let saved_name = settings.program_name.clone();
+                    self.program_settings.close_after_save = false;
                     self.program_settings.apply_settings(settings);
                     self.preview.program_inputs.clear();
-                    self.refresh_program_cache(cx);
-                    if close {
-                        self.preview.sheet = None;
-                        self.preview.sheet_history.clear();
-                        self.show_notice("程序设置已保存", cx);
+                    if let Some((next_index, next_exe)) = pending_switch {
+                        self.show_notice(format!("已保存 {saved_name} 的程序设置"), cx);
+                        self.run_settings_target_exe = Some(next_exe);
+                        self.open_program_settings(next_index, cx);
+                    } else {
+                        self.refresh_program_cache(cx);
+                        if close {
+                            self.preview.sheet = None;
+                            self.preview.sheet_history.clear();
+                            self.preview_sheet_return_captured_gen = 0;
+                            self.show_notice("程序设置已保存", cx);
+                        } else if was_saving {
+                            self.show_notice(format!("已保存 {saved_name} 的程序设置"), cx);
+                        }
                     }
                 }
             }
@@ -2571,6 +2603,8 @@ impl WhiskyApp {
             } => {
                 if self.program_target_matches(&container, &executable) {
                     let was_saving = self.program_settings.saving;
+                    self.program_settings.pending_switch = None;
+                    self.program_settings.close_after_save = false;
                     self.program_settings.fail(reason.clone());
                     if was_saving {
                         self.show_notice(reason, cx);
@@ -3494,6 +3528,7 @@ impl WhiskyApp {
         }
         self.detail = Some(index);
         self.detail_open = true;
+        self.detail_tags_expanded = false;
         self.detail_open_generation = self.detail_open_generation.wrapping_add(1);
         self.hovered = None;
         self.notice = None;
@@ -6327,6 +6362,7 @@ impl WhiskyApp {
         self.run_file_in(index, &file.path, &file.name, cx);
         self.preview.sheet = None;
         self.preview.sheet_history.clear();
+        self.preview_sheet_return_captured_gen = 0;
         cx.notify();
     }
 
@@ -6439,6 +6475,15 @@ impl WhiskyApp {
         executable: String,
         cx: &mut Context<Self>,
     ) {
+        if self.program_settings.executable.as_deref() == Some(executable.as_str())
+            || self.program_settings.saving
+        {
+            return;
+        }
+        if !self.demo && self.program_settings_is_dirty(cx) {
+            self.start_save_program_settings(false, Some((index, executable)), cx);
+            return;
+        }
         self.run_settings_target_exe = Some(executable);
         self.open_program_settings(index, cx);
     }
@@ -6553,14 +6598,25 @@ impl WhiskyApp {
         }
     }
 
-    /// Read the text inputs, build one patch and save on the current target.
-    pub(crate) fn save_program_settings(&mut self, cx: &mut Context<Self>) {
+    fn build_program_settings_draft(
+        &self,
+        cx: &App,
+    ) -> Result<
+        (
+            String,
+            String,
+            crate::program_settings::ProgramSettingsDto,
+            String,
+            BTreeMap<String, String>,
+        ),
+        String,
+    > {
         let (Some(container), Some(executable), Some(mut settings)) = (
             self.program_settings.container.clone(),
             self.program_settings.executable.clone(),
             self.program_settings.settings.clone(),
         ) else {
-            return;
+            return Err(String::new());
         };
         if settings.display_enabled()
             && settings
@@ -6595,12 +6651,10 @@ impl WhiskyApp {
                 });
             let (Ok(width), Ok(height)) = (width.trim().parse::<i64>(), height.trim().parse::<i64>())
             else {
-                self.show_notice("自定义分辨率必须是整数", cx);
-                return;
+                return Err("自定义分辨率必须是整数".to_owned());
             };
             if !(200..=16_384).contains(&width) || !(200..=16_384).contains(&height) {
-                self.show_notice("自定义分辨率超出范围", cx);
-                return;
+                return Err("自定义分辨率超出范围".to_owned());
             }
             if let Some(overrides) = settings.overrides.as_mut() {
                 overrides.custom_resolution_width = Some(width);
@@ -6636,21 +6690,74 @@ impl WhiskyApp {
                 continue;
             }
             if key.contains('=') || key.contains('\0') {
-                self.show_notice("环境变量名不能包含 = 或 NUL", cx);
-                return;
+                return Err("环境变量名不能包含 = 或 NUL".to_owned());
             }
             if environment.insert(key.clone(), value).is_some() {
-                self.show_notice(format!("环境变量 {key} 重复"), cx);
-                return;
+                return Err(format!("环境变量 {key} 重复"));
             }
         }
+        Ok((container, executable, settings, arguments, environment))
+    }
+
+    pub(crate) fn program_settings_is_dirty(&self, cx: &App) -> bool {
+        let Some(baseline) = self.program_settings.baseline.as_ref() else {
+            return false;
+        };
+        if self.program_settings.settings.is_none() {
+            return false;
+        }
+        match self.build_program_settings_draft(cx) {
+            Ok((_, _, settings, arguments, environment)) => {
+                let current = crate::program_settings::normalized_patch_for_dirty_check(
+                    &settings,
+                    &arguments,
+                    &environment,
+                );
+                let base = crate::program_settings::normalized_patch_for_dirty_check(
+                    baseline,
+                    &baseline.arguments,
+                    &baseline.environment,
+                );
+                current != base
+            }
+            Err(msg) => !msg.is_empty(),
+        }
+    }
+
+    fn start_save_program_settings(
+        &mut self,
+        close_after_save: bool,
+        pending_switch: Option<(usize, String)>,
+        cx: &mut Context<Self>,
+    ) {
+        let (container, executable, settings, arguments, environment) =
+            match self.build_program_settings_draft(cx) {
+                Ok(parts) => parts,
+                Err(msg) => {
+                    if !msg.is_empty() {
+                        self.show_notice(msg, cx);
+                    }
+                    return;
+                }
+            };
         let patch = settings_patch(&settings, &arguments, &environment);
         self.program_settings.saving = true;
-        self.program_settings.close_after_save = true;
+        self.program_settings.close_after_save = close_after_save;
+        self.program_settings.pending_switch = pending_switch;
         self.program_settings.error = None;
         self.bridge
             .save_program_settings(&container, &executable, patch);
         cx.notify();
+    }
+
+    /// Read the text inputs, build one patch and save on the current target.
+    pub(crate) fn save_program_settings(&mut self, cx: &mut Context<Self>) {
+        self.start_save_program_settings(true, None, cx);
+    }
+
+    /// Save edits for the current `.exe` target without closing the sheet.
+    pub(crate) fn save_program_settings_keep_open(&mut self, cx: &mut Context<Self>) {
+        self.start_save_program_settings(false, None, cx);
     }
 
     pub(crate) fn create_program_shortcut(&mut self, cx: &mut Context<Self>) {
@@ -6866,14 +6973,14 @@ impl WhiskyApp {
                 overrides.use_button_labels = None;
             }
             "display" if on => {
-                overrides.emulate_modeset = defaults.emulate_modeset;
-                overrides.virtual_desktop_enabled = defaults.virtual_desktop_enabled;
-                overrides.resolution_preset = defaults.resolution_preset;
+                overrides.virtual_desktop_enabled =
+                    Some(defaults.virtual_desktop_enabled.unwrap_or(false));
+                overrides.resolution_preset =
+                    defaults.resolution_preset.or_else(|| Some("r1920x1080".into()));
                 overrides.custom_resolution_width = defaults.custom_resolution_width;
                 overrides.custom_resolution_height = defaults.custom_resolution_height;
             }
             "display" => {
-                overrides.emulate_modeset = None;
                 overrides.virtual_desktop_enabled = None;
                 overrides.resolution_preset = None;
                 overrides.custom_resolution_width = None;
@@ -7619,6 +7726,7 @@ impl WhiskyApp {
             return;
         }
         let folder = folder.to_string_lossy().to_string();
+        self.executable_picker_generation = self.executable_picker_generation.wrapping_add(1);
         self.executable_picker = Some(ExecutablePickerState {
             game_index: index,
             container: container.clone(),
@@ -7671,6 +7779,7 @@ impl WhiskyApp {
             selected.push(exe.to_string_lossy().into_owned());
         }
         let folder = folder.to_string_lossy().to_string();
+        self.executable_picker_generation = self.executable_picker_generation.wrapping_add(1);
         self.executable_picker = Some(ExecutablePickerState {
             game_index: index,
             container: game.container.clone(),
@@ -7727,6 +7836,8 @@ impl WhiskyApp {
                         .unwrap_or_else(|| path.to_owned())
                 });
             self.show_notice(format!("正在启动 {title}"), cx);
+            self.active_executables
+                .insert(picker.entry_id.clone(), path.to_owned());
             self.runtime
                 .set_state(&picker.entry_id, RuntimeState::Preparing);
             self.bridge
@@ -7734,6 +7845,7 @@ impl WhiskyApp {
         }
         self.preview.sheet = None;
         self.preview.sheet_history.clear();
+        self.preview_sheet_return_captured_gen = 0;
         cx.notify();
     }
 
@@ -7938,6 +8050,10 @@ impl WhiskyApp {
         let Some(prompt) = self.clipboard_prompt.take() else {
             return;
         };
+        if let Some(executable) = prompt.executable.as_deref() {
+            self.active_executables
+                .insert(prompt.entry_id.clone(), executable.to_owned());
+        }
         self.runtime
             .set_state(&prompt.entry_id, RuntimeState::Preparing);
         self.bridge.resolve_clipboard(prompt, decision);
@@ -7961,6 +8077,8 @@ impl WhiskyApp {
             json!({ "overrides": { "emulateModeset": prompt.enable } }),
         );
         if relaunch {
+            self.active_executables
+                .insert(prompt.entry_id.clone(), prompt.executable.clone());
             self.runtime
                 .set_state(&prompt.entry_id, RuntimeState::Preparing);
             self.bridge.launch(
@@ -8047,6 +8165,8 @@ impl WhiskyApp {
         }
     }
     pub(crate) fn open_preview_sheet(&mut self, sheet: PreviewSheet, cx: &mut Context<Self>) {
+        let was_sheet_open = self.preview.sheet.is_some();
+        let closing_detail = self.detail_open;
         if let Some(previous) = self.preview.sheet {
             self.preview.sheet_history.push(previous);
         } else {
@@ -8055,6 +8175,19 @@ impl WhiskyApp {
         self.preview.sheet = Some(sheet);
         self.detail_open = false;
         self.hovered = None;
+        self.preview_sheet_generation = self.preview_sheet_generation.wrapping_add(1);
+        if closing_detail {
+            self.preview_sheet_return_focus = Some(
+                self.detail_return_focus
+                    .take()
+                    .unwrap_or_else(|| self.focus_handle.clone()),
+            );
+            self.preview_sheet_return_captured_gen = self.preview_sheet_generation;
+        } else if was_sheet_open {
+            self.preview_sheet_return_captured_gen = self.preview_sheet_generation;
+        } else {
+            self.preview_sheet_return_focus = None;
+        }
         if sheet == PreviewSheet::Scan {
             self.ensure_folders(cx);
         }
@@ -8223,6 +8356,8 @@ impl WhiskyApp {
         self.create_bottle = None;
         self.preview.sheet = None;
         self.preview.sheet_history.clear();
+        self.preview_sheet_return_captured_gen = 0;
+        self.program_settings.pending_switch = None;
         // A dismissed picker chose nothing, so nothing is recorded or launched.
         self.executable_picker = None;
         self.tag_manager_rename_target = None;
@@ -9100,10 +9235,13 @@ impl WhiskyApp {
         if let Some(index) = return_index {
             self.preview.sheet = Some(PreviewSheet::RunSettings(index));
             self.preview.sheet_history.clear();
+            self.preview_sheet_generation = self.preview_sheet_generation.wrapping_add(1);
+            self.preview_sheet_return_captured_gen = self.preview_sheet_generation;
             self.open_program_settings(index, cx);
         } else {
             self.preview.sheet = None;
             self.preview.sheet_history.clear();
+            self.preview_sheet_return_captured_gen = 0;
         }
         cx.notify();
     }
@@ -9179,12 +9317,15 @@ impl WhiskyApp {
         if picker.return_to_run_settings {
             self.preview.sheet = Some(PreviewSheet::RunSettings(picker.game_index));
             self.preview.sheet_history.clear();
+            self.preview_sheet_generation = self.preview_sheet_generation.wrapping_add(1);
+            self.preview_sheet_return_captured_gen = self.preview_sheet_generation;
             self.open_program_settings(picker.game_index, cx);
             cx.notify();
             return;
         }
         self.preview.sheet = None;
         self.preview.sheet_history.clear();
+        self.preview_sheet_return_captured_gen = 0;
         if picker.launch_after {
             let _ = self.configured.ensure(&picker.container);
             self.bridge.configure_runtime(&picker.container);
@@ -9197,6 +9338,7 @@ impl WhiskyApp {
                     cx,
                 );
             } else {
+                self.launch_chooser_generation = self.launch_chooser_generation.wrapping_add(1);
                 self.launch_chooser = Some(LaunchChooserState {
                     game_index: picker.game_index,
                     container: picker.container,
@@ -9229,6 +9371,7 @@ impl WhiskyApp {
             .game_directory()
             .map(|dir| dir.to_string_lossy().into_owned())
             .unwrap_or_default();
+        self.launch_chooser_generation = self.launch_chooser_generation.wrapping_add(1);
         self.launch_chooser = Some(LaunchChooserState {
             game_index: index,
             container: game.container,
@@ -9243,16 +9386,70 @@ impl WhiskyApp {
         cx.notify();
     }
 
+    #[cfg(test)]
     pub(crate) fn dismiss_launch_chooser(&mut self, cx: &mut Context<Self>) {
         self.launch_chooser = None;
         cx.notify();
+    }
+
+    pub(crate) fn restore_launch_chooser_focus(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(handle) = self.launch_chooser_return_focus.take() {
+            handle.focus(window, cx);
+        } else {
+            self.focus_handle.focus(window, cx);
+        }
+    }
+
+    pub(crate) fn close_launch_chooser(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.launch_chooser = None;
+        self.restore_launch_chooser_focus(window, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn restore_preview_sheet_focus(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(handle) = self.preview_sheet_return_focus.take() {
+            handle.focus(window, cx);
+        } else {
+            self.focus_handle.focus(window, cx);
+        }
+    }
+
+    pub(crate) fn open_run_settings_for_executable(
+        &mut self,
+        index: usize,
+        executable: String,
+        cx: &mut Context<Self>,
+    ) {
+        let chooser_return = self.launch_chooser_return_focus.take();
+        let was_detail_open = self.detail_open;
+        self.launch_chooser = None;
+        self.run_settings_target_exe = Some(executable);
+        self.open_preview_sheet(PreviewSheet::RunSettings(index), cx);
+        if !was_detail_open {
+            self.preview_sheet_return_focus = chooser_return;
+            self.preview_sheet_return_captured_gen = self.preview_sheet_generation;
+        }
     }
 
     pub(crate) fn edit_launch_chooser_executables(&mut self, cx: &mut Context<Self>) {
         let Some(chooser) = self.launch_chooser.take() else {
             return;
         };
+        let chooser_return = self.launch_chooser_return_focus.take();
+        let was_detail_open = self.detail_open;
         self.open_multi_executable_picker(chooser.game_index, true, false, chooser.terminal, cx);
+        if !was_detail_open {
+            self.preview_sheet_return_focus = chooser_return;
+            self.preview_sheet_return_captured_gen = self.preview_sheet_generation;
+        }
     }
 
     pub(crate) fn launch_selected_entry(
@@ -9292,6 +9489,28 @@ impl WhiskyApp {
         cx.notify();
     }
 
+    pub(crate) fn resolve_exited_executable(&mut self, entry_id: &str) -> Option<String> {
+        if let Some(exe) = self.active_executables.remove(entry_id) {
+            return Some(exe);
+        }
+        let entry = self.entries.iter().find(|entry| entry.id == entry_id)?;
+        if entry.multi_executable {
+            if let Some(last) = entry
+                .last_executable
+                .as_deref()
+                .filter(|path| !path.is_empty())
+            {
+                return Some(last.to_owned());
+            }
+        }
+        entry
+            .executable
+            .as_ref()
+            .and_then(|path| path.to_str())
+            .filter(|path| !path.is_empty())
+            .map(ToOwned::to_owned)
+    }
+
     fn launch_entry_directly(
         &mut self,
         container: &str,
@@ -9305,6 +9524,8 @@ impl WhiskyApp {
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_else(|| executable.to_owned());
         self.show_notice(format!("正在启动 {title} · {exe_name}"), cx);
+        self.active_executables
+            .insert(entry_id.to_owned(), executable.to_owned());
         self.runtime.set_state(entry_id, RuntimeState::Preparing);
         self.bridge.launch(container, entry_id, Some(executable));
         if !cfg!(target_os = "linux")

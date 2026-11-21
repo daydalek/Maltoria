@@ -2679,6 +2679,45 @@ fn studio_filter_and_clustering_compose_with_tags(cx: &mut gpui_kit::TestAppCont
 
                 app.clear_all_library_filters(cx);
                 assert_eq!(app.filtered(cx), vec![0, 1, 2, 3]);
+
+                // Opening detail keeps the bottom tags section collapsed by default.
+                app.open_detail(0, cx);
+                assert!(!app.detail_tags_expanded);
+            });
+        })
+        .unwrap();
+
+    // Render detail panel in both collapsed and expanded tag states, then close before mode loop.
+    cx.update_window(app_handle.into(), |_, window, cx| {
+        window.draw(cx).clear(cx);
+    })
+    .unwrap();
+    app_handle
+        .update(cx, |root, _, cx| {
+            let view = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap();
+            view.update(cx, |app, cx| {
+                app.detail_tags_expanded = true;
+                cx.notify();
+            });
+        })
+        .unwrap();
+    cx.update_window(app_handle.into(), |_, window, cx| {
+        window.draw(cx).clear(cx);
+    })
+    .unwrap();
+    app_handle
+        .update(cx, |root, window, cx| {
+            let view = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap();
+            view.update(cx, |app, cx| {
+                app.close_detail(window, cx);
             });
         })
         .unwrap();
@@ -2844,4 +2883,492 @@ fn pull_down_tag_bar_gesture_hint_and_mode_switching(cx: &mut gpui_kit::TestAppC
         window.draw(cx).clear(cx);
     })
     .unwrap();
+}
+
+#[gpui_kit::test]
+fn multi_executable_per_exe_run_settings_and_legacy_fullscreen_probe(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    cx.update(|app| {
+        gpui_kit::init(app);
+        crate::bind_shortcuts(app);
+    });
+    let (_events_tx, events_rx) = smol::channel::unbounded();
+    let bridge = crate::bridge::BridgeSupervisor::disconnected_for_tests();
+    let app_handle = cx.add_window(|window, cx| {
+        let view = cx.new(|cx| {
+            let mut app =
+                crate::state::WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, false);
+            app.apply_bridge_event(
+                crate::bridge::BridgeEvent::Containers(vec![crate::bridge::dto::Container {
+                    path: "/bottles/alpha".into(),
+                    name: "Alpha".into(),
+                    available: true,
+                }]),
+                cx,
+            );
+            let folder_entry: crate::bridge::dto::EntryDto = serde_json::from_value(serde_json::json!({
+                "id": "folder:/bottles/alpha:/games/dual",
+                "name": "Dual Exe Work",
+                "source": "folder",
+                "folder": "/games/dual",
+                "executable": "/games/dual/Game.exe",
+                "multiExecutable": true,
+                "launchExecutables": ["/games/dual/Game.exe", "/games/dual/bin/Config.exe"],
+                "lastExecutable": "/games/dual/Game.exe",
+                "needsExecutable": false
+            }))
+            .unwrap();
+            app.apply_bridge_event(
+                crate::bridge::BridgeEvent::Entries {
+                    container: "/bottles/alpha".into(),
+                    entries: vec![folder_entry],
+                },
+                cx,
+            );
+            app
+        });
+        gpui_kit::base::Root::new(view, window, cx)
+    });
+
+    app_handle
+        .update(cx, |root, _, cx| {
+            let view = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap();
+            view.update(cx, |app, cx| {
+                app.open_run_settings_for_executable(0, "/games/dual/bin/Config.exe".into(), cx);
+                assert!(matches!(
+                    app.preview.sheet,
+                    Some(crate::state::PreviewSheet::RunSettings(0))
+                ));
+                assert_eq!(
+                    app.program_settings.executable.as_deref(),
+                    Some("/games/dual/bin/Config.exe")
+                );
+
+                let config_dto: crate::program_settings::ProgramSettingsDto =
+                    serde_json::from_value(serde_json::json!({
+                        "container": "/bottles/alpha",
+                        "executable": "/games/dual/bin/Config.exe",
+                        "programName": "Config.exe",
+                        "locale": "",
+                        "arguments": "",
+                        "environment": {},
+                        "overrides": null,
+                        "defaults": {},
+                        "available": true
+                    }))
+                    .unwrap();
+                app.apply_bridge_event(
+                    crate::bridge::BridgeEvent::ProgramSettings {
+                        settings: config_dto,
+                    },
+                    cx,
+                );
+                assert!(!app.program_settings_is_dirty(cx));
+
+                // Toggling emulateModeset works directly without enabling virtual desktop override.
+                app.set_program_override_bool("emulateModeset", true, cx);
+                assert!(app.program_settings_is_dirty(cx));
+                assert_eq!(
+                    app.program_settings
+                        .settings
+                        .as_ref()
+                        .and_then(|s| s.overrides.as_ref())
+                        .and_then(|o| o.emulate_modeset),
+                    Some(true)
+                );
+
+                // Display override group activates even when bottle defaults lack virtualDesktopEnabled,
+                // and turning it back off preserves per-exe emulateModeset.
+                app.set_program_override_group("display", true);
+                assert!(app.program_settings.settings.as_ref().unwrap().display_enabled());
+                app.set_program_override_group("display", false);
+                assert!(!app.program_settings.settings.as_ref().unwrap().display_enabled());
+                assert_eq!(
+                    app.program_settings
+                        .settings
+                        .as_ref()
+                        .and_then(|s| s.overrides.as_ref())
+                        .and_then(|o| o.emulate_modeset),
+                    Some(true)
+                );
+
+                // Switching exe while dirty auto-saves Config.exe before loading Game.exe.
+                app.select_run_settings_executable(0, "/games/dual/Game.exe".into(), cx);
+                assert!(app.program_settings.saving);
+                assert!(!app.program_settings.close_after_save);
+                assert_eq!(
+                    app.program_settings.pending_switch,
+                    Some((0, "/games/dual/Game.exe".to_owned()))
+                );
+                assert_eq!(
+                    app.program_settings.executable.as_deref(),
+                    Some("/games/dual/bin/Config.exe")
+                );
+
+                let saved_dto: crate::program_settings::ProgramSettingsDto =
+                    serde_json::from_value(serde_json::json!({
+                        "container": "/bottles/alpha",
+                        "executable": "/games/dual/bin/Config.exe",
+                        "programName": "Config.exe",
+                        "locale": "",
+                        "arguments": "",
+                        "environment": {},
+                        "overrides": { "emulateModeset": true },
+                        "defaults": {},
+                        "available": true
+                    }))
+                    .unwrap();
+                app.apply_bridge_event(
+                    crate::bridge::BridgeEvent::ProgramSettings {
+                        settings: saved_dto,
+                    },
+                    cx,
+                );
+                assert_eq!(
+                    app.program_settings.executable.as_deref(),
+                    Some("/games/dual/Game.exe")
+                );
+                assert!(matches!(
+                    app.preview.sheet,
+                    Some(crate::state::PreviewSheet::RunSettings(0))
+                ));
+                assert_eq!(
+                    app.notice.as_deref(),
+                    Some("已保存 Config.exe 的程序设置")
+                );
+
+                app.preview_dismiss(cx);
+
+                // Launching Config.exe records the actual running executable for post-exit probing.
+                app.open_launch_chooser(0, false, cx);
+                app.launch_selected_entry("/games/dual/bin/Config.exe".into(), cx);
+                assert_eq!(
+                    app.resolve_exited_executable("folder:/bottles/alpha:/games/dual")
+                        .as_deref(),
+                    Some("/games/dual/bin/Config.exe")
+                );
+            });
+        })
+        .unwrap();
+}
+
+#[gpui_kit::test]
+fn multi_executable_launch_chooser_and_picker_keyboard_navigation(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    cx.update(|app| {
+        gpui_kit::init(app);
+        crate::bind_shortcuts(app);
+    });
+    let (_events_tx, events_rx) = smol::channel::unbounded();
+    let bridge = crate::bridge::BridgeSupervisor::disconnected_for_tests();
+    let app_handle = cx.add_window(|window, cx| {
+        let view = cx.new(|cx| {
+            let mut app =
+                crate::state::WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, false);
+            app.apply_bridge_event(
+                crate::bridge::BridgeEvent::Containers(vec![crate::bridge::dto::Container {
+                    path: "/bottles/alpha".into(),
+                    name: "Alpha".into(),
+                    available: true,
+                }]),
+                cx,
+            );
+            let folder_entry: crate::bridge::dto::EntryDto = serde_json::from_value(serde_json::json!({
+                "id": "folder:/bottles/alpha:/games/dual",
+                "name": "Dual Exe Work",
+                "source": "folder",
+                "folder": "/games/dual",
+                "executable": "/games/dual/Game.exe",
+                "multiExecutable": true,
+                "launchExecutables": ["/games/dual/Game.exe", "/games/dual/bin/Config.exe"],
+                "lastExecutable": "/games/dual/Game.exe",
+                "needsExecutable": false
+            }))
+            .unwrap();
+            app.apply_bridge_event(
+                crate::bridge::BridgeEvent::Entries {
+                    container: "/bottles/alpha".into(),
+                    entries: vec![folder_entry],
+                },
+                cx,
+            );
+            app
+        });
+        gpui_kit::base::Root::new(view, window, cx)
+    });
+
+    app_handle
+        .update(cx, |root, _, cx| {
+            let view = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap();
+            view.update(cx, |app, cx| {
+                app.open_detail(0, cx);
+            });
+        })
+        .unwrap();
+    cx.update_window(app_handle.into(), |_, window, cx| {
+        window.draw(cx).clear(cx);
+    })
+    .unwrap();
+    let detail_play_focus = cx
+        .update_window(app_handle.into(), |_, window, cx| window.focused(cx))
+        .unwrap();
+    assert!(detail_play_focus.is_some());
+
+    // Enter on detail-play opens launch chooser and auto-focuses default exe (index 0).
+    press_key(cx, app_handle.into(), "enter");
+    cx.update_window(app_handle.into(), |_, window, cx| {
+        window.draw(cx).clear(cx);
+    })
+    .unwrap();
+    let entry0_focus = cx
+        .update_window(app_handle.into(), |_, window, cx| window.focused(cx))
+        .unwrap();
+    app_handle
+        .read_with(cx, |root, cx| {
+            let app = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap()
+                .read(cx);
+            assert!(app.launch_chooser.is_some());
+            assert!(entry0_focus.is_some());
+            assert_ne!(entry0_focus, detail_play_focus);
+        })
+        .unwrap();
+
+    // Down moves to Config.exe; Right moves to its settings button; Left moves back.
+    press_key(cx, app_handle.into(), "down");
+    let entry1_focus = cx
+        .update_window(app_handle.into(), |_, window, cx| window.focused(cx))
+        .unwrap();
+    assert_ne!(entry1_focus, entry0_focus);
+
+    press_key(cx, app_handle.into(), "right");
+    let settings1_focus = cx
+        .update_window(app_handle.into(), |_, window, cx| window.focused(cx))
+        .unwrap();
+    assert_ne!(settings1_focus, entry1_focus);
+
+    press_key(cx, app_handle.into(), "left");
+    let back_to_entry1 = cx
+        .update_window(app_handle.into(), |_, window, cx| window.focused(cx))
+        .unwrap();
+    assert_eq!(back_to_entry1, entry1_focus);
+
+    // Escape closes launch chooser and restores focus back to detail-play.
+    press_key(cx, app_handle.into(), "escape");
+    let restored_detail_focus = cx
+        .update_window(app_handle.into(), |_, window, cx| window.focused(cx))
+        .unwrap();
+    app_handle
+        .read_with(cx, |root, cx| {
+            let app = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap()
+                .read(cx);
+            assert!(app.launch_chooser.is_none());
+            assert_eq!(restored_detail_focus, detail_play_focus);
+        })
+        .unwrap();
+
+    // Reopen launch chooser, move to Config.exe and press Enter to launch it.
+    press_key(cx, app_handle.into(), "enter");
+    cx.update_window(app_handle.into(), |_, window, cx| {
+        window.draw(cx).clear(cx);
+    })
+    .unwrap();
+    press_key(cx, app_handle.into(), "down");
+    press_key(cx, app_handle.into(), "enter");
+    app_handle
+        .read_with(cx, |root, cx| {
+            let app = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap()
+                .read(cx);
+            assert!(app.launch_chooser.is_none());
+            assert_eq!(
+                app.games()[0].last_executable.as_deref(),
+                Some("/games/dual/bin/Config.exe")
+            );
+            assert_eq!(
+                app.notice.as_deref(),
+                Some("正在启动 Dual Exe Work · Config.exe")
+            );
+        })
+        .unwrap();
+
+    // Reopen launch chooser (Config.exe at index 1 is now default), Right -> Enter opens RunSettings for Config.exe.
+    app_handle
+        .update(cx, |root, _, cx| {
+            let view = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap();
+            view.update(cx, |app, cx| {
+                app.open_launch_chooser(0, false, cx);
+            });
+        })
+        .unwrap();
+    cx.update_window(app_handle.into(), |_, window, cx| {
+        window.draw(cx).clear(cx);
+    })
+    .unwrap();
+    press_key(cx, app_handle.into(), "right");
+    press_key(cx, app_handle.into(), "enter");
+    cx.update_window(app_handle.into(), |_, window, cx| {
+        window.draw(cx).clear(cx);
+    })
+    .unwrap();
+    app_handle
+        .read_with(cx, |root, cx| {
+            let app = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap()
+                .read(cx);
+            assert!(matches!(
+                app.preview.sheet,
+                Some(crate::state::PreviewSheet::RunSettings(0))
+            ));
+            assert_eq!(
+                app.program_settings.executable.as_deref(),
+                Some("/games/dual/bin/Config.exe")
+            );
+        })
+        .unwrap();
+
+    // Up + Enter inside RunSettings exe list switches target to Game.exe.
+    press_key(cx, app_handle.into(), "up");
+    press_key(cx, app_handle.into(), "enter");
+    app_handle
+        .read_with(cx, |root, cx| {
+            let app = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap()
+                .read(cx);
+            assert_eq!(
+                app.program_settings.executable.as_deref(),
+                Some("/games/dual/Game.exe")
+            );
+        })
+        .unwrap();
+
+    // Open multi-select executable picker from RunSettings, navigate with Up/Down/Space, Escape returns to RunSettings.
+    app_handle
+        .update(cx, |root, _, cx| {
+            let view = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap();
+            view.update(cx, |app, cx| {
+                app.open_multi_executable_picker(0, false, true, false, cx);
+                app.apply_bridge_event(
+                    crate::bridge::BridgeEvent::Candidates {
+                        candidates: crate::bridge::dto::CandidatesDto {
+                            folder: "/games/dual".into(),
+                            candidates: vec![
+                                crate::bridge::dto::CandidateDto {
+                                    path: "/games/dual/Game.exe".into(),
+                                    name: "Game.exe".into(),
+                                },
+                                crate::bridge::dto::CandidateDto {
+                                    path: "/games/dual/bin/Config.exe".into(),
+                                    name: "Config.exe".into(),
+                                },
+                            ],
+                        },
+                    },
+                    cx,
+                );
+            });
+        })
+        .unwrap();
+    cx.update_window(app_handle.into(), |_, window, cx| {
+        window.draw(cx).clear(cx);
+    })
+    .unwrap();
+
+    press_key(cx, app_handle.into(), "space");
+    app_handle
+        .read_with(cx, |root, cx| {
+            let app = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap()
+                .read(cx);
+            assert_eq!(
+                app.executable_picker.as_ref().unwrap().selected,
+                vec!["/games/dual/bin/Config.exe".to_owned()]
+            );
+        })
+        .unwrap();
+
+    press_key(cx, app_handle.into(), "down");
+    press_key(cx, app_handle.into(), "space");
+    app_handle
+        .read_with(cx, |root, cx| {
+            let app = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap()
+                .read(cx);
+            assert!(app.executable_picker.as_ref().unwrap().selected.is_empty());
+        })
+        .unwrap();
+
+    press_key(cx, app_handle.into(), "up");
+    press_key(cx, app_handle.into(), "space");
+    app_handle
+        .read_with(cx, |root, cx| {
+            let app = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap()
+                .read(cx);
+            assert_eq!(
+                app.executable_picker.as_ref().unwrap().selected,
+                vec!["/games/dual/Game.exe".to_owned()]
+            );
+        })
+        .unwrap();
+
+    press_key(cx, app_handle.into(), "escape");
+    app_handle
+        .read_with(cx, |root, cx| {
+            let app = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap()
+                .read(cx);
+            assert!(app.executable_picker.is_none());
+            assert!(matches!(
+                app.preview.sheet,
+                Some(crate::state::PreviewSheet::RunSettings(0))
+            ));
+        })
+        .unwrap();
 }

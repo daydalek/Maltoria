@@ -110,16 +110,8 @@ public final class WineLibraryContentService: LibraryContentProviding {
         let launch = sourceLaunch.options(for: entry)
         if !launch.isDefault {
             var targetLaunch = try LibraryLaunchOptions.load(bottleURL: containerURL)
-            let rekeyed = EntryLaunchOptions(
-                multiExecutable: launch.multiExecutable,
-                executables: launch.executables.map { key in
-                    let resolved = FolderGameLibrary.url(for: key, bottleURL: entry.bottleURL)
-                    return FolderGameLibrary.key(for: resolved, bottleURL: containerURL)
-                },
-                lastExecutable: launch.lastExecutable.map { key in
-                    let resolved = FolderGameLibrary.url(for: key, bottleURL: entry.bottleURL)
-                    return FolderGameLibrary.key(for: resolved, bottleURL: containerURL)
-                }
+            let rekeyed = FolderGameLibrary.migrateLaunchOptions(
+                launch, from: entry.bottleURL, to: containerURL, alreadyMigrated: entry.source == .folder ? nil : url
             )
             targetLaunch.setOptions(rekeyed, for: moved)
             try targetLaunch.save(bottleURL: containerURL)

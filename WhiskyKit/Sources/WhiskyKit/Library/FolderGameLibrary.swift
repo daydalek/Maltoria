@@ -99,12 +99,7 @@ extension FolderGameLibrary {
             url(for: $0, bottleURL: sourceBottleURL).standardizedFileURL == rootURL
         }
         let wasInitialized = sourceLib.initializedRoots.remove(rootKey) != nil
-        if !targetLib.roots.contains(targetRootKey) {
-            targetLib.roots.append(targetRootKey)
-        }
-        if wasInitialized {
-            targetLib.initializedRoots.insert(targetRootKey)
-        }
+        targetLib.registerMovedRoot(targetRootKey, initialized: wasInitialized)
 
         let exclusions = sourceLib.excludedFolders.filter {
             url(for: $0, bottleURL: sourceBottleURL).deletingLastPathComponent().standardizedFileURL == rootURL
@@ -138,9 +133,8 @@ extension FolderGameLibrary {
             if !targetLib.knownFolders.contains(newFolderKey) {
                 targetLib.knownFolders.append(newFolderKey)
             }
-            if targetVisibility.hiddenIdentities.remove("program:" + newFolderKey) != nil {
-                visibilityChanged = true
-            }
+            visibilityChanged = targetVisibility.hiddenIdentities.remove("program:" + newFolderKey) != nil
+                || visibilityChanged
             let sourceIdentity = "program:" + folderKey
             let targetIdentity = "program:" + newFolderKey
             let movedTags = sourceTags.tags(forIdentity: sourceIdentity)
@@ -148,27 +142,22 @@ extension FolderGameLibrary {
                 targetTags.setTags(movedTags, forIdentity: targetIdentity)
                 tagsChanged = true
             }
+            let executable = sourceLib.executable(for: folderURL, bottleURL: sourceBottleURL)
+            if let executable {
+                targetLib.executables[newFolderKey] = key(for: executable, bottleURL: targetBottleURL)
+                migrateProgramSettings(for: executable, from: sourceBottleURL, to: targetBottleURL)
+                sourceLib.executables.removeValue(forKey: folderKey)
+            }
             let movedLaunch = sourceLaunch.options(forIdentity: sourceIdentity)
             if !movedLaunch.isDefault {
-                let rekeyed = EntryLaunchOptions(
-                    multiExecutable: movedLaunch.multiExecutable,
-                    executables: movedLaunch.executables.map { exeKey in
-                        key(for: url(for: exeKey, bottleURL: sourceBottleURL), bottleURL: targetBottleURL)
-                    },
-                    lastExecutable: movedLaunch.lastExecutable.map { exeKey in
-                        key(for: url(for: exeKey, bottleURL: sourceBottleURL), bottleURL: targetBottleURL)
-                    }
+                let rekeyed = migrateLaunchOptions(
+                    movedLaunch, from: sourceBottleURL, to: targetBottleURL, alreadyMigrated: executable
                 )
                 targetLaunch.setOptions(rekeyed, forIdentity: targetIdentity)
                 launchChanged = true
             }
             if sourceLib.pendingMetadata.remove(folderKey) != nil, targetLib.automaticMetadata {
                 targetLib.pendingMetadata.insert(newFolderKey)
-            }
-            if let exeURL = sourceLib.executable(for: folderURL, bottleURL: sourceBottleURL) {
-                targetLib.executables[newFolderKey] = key(for: exeURL, bottleURL: targetBottleURL)
-                migrateProgramSettings(for: exeURL, from: sourceBottleURL, to: targetBottleURL)
-                sourceLib.executables.removeValue(forKey: folderKey)
             }
         }
         targetLib.knownFolders.sort()
@@ -184,6 +173,41 @@ extension FolderGameLibrary {
         if launchChanged {
             try targetLaunch.save(bottleURL: targetBottleURL)
         }
+    }
+
+    private mutating func registerMovedRoot(_ rootKey: String, initialized: Bool) {
+        if !roots.contains(rootKey) {
+            roots.append(rootKey)
+        }
+        if initialized {
+            initializedRoots.insert(rootKey)
+        }
+    }
+
+    static func migrateLaunchOptions(
+        _ options: EntryLaunchOptions,
+        from sourceBottleURL: URL,
+        to targetBottleURL: URL,
+        alreadyMigrated: URL?
+    ) -> EntryLaunchOptions {
+        var migratedPaths: Set<String> = []
+        if let alreadyMigrated {
+            migratedPaths.insert(alreadyMigrated.standardizedFileURL.path)
+        }
+        let executables = options.executables.map { sourceKey in
+            let executable = url(for: sourceKey, bottleURL: sourceBottleURL).standardizedFileURL
+            if migratedPaths.insert(executable.path).inserted {
+                migrateProgramSettings(for: executable, from: sourceBottleURL, to: targetBottleURL)
+            }
+            return key(for: executable, bottleURL: targetBottleURL)
+        }
+        return EntryLaunchOptions(
+            multiExecutable: options.multiExecutable,
+            executables: executables,
+            lastExecutable: options.lastExecutable.map {
+                key(for: url(for: $0, bottleURL: sourceBottleURL), bottleURL: targetBottleURL)
+            }
+        )
     }
 
     public static func migrateProgramSettings(

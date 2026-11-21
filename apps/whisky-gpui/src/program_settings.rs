@@ -74,7 +74,7 @@ impl ProgramSettingsDto {
 
     pub(crate) fn display_enabled(&self) -> bool {
         self.overrides.as_ref().is_some_and(|overrides| {
-            overrides.virtual_desktop_enabled.is_some() || overrides.emulate_modeset.is_some()
+            overrides.virtual_desktop_enabled.is_some() || overrides.resolution_preset.is_some()
         })
     }
 
@@ -198,6 +198,8 @@ pub(crate) struct ProgramSettingsPage {
     pub(crate) executable: Option<String>,
     pub(crate) title: String,
     pub(crate) settings: Option<ProgramSettingsDto>,
+    /// Snapshot of the last loaded or saved settings for dirty-state detection.
+    pub(crate) baseline: Option<ProgramSettingsDto>,
     pub(crate) loading: bool,
     pub(crate) saving: bool,
     pub(crate) error: Option<String>,
@@ -209,6 +211,8 @@ pub(crate) struct ProgramSettingsPage {
     pub(crate) dll_new_mode: String,
     pub(crate) shortcut_destination: String,
     pub(crate) close_after_save: bool,
+    /// Queued `(game_index, executable)` switch waiting for an auto-save before switching targets.
+    pub(crate) pending_switch: Option<(usize, String)>,
     pub(crate) shortcut_path: Option<String>,
     pub(crate) shortcut_error: Option<String>,
     /// Last measured size of the GDI upscaler disk cache for this program.
@@ -233,6 +237,7 @@ impl ProgramSettingsPage {
         self.executable = Some(executable.to_owned());
         self.title = title.to_owned();
         self.settings = None;
+        self.baseline = None;
         self.loading = true;
         self.saving = false;
         self.error = None;
@@ -243,6 +248,7 @@ impl ProgramSettingsPage {
         self.history_loading = true;
         self.shortcut_destination = default_shortcut_destination();
         self.close_after_save = false;
+        self.pending_switch = None;
         self.shortcut_path = None;
         self.shortcut_error = None;
         self.cache_bytes = None;
@@ -279,6 +285,7 @@ impl ProgramSettingsPage {
                 }
             })
             .collect();
+        self.baseline = Some(settings.clone());
         self.settings = Some(settings);
         self.loading = false;
         self.saving = false;
@@ -543,6 +550,25 @@ pub(crate) fn settings_patch(
     if let Some(overrides) = patch["overrides"].as_object_mut() {
         for key in ["metal4Enabled", "gdiUpscaler", "gdiUpscalerCache"] {
             overrides.remove(key);
+        }
+    }
+    patch
+}
+
+/// Canonicalizes `settings_patch` for dirty-checking so empty overrides or
+/// `emulateModeset: false` compare equal to inherited `null`.
+pub(crate) fn normalized_patch_for_dirty_check(
+    settings: &ProgramSettingsDto,
+    arguments: &str,
+    environment: &BTreeMap<String, String>,
+) -> Value {
+    let mut patch = settings_patch(settings, arguments, environment);
+    if let Some(overrides) = patch["overrides"].as_object_mut() {
+        if overrides.get("emulateModeset").and_then(Value::as_bool) == Some(false) {
+            overrides.insert("emulateModeset".to_owned(), Value::Null);
+        }
+        if overrides.values().all(Value::is_null) {
+            patch["overrides"] = Value::Null;
         }
     }
     patch
@@ -830,5 +856,22 @@ mod tests {
         page.env_rows.retain(|row| row.id != first);
         assert_eq!(page.env_rows[0].key, "NEW");
         assert_ne!(page.env_rows[0].id, first);
+    }
+
+    #[test]
+    fn dirty_check_normalizes_empty_overrides_and_false_emulate_modeset() {
+        let mut base = settings();
+        base.overrides = None;
+        let mut draft = base.clone();
+        draft.overrides_mut().emulate_modeset = Some(false);
+        assert_eq!(
+            normalized_patch_for_dirty_check(&base, &base.arguments, &base.environment),
+            normalized_patch_for_dirty_check(&draft, &draft.arguments, &draft.environment),
+        );
+        draft.overrides_mut().emulate_modeset = Some(true);
+        assert_ne!(
+            normalized_patch_for_dirty_check(&base, &base.arguments, &base.environment),
+            normalized_patch_for_dirty_check(&draft, &draft.arguments, &draft.environment),
+        );
     }
 }
