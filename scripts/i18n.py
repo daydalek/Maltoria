@@ -28,7 +28,7 @@ PLACEHOLDER_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 CJK_RE = re.compile(r"[぀-ヿ一-鿿가-힯]")
 PLURAL_CATEGORIES = {"zero", "one", "other"}
 
-# Banned call patterns outside src/i18n/ (H2 will migrate these sites).
+# Banned call patterns outside src/i18n/: all text comes from locales/*.toml.
 BANNED_PATTERNS = [
     ("crate::i18n::tr(", re.compile(r"crate::i18n::tr\(")),
     ("crate::i18n::pick(", re.compile(r"crate::i18n::pick\(")),
@@ -193,34 +193,116 @@ def rust_files():
     return sorted(p for p in SRC.rglob("*.rs"))
 
 
+def sanitized_lines(text):
+    """Return per-line text with string/comment contents blanked out.
+
+    Tracks `//` comments, `"..."` strings and `r#"..."#` raw strings across the
+    whole file so brace counting is not confused by literal contents. Char literals are blanked too; lifetimes like `'a` pass through.
+    """
+    out = []
+    buf = []
+    i = 0
+    n = len(text)
+    mode = None  # None | "str" | ("raw", hashes)
+    while i < n:
+        c = text[i]
+        if mode == "str":
+            if c == "\\":
+                i += 2
+                continue
+            if c == '"':
+                mode = None
+            elif c == "\n":
+                out.append("".join(buf))
+                buf = []
+            i += 1
+            continue
+        if isinstance(mode, tuple):
+            if text.startswith('"' + mode[1], i):
+                i += 1 + len(mode[1])
+                mode = None
+                continue
+            if c == "\n":
+                out.append("".join(buf))
+                buf = []
+            i += 1
+            continue
+        if text.startswith("//", i):
+            j = text.find("\n", i)
+            if j < 0:
+                break
+            out.append("".join(buf))
+            buf = []
+            i = j + 1
+            continue
+        if c == '"':
+            mode = "str"
+            i += 1
+            continue
+        m = re.match(r"r(#*)\"", text[i:])
+        if m:
+            if m.group(1):
+                mode = ("raw", m.group(1))
+                i += m.end()
+                continue
+            mode = "str"  # plain r"..." — closes at the next unescaped quote
+            i += m.end()
+            continue
+        if c == "'":
+            j = i + 1
+            if j < n and text[j] == "\\":
+                j += 2
+            else:
+                j += 1
+            if j < n and text[j] == "'":
+                i = j + 1
+                continue
+        if c == "\n":
+            out.append("".join(buf))
+            buf = []
+            i += 1
+            continue
+        buf.append(c)
+        i += 1
+    out.append("".join(buf))
+    return out
+
+
 def strip_test_regions(text):
-    """Return (code text, set of 1-based line numbers inside #[cfg(test)] blocks).
+    """Return the set of 1-based line numbers inside #[cfg(test)] items.
 
     Heuristic: a `#[cfg(test)]` line marks the start; the following braced block
-    (or the rest of the file when no braces are found on that module) is test code.
+    is test code.
     """
-    lines = text.split("\n")
+    lines = sanitized_lines(text)
     test_lines = set()
     i = 0
     while i < len(lines):
         if "#[cfg(test)]" in lines[i]:
-            # consume attributes until the item's opening brace
             depth = 0
             j = i
             opened = False
+            inner = 0  # ( and [ depth, so `;` in `[T; N]` types is ignored
+            end = j  # 0-based index of the last line of the item
             while j < len(lines):
                 for c in lines[j]:
-                    if c == "{":
+                    if c in "([":
+                        inner += 1
+                    elif c in ")]":
+                        inner -= 1
+                    elif c == "{" and inner == 0:
                         depth += 1
                         opened = True
-                    elif c == "}":
+                    elif c == "}" and inner == 0:
                         depth -= 1
-                if not opened and ";" in lines[j]:
-                    break  # `#[cfg(test)] use ...;` — no block follows
+                if not opened and inner == 0 and ";" in lines[j]:
+                    end = j  # `#[cfg(test)] use ...;` — item ends on this line
+                    break
+                end = j
                 j += 1
                 if opened and depth <= 0:
                     break
-            test_lines.update(range(i + 1, min(j, len(lines)) + 1))
+            test_lines.update(range(i + 1, min(end + 2, len(lines) + 1)))
             i = j
         else:
             i += 1
@@ -298,10 +380,26 @@ def scan_sources():
 
 def load_allowlist():
     if not ALLOWLIST_PATH.exists():
-        return {"banned_patterns": {}, "hardcoded": {}, "bridge_untranslated": {}, "unused_keys": {}}
+        return {
+            "banned_patterns": {},
+            "hardcoded": {},
+            "bridge_untranslated": {},
+            "bridge_dynamic": {},
+            "unused_keys": {},
+            "identical": {},
+            "naming": {},
+        }
     data = tomllib.loads(ALLOWLIST_PATH.read_text())
     out = {}
-    for cat in ("banned_patterns", "hardcoded", "bridge_untranslated", "unused_keys"):
+    for cat in (
+        "banned_patterns",
+        "hardcoded",
+        "bridge_untranslated",
+        "bridge_dynamic",
+        "unused_keys",
+        "identical",
+        "naming",
+    ):
         entries = data.get(cat, {})
         # TOML shape: [cat."file::literal"] reason = "..." [count = N]
         normalized = {}
@@ -333,6 +431,76 @@ def bridge_codes():
     return codes
 
 
+def bridge_dynamic_calls():
+    """Find `BridgeFailure(...)` sites whose code argument is not a literal."""
+    calls = {}  # expr -> set(files)
+    literal = re.compile(
+        r'BridgeFailure\(\s*(?:code:\s*)?"[a-zA-Z_][a-zA-Z0-9_]*"\s*,', re.S
+    )
+    start = re.compile(r"BridgeFailure\(\s*(?:code:\s*)?")
+    for path in sorted(SWIFT_SRC.rglob("*.swift")):
+        text = path.read_text()
+        rel = path.relative_to(ROOT).as_posix()
+        for m in start.finditer(text):
+            if literal.match(text, m.start()):
+                continue
+            i = m.end()
+            depth = 1
+            j = i
+            while j < len(text) and depth > 0:
+                if text[j] == "(":
+                    depth += 1
+                elif text[j] == ")":
+                    depth -= 1
+                elif text[j] == "," and depth == 1:
+                    break
+                j += 1
+            expr = re.sub(r"\s+", " ", text[i:j]).strip()
+            calls.setdefault(expr, set()).add(rel)
+    return calls
+
+
+KEY_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+KEY_NAME_MAX = 40
+NUMERIC_PLACEHOLDER_RE = re.compile(r"p\d+")
+
+
+def naming_errors(en):
+    """Enforce semantic key/placeholder naming on en.toml (the reference)."""
+    errors = []
+    for sec, entries in en.items():
+        if sec == "maps":
+            continue
+        for key, value in entries.items():
+            name = f"{sec}.{key}"
+            if not KEY_NAME_RE.match(key):
+                errors.append(
+                    f"en.toml: {name}: key name must match {KEY_NAME_RE.pattern}"
+                )
+            elif len(key) > KEY_NAME_MAX:
+                errors.append(
+                    f"en.toml: {name}: key name exceeds {KEY_NAME_MAX} characters"
+                )
+            values = (
+                value.values()
+                if isinstance(value, dict)
+                else (value if isinstance(value, list) else [value])
+            )
+            for item in values:
+                if not isinstance(item, str):
+                    continue
+                for ph in sorted(placeholders(item)):
+                    if len(ph) < 2:
+                        errors.append(
+                            f"en.toml: {name}: placeholder {{{ph}}} must be at least 2 characters"
+                        )
+                    elif NUMERIC_PLACEHOLDER_RE.fullmatch(ph):
+                        errors.append(
+                            f"en.toml: {name}: placeholder {{{ph}}} must be descriptive, not {ph!r}"
+                        )
+    return errors
+
+
 def map_key_sets(en_maps):
     return {name: set(table) for name, table in en_maps.items()}
 
@@ -349,6 +517,13 @@ def cmd_check():
 
     en = files.get("en", {})
     en_maps = en.get("maps", {})
+
+    # (a2) key/placeholder naming on the en reference.
+    for e in naming_errors(en):
+        key = e.split(": ")[1].split(":")[0]
+        if allow["naming"].get(key):
+            continue
+        errors.append(e)
 
     # (b) unused keys: a non-map key is unused if its name appears nowhere.
     banned, literals, corpus = scan_sources()
@@ -409,6 +584,14 @@ def cmd_check():
                     f"({files_str}) — add to maps.bridge_* in locales/en.toml "
                     "or bridge_untranslated in the allowlist"
                 )
+    for expr, files_set in sorted(bridge_dynamic_calls().items()):
+        key = f"{sorted(files_set)[0]}::{expr}"
+        if allow["bridge_dynamic"].get(key):
+            continue
+        errors.append(
+            f"{sorted(files_set)[0]}: dynamic BridgeFailure code `{expr}` "
+            "— add a bridge_dynamic allowlist entry with a reason"
+        )
 
     # (f) en-identical values in other locales -> warnings.
     for stem, table in sorted(files.items()):
@@ -418,11 +601,13 @@ def cmd_check():
             if sec == "maps":
                 continue
             for key, value in entries.items():
-                if value == en.get(sec, {}).get(key):
+                if value == en.get(sec, {}).get(key) and not allow["identical"].get(f"{sec}.{key}"):
                     warnings.append(f"locales/{stem}.toml: {sec}.{key} identical to en")
         for map_name, table_map in table.get("maps", {}).items():
             for key, value in table_map.items():
-                if value == en_maps.get(map_name, {}).get(key):
+                if value == en_maps.get(map_name, {}).get(key) and not allow[
+                    "identical"
+                ].get(f"maps.{map_name}.{key}"):
                     warnings.append(f"locales/{stem}.toml: maps.{map_name}.{key} identical to en")
 
     for w in warnings:
@@ -459,6 +644,7 @@ def cmd_stats():
             uncovered.append(code)
     listed = {k.split("::")[-1] for k in allow["bridge_untranslated"]}
     print(f"swift BridgeFailure literal codes: {len(codes)}")
+    print(f"swift BridgeFailure dynamic sites: {len(bridge_dynamic_calls())}")
     print(f"uncovered bridge codes: {len([c for c in uncovered if c not in listed])} "
           f"({len(uncovered)} total unlocalized, {len(uncovered) - len([c for c in uncovered if c not in listed])} allowlisted)")
     return 0

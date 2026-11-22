@@ -76,19 +76,19 @@ fn gdi_upscalers() -> Vec<(&'static str, &'static str)> {
         ("metalfx", "MetalFX Spatial"),
         ("anime4k", "Anime4K (CNN x2 S)"),
         ("realcugan", "Real-CUGAN (models-se x2)"),
-        ("adaptive", crate::i18n::tr("动态 MetalFX／静态 Real-CUGAN", "動的 MetalFX／静的 Real-CUGAN", "Dynamic MetalFX / Static Real-CUGAN", "동적 MetalFX / 정적 Real-CUGAN")),
+        ("adaptive", crate::i18n::s().dialogs.dynamic_metalfx_static_real_cugan),
         ("realesrgan", "Real-ESRGAN AnimeVideo-v3 (x2)"),
-        ("adaptive-realesrgan", crate::i18n::tr("动态 MetalFX／静态 AnimeVideo-v3", "動的 MetalFX／静的 AnimeVideo-v3", "Dynamic MetalFX / Static AnimeVideo-v3", "동적 MetalFX / 정적 AnimeVideo-v3")),
-        ("adaptive-anime4k", crate::i18n::tr("动态 Anime4K／静态 Real-CUGAN", "動的 Anime4K／静的 Real-CUGAN", "Dynamic Anime4K / Static Real-CUGAN", "동적 Anime4K / 정적 Real-CUGAN")),
-        ("adaptive-anime4k-realesrgan", crate::i18n::tr("动态 Anime4K／静态 AnimeVideo-v3", "動的 Anime4K／静的 AnimeVideo-v3", "Dynamic Anime4K / Static AnimeVideo-v3", "동적 Anime4K / 정적 AnimeVideo-v3")),
+        ("adaptive-realesrgan", crate::i18n::s().dialogs.dynamic_metalfx_static_animevideo_v3),
+        ("adaptive-anime4k", crate::i18n::s().dialogs.dynamic_anime4k_static_real_cugan),
+        ("adaptive-anime4k-realesrgan", crate::i18n::s().dialogs.dynamic_anime4k_static_animevideo_v3),
     ]
 }
 
 fn gdi_caches() -> Vec<(&'static str, &'static str)> {
     vec![
-        ("off", crate::i18n::tr("关闭跨场景缓存", "シーン間キャッシュをオフ", "Cross-scene cache off", "장면 간 캐시 끄기")),
-        ("memory", crate::i18n::tr("本次游戏缓存", "今回のセッションのみキャッシュ", "Memory cache (this session)", "이번 세션만 메모리 캐시")),
-        ("persistent", crate::i18n::tr("缓存并保存到磁盘", "キャッシュしてディスクに保存", "Cache and save to disk", "캐시 및 디스크에 저장")),
+        ("off", crate::i18n::s().dialogs.cross_scene_cache_off),
+        ("memory", crate::i18n::s().dialogs.memory_cache_this_session),
+        ("persistent", crate::i18n::s().dialogs.cache_and_save_to_disk),
     ]
 }
 
@@ -100,7 +100,7 @@ fn resolutions() -> Vec<(&'static str, &'static str)> {
         ("r2560x1440", "2560 × 1440"),
         ("r3840x2160", "3840 × 2160"),
         #[cfg(not(target_os = "linux"))]
-        ("matchDisplay", crate::i18n::tr("匹配显示器", "ディスプレイに合わせる", "Match Display", "디스플레이에 맞춤")),
+        ("matchDisplay", crate::i18n::s().dialogs.match_display),
         ("custom", crate::i18n::s().common.custom),
     ]
 }
@@ -123,10 +123,10 @@ pub(crate) const THIRD_PARTY_NOTICES_TEXT: &str =
 fn about_tabs() -> [(AboutTab, &'static str, &'static str); 4] {
     let d = &crate::i18n::s().dialogs;
     [
-        (AboutTab::Overview, "about-tab-overview", crate::i18n::tr("概览", "概要", "Overview", "개요")),
+        (AboutTab::Overview, "about-tab-overview", crate::i18n::s().dialogs.about_tab_overview),
         (AboutTab::Acknowledgments, "about-tab-ack", d.about_view_ack),
-        (AboutTab::License, "about-tab-license", crate::i18n::tr("许可证 (GPLv3)", "ライセンス (GPLv3)", "License (GPLv3)", "라이선스 (GPLv3)")),
-        (AboutTab::Notices, "about-tab-notices", crate::i18n::tr("第三方声明", "サードパーティ表記", "Third-Party Notices", "서드파티 고지")),
+        (AboutTab::License, "about-tab-license", crate::i18n::s().dialogs.about_tab_license),
+        (AboutTab::Notices, "about-tab-notices", crate::i18n::s().dialogs.third_party_notices),
     ]
 }
 
@@ -134,74 +134,29 @@ struct AcknowledgmentItem {
     #[allow(dead_code)]
     name: &'static str,
     badge: &'static str,
-    #[allow(dead_code)]
-    description: &'static str,
     highlighted: bool,
 }
 
 impl AcknowledgmentItem {
     fn display_name(&self) -> &'static str {
-        match self.name {
-            "gpui-kit / Zed GPUI & Rust 生态依赖" => crate::i18n::tr(
-                "gpui-kit / Zed GPUI & Rust 生态依赖",
-                "gpui-kit / Zed GPUI & Rust エコシステム",
-                "gpui-kit / Zed GPUI & Rust Ecosystem",
-                "gpui-kit / Zed GPUI 및 Rust 생태계",
-            ),
-            "PotatoVN & 元数据公开接口" => crate::i18n::tr(
-                "PotatoVN & 元数据公开接口",
-                "PotatoVN & メタデータ公開 API",
-                "PotatoVN & Public Metadata APIs",
-                "PotatoVN 및 공개 메타데이터 API",
-            ),
-            other => other,
+        match self.badge {
+            "Apache-2.0" => crate::i18n::s().dialogs.gpui_kit_zed_gpui_rust_ecosystem,
+            "GoldenPotato137/PotatoVN · Apache-2.0" => {
+                crate::i18n::s().dialogs.potatovn_public_metadata_apis
+            }
+            _ => self.name,
         }
     }
 
     fn display_description(&self) -> &'static str {
         match self.badge {
-            "HIllya51/LunaTranslator · GPL-3.0" => crate::i18n::tr(
-                "核心 Windows 文本钩取与进程注入引擎（LunaHook32/64.dll、LunaHost32/64.dll、LunaTmpFontLoader.dll），配套 MinHook（BSD-2-Clause，Tsuda Kageyu / HDE by Vyacheslav Patkov）、uchardet（GPL-2.0-or-later）与 nlohmann/json（MIT）。",
-                "中核の Windows テキストフック・インジェクションエンジン（LunaHook32/64.dll、LunaHost32/64.dll、LunaTmpFontLoader.dll）。MinHook（BSD-2-Clause）、uchardet（GPL-2.0-or-later）、nlohmann/json（MIT）を同梱。",
-                "Core Windows text hook & process injection engine (LunaHook32/64.dll, LunaHost32/64.dll, LunaTmpFontLoader.dll), with MinHook (BSD-2-Clause), uchardet (GPL-2.0-or-later), and nlohmann/json (MIT).",
-                "핵심 Windows 텍스트 후킹 및 프로세스 인젝션 엔진(LunaHook32/64.dll, LunaHost32/64.dll, LunaTmpFontLoader.dll)과 MinHook(BSD-2-Clause), uchardet(GPL-2.0-or-later), nlohmann/json(MIT) 포함.",
-            ),
-            "whisky-app/whisky / frankea/Whisky · GPL-3.0" => crate::i18n::tr(
-                "酒瓶容器管理架构、偏好设置模型与原生桥接基础。",
-                "ボトル管理アーキテクチャ、設定モデル、およびネイティブブリッジ基盤。",
-                "Bottle container management architecture, preference model, and native bridge foundation.",
-                "보틀 컨테이너 관리 아키텍처, 환경설정 모델 및 네이티브 브리지 기반.",
-            ),
-            "LGPL-2.1+" => crate::i18n::tr(
-                "Windows 兼容运行时，以及 msync、DXVK-macOS、DXMT、MoltenVK、D3DMetal 等图形与同步兼容组件。",
-                "Windows 互換ランタイム、および msync、DXVK-macOS、DXMT、MoltenVK、D3DMetal などのグラフィックス・同期コンポーネント。",
-                "Windows compatibility runtime along with graphics and sync components including msync, DXVK-macOS, DXMT, MoltenVK, and D3DMetal.",
-                "Windows 호환 런타임과 msync, DXVK-macOS, DXMT, MoltenVK, D3DMetal 등 그래픽·동기화 구성 요소.",
-            ),
-            "LGPL-2.1+ · GPL-2.0+ / LGPL-2.1+" => crate::i18n::tr(
-                "Windows 运行库组件安装脚本与 CAB 压缩包解包支持。",
-                "Windows ランタイムライブラリ導入スクリプトと CAB アーカイブ展開サポート。",
-                "Windows runtime component installation scripts and CAB archive extraction.",
-                "Windows 런타임 라이브러리 설치 스크립트 및 CAB 압축 해제 지원.",
-            ),
-            "Apache-2.0" => crate::i18n::tr(
-                "硬件加速原生桌面界面框架及 Rust 生态基础依赖。",
-                "ハードウェアアクセラレーション対応のネイティブデスクトップ UI フレームワークおよび Rust 基盤クレート。",
-                "Hardware-accelerated native desktop UI framework and foundational Rust ecosystem crates.",
-                "하드웨어 가속 네이티브 데스크톱 UI 프레임워크 및 Rust 기반 크레이트.",
-            ),
-            "bilibili/ailab & nihui · MIT / bloc97 · MIT" => crate::i18n::tr(
-                "封面超分辨率模型（Real-CUGAN models-se）与实时 Metal 着色器管线。",
-                "カバー超解像モデル（Real-CUGAN models-se）およびリアルタイム Metal シェーダーパイプライン。",
-                "Cover super-resolution models (Real-CUGAN models-se) and real-time Metal shader pipelines.",
-                "커버 초해상도 모델(Real-CUGAN models-se) 및 실시간 Metal 셰이더 파이프라인.",
-            ),
-            _ => crate::i18n::tr(
-                "视觉小说库与元数据设计参考，及 Bangumi、VNDB、Steam、YMGal、NextMoe 公开数据来源。",
-                "ビジュアルノベルライブラリおよびメタデータ設計の参考、ならびに Bangumi・VNDB・Steam・YMGal・NextMoe の公開データソース。",
-                "Visual novel library and metadata design reference, plus public metadata sources (Bangumi, VNDB, Steam, YMGal, NextMoe).",
-                "비주얼 노벨 라이브러리·메타데이터 설계 참고 및 Bangumi·VNDB·Steam·YMGal·NextMoe 공개 데이터 소스.",
-            ),
+            "HIllya51/LunaTranslator · GPL-3.0" => crate::i18n::s().dialogs.ack_lunahook_desc,
+            "whisky-app/whisky / frankea/Whisky · GPL-3.0" => crate::i18n::s().dialogs.ack_whisky_desc,
+            "LGPL-2.1+" => crate::i18n::s().dialogs.ack_wine_desc,
+            "LGPL-2.1+ · GPL-2.0+ / LGPL-2.1+" => crate::i18n::s().dialogs.ack_winetricks_desc,
+            "Apache-2.0" => crate::i18n::s().dialogs.ack_gpui_desc,
+            "bilibili/ailab & nihui · MIT / bloc97 · MIT" => crate::i18n::s().dialogs.ack_realcugan_desc,
+            _ => crate::i18n::s().dialogs.ack_potatovn_desc,
         }
     }
 }
@@ -210,43 +165,36 @@ const ACKNOWLEDGMENTS: &[AcknowledgmentItem] = &[
     AcknowledgmentItem {
         name: "LunaHook / LunaTranslator",
         badge: "HIllya51/LunaTranslator · GPL-3.0",
-        description: "核心 Windows 文本钩取与进程注入引擎（LunaHook32/64.dll、LunaHost32/64.dll、LunaTmpFontLoader.dll），配套 MinHook（BSD-2-Clause，Tsuda Kageyu / HDE by Vyacheslav Patkov）、uchardet（GPL-2.0-or-later）与 nlohmann/json（MIT）。",
         highlighted: true,
     },
     AcknowledgmentItem {
         name: "Whisky & Contributors",
         badge: "whisky-app/whisky / frankea/Whisky · GPL-3.0",
-        description: "酒瓶容器管理架构、偏好设置模型与原生桥接基础。",
         highlighted: false,
     },
     AcknowledgmentItem {
         name: "Wine / CrossOver Wine & GE-Proton",
         badge: "LGPL-2.1+",
-        description: "Windows 兼容运行时，以及 msync、DXVK-macOS、DXMT、MoltenVK、D3DMetal 等图形与同步兼容组件。",
         highlighted: false,
     },
     AcknowledgmentItem {
         name: "Winetricks & cabextract / libmspack",
         badge: "LGPL-2.1+ · GPL-2.0+ / LGPL-2.1+",
-        description: "Windows 运行库组件安装脚本与 CAB 压缩包解包支持。",
         highlighted: false,
     },
     AcknowledgmentItem {
-        name: "gpui-kit / Zed GPUI & Rust 生态依赖",
+        name: "gpui-kit / Zed GPUI & Rust",
         badge: "Apache-2.0",
-        description: "硬件加速原生桌面界面框架及 Rust 生态基础依赖。",
         highlighted: false,
     },
     AcknowledgmentItem {
         name: "Real-CUGAN & Anime4K",
         badge: "bilibili/ailab & nihui · MIT / bloc97 · MIT",
-        description: "封面超分辨率模型（Real-CUGAN models-se）与实时 Metal 着色器管线。",
         highlighted: false,
     },
     AcknowledgmentItem {
-        name: "PotatoVN & 元数据公开接口",
+        name: "PotatoVN",
         badge: "GoldenPotato137/PotatoVN · Apache-2.0",
-        description: "视觉小说库与元数据设计参考，及 Bangumi、VNDB、Steam、YMGal、NextMoe 公开数据来源。",
         highlighted: false,
     },
 ];
@@ -271,9 +219,9 @@ impl WhiskyApp {
                             crate::i18n::s().program_settings.locale_label,
                             &[
                                 crate::i18n::s().common.inherit_bottle,
-                                crate::i18n::tr("日语（日本）", "日本語（日本）", "Japanese (Japan)", "일본어 (일본)"),
-                                crate::i18n::tr("简体中文（中国）", "簡体字中国語（中国）", "Simplified Chinese (China)", "중국어 간체 (중국)"),
-                                crate::i18n::tr("英语（美国）", "英語（米国）", "English (US)", "영어 (미국)"),
+                                crate::i18n::s().dialogs.japanese_japan,
+                                crate::i18n::s().dialogs.simplified_chinese_china,
+                                crate::i18n::s().dialogs.english_us,
                             ],
                             cx,
                         ),
@@ -315,17 +263,17 @@ impl WhiskyApp {
                 ),
                 self.section(
                     "overrides",
-                    crate::i18n::tr("程序专属覆盖", "プログラム固有の上書き", "Program Overrides", "프로그램별 재정의"),
+                    crate::i18n::s().dialogs.program_overrides,
                     vec![
                         self.toggle(
                             "override-graphics",
                             crate::i18n::s().program_settings.override_graphics,
-                            crate::i18n::tr("关闭时继承容器设置。", "オフの場合はコンテナ設定を継承します。", "Inherits bottle settings when off.", "끄면 컨테이너 설정을 상속합니다."),
+                            crate::i18n::s().dialogs.inherits_bottle_settings_when_off,
                             cx,
                         ),
                         self.choice(
                             "program-backend",
-                            crate::i18n::tr(crate::i18n::tr("图形后端", "グラフィックスバックエンド", "Graphics Backend", "그래픽 백엔드"), "グラフィックスバックエンド", "Graphics Backend", "그래픽 백엔드"),
+                            crate::i18n::s().dialogs.graphics_backend,
                             #[cfg(not(target_os = "linux"))]
                             &[crate::i18n::s().common.inherit_bottle, "D3DMetal", "DXVK", "WineD3D"],
                             #[cfg(target_os = "linux")]
@@ -346,15 +294,15 @@ impl WhiskyApp {
                 ),
                 self.section(
                     "run-diagnostics",
-                    crate::i18n::tr("诊断", "診断", "Diagnostics", "진단"),
+                    crate::i18n::s().dialogs.diagnostics,
                     vec![
                         self.info(
-                            crate::i18n::tr("最近一次运行", "前回の実行", "Last Run", "최근 실행"),
+                            crate::i18n::s().dialogs.last_run,
                             crate::i18n::s().program_settings.demo_last_run_value,
                         ),
                         self.action(
                             "run-troubleshoot",
-                            crate::i18n::tr("故障排查…", "トラブルシューティング…", "Troubleshoot…", "문제 해결…"),
+                            crate::i18n::s().dialogs.troubleshoot,
                             Command::Sheet(PreviewSheet::Diagnostics),
                             cx,
                         ),
@@ -363,9 +311,9 @@ impl WhiskyApp {
                 ),
                 self.section(
                     "console",
-                    crate::i18n::tr("控制台与运行历史", "コンソールと実行履歴", "Console & Run History", "콘솔 및 실행 기록"),
+                    crate::i18n::s().dialogs.console_run_history,
                     vec![
-                        self.info(crate::i18n::s().program_settings.just_now, crate::i18n::s().program_settings.demo_exit_code_0),
+                        self.info(crate::i18n::s().program_settings.just_now, crate::i18n::s().program_settings.demo_exit_ok),
                         muted("[wine] Program started\n[wine] Process exited successfully")
                             .font_family("monospace")
                             .p(px(12.))
@@ -468,7 +416,7 @@ impl WhiskyApp {
         if let Some(error) = &self.program_settings.error {
             sections.push(self.section(
                 "program-settings-error",
-                crate::i18n::tr("保存失败", "保存に失敗しました", "Save Failed", "저장 실패"),
+                crate::i18n::s().dialogs.save_failed,
                 vec![muted(error.clone()).into_any_element()],
                 cx,
             ));
@@ -542,18 +490,8 @@ impl WhiskyApp {
                 p.live_translation_disabled
             };
             match remembered_process {
-                Some(exe) => match crate::i18n::locale() {
-                    crate::i18n::Locale::ZhHans => format!("{base} · 记忆目标进程：{exe}"),
-                    crate::i18n::Locale::Ja => format!("{base} · 記憶プロセス：{exe}"),
-                    crate::i18n::Locale::En => format!("{base} · Remembered process: {exe}"),
-                    crate::i18n::Locale::Ko => format!("{base} · 기억된 프로세스: {exe}"),
-                },
-                None => match crate::i18n::locale() {
-                    crate::i18n::Locale::ZhHans => format!("{base} · 尚未记忆目标进程"),
-                    crate::i18n::Locale::Ja => format!("{base} · 対象プロセス未記憶"),
-                    crate::i18n::Locale::En => format!("{base} · No remembered process"),
-                    crate::i18n::Locale::Ko => format!("{base} · 기억된 대상 프로세스 없음"),
-                },
+                Some(exe) => crate::i18n::s().dialogs.remembered_process(base, exe),
+                None => crate::i18n::s().dialogs.no_remembered_process(base),
             }
         };
         let enabled = preset.translation_enabled;
@@ -905,12 +843,7 @@ impl WhiskyApp {
         );
         if multi_exe {
             rows.push(
-                muted(match crate::i18n::locale() {
-                    crate::i18n::Locale::ZhHans => format!("当前仅编辑 {} 的独立运行设置（含旧版全屏兼容、图形、语言与参数）。", settings.program_name),
-                    crate::i18n::Locale::Ja => format!("現在 {} の個別実行設定（旧式フルスクリーン互換・グラフィックス・言語・引数）のみを編集中です。", settings.program_name),
-                    crate::i18n::Locale::En => format!("Editing per-program run settings only for {} (including legacy fullscreen, graphics, locale, and args).", settings.program_name),
-                    crate::i18n::Locale::Ko => format!("현재 {}의 개별 실행 설정(레거시 전체 화면 호환, 그래픽, 로캘 및 인수)만 편집 중입니다.", settings.program_name),
-                })
+                muted(crate::i18n::s().dialogs.per_program_scope_tip(&settings.program_name))
                 .text_size(px(11.5))
                 .line_height(relative(1.4))
                 .py(px(4.))
@@ -1122,7 +1055,7 @@ impl WhiskyApp {
                 .or_else(|| defaults.graphics_backend.clone())
                 .unwrap_or_else(|| "recommended".into());
             children.push(self.program_choice_row(
-                crate::i18n::tr("图形后端", "グラフィックスバックエンド", "Graphics Backend", "그래픽 백엔드"),
+                crate::i18n::s().dialogs.graphics_backend,
                 self.program_choice(
                     "ps-graphics-backend".into(),
                     program_settings::graphics_label(&backend).to_owned(),
@@ -1178,12 +1111,7 @@ impl WhiskyApp {
             children.push({
                 let g = program_settings::graphics_label(backend);
                 let h = program_settings::hud_label(hud);
-                muted(match crate::i18n::locale() {
-                    crate::i18n::Locale::ZhHans => format!("继承：{g} · HUD {h}"),
-                    crate::i18n::Locale::Ja => format!("継承：{g} · HUD {h}"),
-                    crate::i18n::Locale::En => format!("Inherited: {g} · HUD {h}"),
-                    crate::i18n::Locale::Ko => format!("상속됨: {g} · HUD {h}"),
-                })
+                muted(crate::i18n::s().dialogs.inherited_hud(g, h))
                 .into_any_element()
             });
         }
@@ -1245,12 +1173,7 @@ impl WhiskyApp {
             children.push({
                 let u = program_settings::upscaler_label(upscaler);
                 let c = program_settings::cache_label(cache);
-                muted(match crate::i18n::locale() {
-                    crate::i18n::Locale::ZhHans => format!("继承：{u} · {c}"),
-                    crate::i18n::Locale::Ja => format!("継承：{u} · {c}"),
-                    crate::i18n::Locale::En => format!("Inherited: {u} · {c}"),
-                    crate::i18n::Locale::Ko => format!("상속됨: {u} · {c}"),
-                })
+                muted(crate::i18n::s().dialogs.inherited(c, u))
                 .into_any_element()
             });
         }
@@ -1283,7 +1206,7 @@ impl WhiskyApp {
         }
         let legacy_cache_dir = self.program_settings.legacy_gdi_cache_dir().filter(|dir| dir.is_dir());
         if let Some(dir) = &legacy_cache_dir {
-            children.push(muted(match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("旧缓存：{}", dir.display()), crate::i18n::Locale::Ja => format!("旧キャッシュ：{}", dir.display()), crate::i18n::Locale::En => format!("Legacy cache: {}", dir.display()), crate::i18n::Locale::Ko => format!("이전 캐시: {}", dir.display()) }).text_size(px(11.)).truncate().into_any_element());
+            children.push(muted(crate::i18n::s().dialogs.legacy_cache(dir.display())).text_size(px(11.)).truncate().into_any_element());
         }
         children.push(
             row()
@@ -1368,7 +1291,7 @@ impl WhiskyApp {
         } else {
             let sync = defaults.enhanced_sync.as_deref().unwrap_or("msync");
             children.push(
-                muted(match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("继承：{}", program_settings::sync_label(sync)), crate::i18n::Locale::Ja => format!("継承：{}", program_settings::sync_label(sync)), crate::i18n::Locale::En => format!("Inherited: {}", program_settings::sync_label(sync)), crate::i18n::Locale::Ko => format!("상속됨: {}", program_settings::sync_label(sync)) }).into_any_element(),
+                muted(crate::i18n::s().dialogs.inherited_single(program_settings::sync_label(sync))).into_any_element(),
             );
         }
         self.section("override-sync", crate::i18n::s().program_settings.sync_section, children, cx)
@@ -1411,12 +1334,7 @@ impl WhiskyApp {
                     } else {
                         crate::i18n::s().common.short_off
                     };
-                    muted(match crate::i18n::locale() {
-                        crate::i18n::Locale::ZhHans => format!("继承：着色器缓存 {st}"),
-                        crate::i18n::Locale::Ja => format!("継承：シェーダーキャッシュ {st}"),
-                        crate::i18n::Locale::En => format!("Inherited: Shader Cache {st}"),
-                        crate::i18n::Locale::Ko => format!("상속됨: 셰이더 캐시 {st}"),
-                    })
+                    muted(crate::i18n::s().dialogs.inherited_shader_cache(st))
                 }
                 .into_any_element(),
             );
@@ -1480,12 +1398,7 @@ impl WhiskyApp {
                 let c = &crate::i18n::s().common;
                 let a = if defaults.controller_compatibility_mode.unwrap_or(false) { c.short_on } else { c.short_off };
                 let b = if defaults.use_button_labels.unwrap_or(false) { c.short_on } else { c.short_off };
-                muted(match crate::i18n::locale() {
-                    crate::i18n::Locale::ZhHans => format!("继承：控制器兼容 {a} · 原生标签 {b}"),
-                    crate::i18n::Locale::Ja => format!("継承：コントローラー互換 {a} · ネイティブ表示 {b}"),
-                    crate::i18n::Locale::En => format!("Inherited: Controller Compat {a} · Native Labels {b}"),
-                    crate::i18n::Locale::Ko => format!("상속됨: 컨트롤러 호환 {a} · 네이티브 레이블 {b}"),
-                })
+                muted(crate::i18n::s().dialogs.inherited_controller(a, b))
                 .into_any_element()
             });
         }
@@ -1600,12 +1513,7 @@ impl WhiskyApp {
                     let res = program_settings::resolution_label(
                         defaults.resolution_preset.as_deref().unwrap_or("r1920x1080"),
                     );
-                    muted(match crate::i18n::locale() {
-                        crate::i18n::Locale::ZhHans => format!("继承：{vd} · {res}"),
-                        crate::i18n::Locale::Ja => format!("継承：{vd} · {res}"),
-                        crate::i18n::Locale::En => format!("Inherited: {vd} · {res}"),
-                        crate::i18n::Locale::Ko => format!("상속됨: {vd} · {res}"),
-                    })
+                    muted(crate::i18n::s().dialogs.inherited_display(vd, res))
                 }
                 .into_any_element(),
             );
@@ -1702,10 +1610,10 @@ impl WhiskyApp {
                 .as_ref()
                 .map_or(0, Vec::len);
             children.push(
-                muted(match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("继承：容器级 {count} 条 DLL 覆盖"), crate::i18n::Locale::Ja => format!("継承：コンテナレベル {count} 件の DLL 上書き"), crate::i18n::Locale::En => format!("Inherited: {count} bottle DLL overrides"), crate::i18n::Locale::Ko => format!("상속됨: 컨테이너 DLL 재정의 {count}개") }).into_any_element(),
+                muted(crate::i18n::s().dialogs.inherited_bottle_dll_overrides(count)).into_any_element(),
             );
         }
-        self.section("override-dll", crate::i18n::tr("DLL 覆盖", "DLL オーバーライド", "DLL Overrides", "DLL 재정의"), children, cx)
+        self.section("override-dll", crate::i18n::s().dialogs.sheet_dll, children, cx)
     }
 
     fn program_history_section(&self, cx: &Context<Self>) -> AnyElement {
@@ -1766,12 +1674,7 @@ impl WhiskyApp {
         let run_id = entry.id.clone();
         let exit = entry
             .exit_code
-            .map(|code| match crate::i18n::locale() {
-                crate::i18n::Locale::ZhHans => format!("退出 {code}"),
-                crate::i18n::Locale::Ja => format!("終了 {code}"),
-                crate::i18n::Locale::En => format!("Exit {code}"),
-                crate::i18n::Locale::Ko => format!("종료 {code}"),
-            })
+            .map(|code| crate::i18n::s().dialogs.exit(code))
             .unwrap_or_else(|| crate::i18n::s().runtime.running.to_owned());
         row()
             .gap(px(12.))
@@ -1832,7 +1735,7 @@ impl WhiskyApp {
                 .into_any_element(),
         ];
         if let Some(path) = &self.program_settings.shortcut_path {
-            children.push(muted(match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("已创建：{path}"), crate::i18n::Locale::Ja => format!("作成済み：{path}"), crate::i18n::Locale::En => format!("Created: {path}"), crate::i18n::Locale::Ko => format!("생성됨: {path}") }).into_any_element());
+            children.push(muted(crate::i18n::s().dialogs.created(path)).into_any_element());
         }
         if let Some(error) = &self.program_settings.shortcut_error {
             children.push(muted(error.clone()).into_any_element());
@@ -1861,7 +1764,7 @@ impl WhiskyApp {
                 "scan-settings-scroll",
                 vec![self.section(
                     "scan-folders",
-                    crate::i18n::tr("扫描文件夹", "スキャンフォルダ", "Scan Folders", "스캔 폴더"),
+                    crate::i18n::s().dialogs.scan_folders,
                     vec![muted(crate::i18n::s().bottle.select_bottle_first).into_any_element()],
                     cx,
                 )],
@@ -1874,7 +1777,7 @@ impl WhiskyApp {
                     row()
                         .py(px(10.))
                         .gap(px(16.))
-                        .child(div().flex_1().min_w_0().child(crate::i18n::tr("自动读取元数据", "メタデータを自動取得", "Fetch Metadata Automatically", "메타데이터 자동 가져오기")))
+                        .child(div().flex_1().min_w_0().child(crate::i18n::s().dialogs.fetch_metadata_automatically))
                         .child(
                             Switch::new("scan-automatic-metadata")
                                 .checked(folders.automatic_metadata)
@@ -1896,8 +1799,8 @@ impl WhiskyApp {
                                 .flex_1()
                                 .min_w_0()
                                 .gap(px(3.))
-                                .child(crate::i18n::tr("包含固定程序与 Steam 游戏", "固定プログラムと Steam ゲームを含める", "Include Pinned Programs & Steam Games", "고정된 프로그램 및 Steam 게임 포함"))
-                                .child(muted(crate::i18n::tr("关闭后游戏库只显示扫描文件夹中的游戏。", "オフにするとスキャンフォルダ内のゲームのみ表示します。", "When off, only games from scan folders are shown.", "끄면 스캔 폴더의 게임만 라이브러리에 표시됩니다.")).text_size(px(11.))),
+                                .child(crate::i18n::s().dialogs.include_pinned_programs_steam_games)
+                                .child(muted(crate::i18n::s().dialogs.scan_folders_only_tip).text_size(px(11.))),
                         )
                         .child(
                             Switch::new("scan-include-pinned-steam")
@@ -1909,7 +1812,7 @@ impl WhiskyApp {
                         .into_any_element(),
                 );
                 if folders.roots.is_empty() && folders.assigned_folders.is_empty() {
-                    rows.push(muted(crate::i18n::tr("尚未添加扫描文件夹", "スキャンフォルダがまだありません", "No scan folders added yet", "추가된 스캔 폴더가 없습니다")).into_any_element());
+                    rows.push(muted(crate::i18n::s().dialogs.no_scan_folders_added_yet).into_any_element());
                 }
                 for root in folders.roots.clone() {
                     rows.push(self.scan_root_row(&container, &root, cx));
@@ -1920,13 +1823,13 @@ impl WhiskyApp {
                         .py(px(10.))
                         .child(
                             Button::new("scan-add-picker")
-                                .label(crate::i18n::tr("选择文件夹…", "フォルダを選択…", "Choose Folder…", "폴더 선택…"))
+                                .label(crate::i18n::s().dialogs.choose_folder)
                                 .primary()
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.choose_scan_roots(cx);
                                 })),
                         )
-                        .child(muted(crate::i18n::tr("可多选，从容器 C: 盘开始；子文件夹会成为游戏条目", "複数選択可（ドライブ C から開始）。サブフォルダがゲーム項目になります", "Multi-select starting from bottle C: drive; subfolders become game entries", "컨테이너 C: 드라이브부터 복수 선택 가능; 하위 폴더가 게임 항목이 됩니다")).text_size(px(11.)))
+                        .child(muted(crate::i18n::s().dialogs.multi_select_bottle_tip).text_size(px(11.)))
                         .into_any_element(),
                 );
                 rows.push(
@@ -1940,7 +1843,7 @@ impl WhiskyApp {
                         )
                         .child(
                             Button::new("scan-add")
-                                .label(crate::i18n::tr("添加路径", "パスを追加", "Add Path", "경로 추가"))
+                                .label(crate::i18n::s().dialogs.add_path)
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     let path =
                                         this.preview.inputs["scan-path"].read(cx).value().to_string();
@@ -1958,14 +1861,14 @@ impl WhiskyApp {
                         .py(px(10.))
                         .child(
                             Button::new("scan-assign-picker")
-                                .label(crate::i18n::tr("添加单个游戏文件夹…", "単一ゲームフォルダを追加…", "Add Single Game Folder…", "단일 게임 폴더 추가…"))
+                                .label(crate::i18n::s().dialogs.add_single_game_folder)
                                 .ghost()
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.choose_assign_folders(cx);
                                 })),
                         )
                         .child(
-                            muted(crate::i18n::tr("文件夹本身就是一个游戏，不扫描其子目录", "フォルダ自体を 1 つのゲームとして登録し、サブフォルダはスキャンしません", "Treat this folder itself as one game without scanning subfolders", "하위 폴더를 스캔하지 않고 이 폴더 자체를 하나의 게임으로 등록"))
+                            muted(crate::i18n::s().dialogs.folder_as_game_tip)
                                 .text_size(px(11.)),
                         )
                         .into_any_element(),
@@ -1976,7 +1879,7 @@ impl WhiskyApp {
                     .gap(px(8.))
                     .py(px(10.))
                     .child(Spinner::new().with_size(px(14.)))
-                    .child(muted(crate::i18n::tr("正在读取扫描文件夹…", "スキャンフォルダを読み込み中…", "Loading scan folders…", "스캔 폴더 읽는 중…")))
+                    .child(muted(crate::i18n::s().dialogs.loading_scan_folders))
                     .into_any_element(),
             ),
             None => {
@@ -1984,7 +1887,7 @@ impl WhiskyApp {
                     .folders_error
                     .get(&container)
                     .cloned()
-                    .unwrap_or_else(|| crate::i18n::tr("尚未读取扫描文件夹。", "スキャンフォルダがまだ読み込まれていません。", "Scan folders have not been loaded yet.", "스캔 폴더를 아직 읽지 않았습니다.").to_owned());
+                    .unwrap_or_else(|| crate::i18n::s().dialogs.scan_folders_have_not_been_loaded_yet.to_owned());
                 rows.push(muted(reason).into_any_element());
                 rows.push(
                     row()
@@ -2001,7 +1904,7 @@ impl WhiskyApp {
         rows.extend(self.scan_controls(&container, cx));
         self.form(
             "scan-settings-scroll",
-            vec![self.section("scan-folders", crate::i18n::tr("扫描文件夹", "スキャンフォルダ", "Scan Folders", "스캔 폴더"), rows, cx)],
+            vec![self.section("scan-folders", crate::i18n::s().dialogs.scan_folders, rows, cx)],
         )
     }
 
@@ -2029,7 +1932,7 @@ impl WhiskyApp {
             let menu_root = root.to_owned();
             Some(
                 Button::new(format!("scan-move:{root}"))
-                    .label(crate::i18n::tr("移动…", "移動…", "Move…", "이동…"))
+                    .label(crate::i18n::s().dialogs.move_entry)
                     .ghost()
                     .dropdown_menu(move |mut menu, _, _| {
                         for (index, name) in other_bottles.clone() {
@@ -2059,7 +1962,7 @@ impl WhiskyApp {
                             .min_w_0()
                             .gap(px(4.))
                             .child(div().truncate().child(root.to_owned()))
-                            .child(muted(crate::i18n::tr("扫描文件夹", "スキャンフォルダ", "Scan Folder", "스캔 폴더")).truncate()),
+                            .child(muted(crate::i18n::s().dialogs.scan_folder).truncate()),
                     )
                     .when_some(move_button, |d, button| d.child(button))
                     .child(
@@ -2091,7 +1994,7 @@ impl WhiskyApp {
         let excluded = folders.is_excluded(folder);
         let executable = folders.executable_for(folder).unwrap_or_default().to_owned();
         let display = if executable.is_empty() {
-            crate::i18n::tr("未设置可执行文件", "実行ファイル未設定", "No executable set", "실행 파일이 설정되지 않음").to_owned()
+            crate::i18n::s().dialogs.no_executable_set.to_owned()
         } else {
             executable.clone()
         };
@@ -2131,7 +2034,7 @@ impl WhiskyApp {
                     )
                     .child(
                         Switch::new(format!("scan-exclude:{folder}"))
-                            .label(crate::i18n::tr("排除", "除外", "Exclude", "제외"))
+                            .label(crate::i18n::s().dialogs.exclude)
                             .checked(excluded)
                             .on_change(cx.listener(move |this, checked, _, cx| {
                                 this.edit_folder(
@@ -2164,7 +2067,7 @@ impl WhiskyApp {
                     .child(div().flex_1().child(Input::new(&input)))
                     .child(
                         Button::new(format!("scan-exe:{folder}"))
-                            .label(crate::i18n::tr("设置可执行文件", "実行ファイルを設定", "Set Executable", "실행 파일 설정"))
+                            .label(crate::i18n::s().dialogs.set_executable)
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 let text = this
                                     .preview
@@ -2201,7 +2104,7 @@ impl WhiskyApp {
         }
         let entity = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder(crate::i18n::tr("/路径/游戏.exe", "/path/to/game.exe", "/path/to/game.exe", "/경로/game.exe"))
+                .placeholder(crate::i18n::s().dialogs.path_to_game_exe)
                 .default_value(value.to_owned())
         });
         self.preview.folder_inputs.insert(key, entity.clone());
@@ -2246,7 +2149,7 @@ impl WhiskyApp {
                     .py(px(6.))
                     .child(
                         Button::new("scan-cancel")
-                            .label(crate::i18n::tr("取消扫描", "スキャンをキャンセル", "Cancel Scan", "스캔 취소"))
+                            .label(crate::i18n::s().dialogs.cancel_scan)
                             .on_click(cx.listener(|this, _, _, cx| this.cancel_scan(cx))),
                     )
                     .into_any_element(),
@@ -2258,7 +2161,7 @@ impl WhiskyApp {
                     .py(px(6.))
                     .child(
                         Button::new("scan-start")
-                            .label(if scan.is_some() { crate::i18n::tr("再次扫描", "再スキャン", "Scan Again", "다시 스캔") } else { crate::i18n::tr("立即扫描", "今すぐスキャン", "Scan Now", "지금 스캔") })
+                            .label(if scan.is_some() { crate::i18n::s().dialogs.scan_again } else { crate::i18n::s().dialogs.scan_now })
                             .primary()
                             .disabled(elsewhere)
                             .on_click(cx.listener(|this, _, _, cx| this.start_scan(cx))),
@@ -2275,11 +2178,11 @@ impl WhiskyApp {
             "scan-settings-scroll",
             vec![self.section(
                 "scan-folders",
-                crate::i18n::tr("扫描文件夹", "スキャンフォルダ", "Scan Folders", "스캔 폴더"),
+                crate::i18n::s().dialogs.scan_folders,
                 vec![
-                    self.info("~/Games", crate::i18n::tr("递归扫描", "再帰スキャン", "Recursive", "재귀 스캔")),
-                    self.field("scan-path", crate::i18n::tr("添加文件夹", "フォルダを追加", "Add Folder", "폴더 추가")),
-                    self.action("scan-add", crate::i18n::tr("添加文件夹", "フォルダを追加", "Add Folder", "폴더 추가"), Command::Notice, cx),
+                    self.info("~/Games", crate::i18n::s().dialogs.recursive),
+                    self.field("scan-path", crate::i18n::s().dialogs.add_folder),
+                    self.action("scan-add", crate::i18n::s().dialogs.add_folder, Command::Notice, cx),
                 ],
                 cx,
             )],
@@ -2294,10 +2197,10 @@ impl WhiskyApp {
                 "executable-scroll",
                 vec![self.section(
                     "executable-empty",
-                    crate::i18n::tr("启动程序", "起動プログラム", "Launch Program", "실행 프로그램"),
+                    crate::i18n::s().dialogs.launch_program,
                     vec![self.info(
-                        crate::i18n::tr("没有找到可启动的程序", "起動可能なプログラムが見つかりません", "No launchable executable found", "실행 가능한 프로그램을 찾을 수 없습니다"),
-                        crate::i18n::tr("该文件夹下没有 .exe", "このフォルダ内に .exe がありません", "No .exe in this folder", "이 폴더에 .exe 파일이 없습니다"),
+                        crate::i18n::s().dialogs.no_launchable_executable_found,
+                        crate::i18n::s().dialogs.no_exe_in_this_folder,
                     )],
                     cx,
                 )],
@@ -2360,13 +2263,13 @@ impl WhiskyApp {
                     .py(px(14.))
                     .justify_center()
                     .child(Spinner::new().with_size(px(14.)))
-                    .child(muted(crate::i18n::tr("正在递归扫描该文件夹下的可执行程序…", "このフォルダ内の実行ファイルを再帰スキャン中…", "Scanning executables in this folder…", "이 폴더의 실행 파일 스캔 중…")))
+                    .child(muted(crate::i18n::s().dialogs.scanning_executables_in_this_folder))
                     .into_any_element(),
             );
         } else if let Some(reason) = picker.error.as_deref() {
-            rows.push(self.info(crate::i18n::tr("扫描失败", "スキャン失敗", "Scan Failed", "스캔 실패"), reason));
+            rows.push(self.info(crate::i18n::s().dialogs.scan_failed, reason));
         } else if picker.candidates.is_empty() {
-            rows.push(self.info(crate::i18n::tr("没有找到可启动的程序", "起動可能なプログラムが見つかりません", "No launchable executable found", "실행 가능한 프로그램을 찾을 수 없습니다"), crate::i18n::tr("该文件夹下没有 .exe", "このフォルダ内に .exe がありません", "No .exe in this folder", "이 폴더에 .exe 파일이 없습니다")));
+            rows.push(self.info(crate::i18n::s().dialogs.no_launchable_executable_found, crate::i18n::s().dialogs.no_exe_in_this_folder));
         }
         for (i, candidate) in picker.candidates.iter().enumerate() {
             let path = candidate.path.clone();
@@ -2481,7 +2384,7 @@ impl WhiskyApp {
                                                 .bg(rgba(crate::theme::accent_subtle_bg()))
                                                 .text_size(px(10.))
                                                 .text_color(rgb(crate::theme::accent_fg()))
-                                                .child(crate::i18n::tr("主程序", "メイン", "Primary", "기본")),
+                                                .child(crate::i18n::s().dialogs.primary),
                                         )
                                     }),
                             )
@@ -2497,13 +2400,13 @@ impl WhiskyApp {
                         row()
                             .gap(px(4.))
                             .items_center()
-                            .child(muted(if is_checked { crate::i18n::tr("已勾选", "選択済み", "Selected", "선택됨") } else { crate::i18n::tr("点击勾选", "クリックして選択", "Click to select", "클릭하여 선택") }))
+                            .child(muted(if is_checked { crate::i18n::s().dialogs.selected } else { crate::i18n::s().dialogs.click_to_select }))
                             .into_any_element()
                     } else {
                         row()
                             .gap(px(4.))
                             .items_center()
-                            .child(muted(crate::i18n::tr("选择", "選択", "Select", "선택")))
+                            .child(muted(crate::i18n::s().dialogs.select))
                             .child(muted("›"))
                             .into_any_element()
                     })
@@ -2522,20 +2425,15 @@ impl WhiskyApp {
                             .flex_1()
                             .min_w_0()
                             .gap(px(2.))
-                            .child(div().text_size(px(13.)).child(crate::i18n::tr("多 exe 入口模式", "複数 .exe エントリーモード", "Multi-exe Entry Mode", "다중 .exe 진입점 모드")))
+                            .child(div().text_size(px(13.)).child(crate::i18n::s().dialogs.multi_exe_entry_mode))
                             .child(
                                 muted(if multi_select {
                                     {
                                         let n = selected.len();
-                                        match crate::i18n::locale() {
-                                            crate::i18n::Locale::ZhHans => format!("已勾选 {n} 个入口，每次启动将弹出快捷选择面板（↑↓ 移动，Space 勾选，Cmd/Ctrl+Enter 确认）。"),
-                                            crate::i18n::Locale::Ja => format!("{n} 個のエントリーを選択中。起動時に選択パネルを表示します（↑↓ 移動、Space 選択、Cmd/Ctrl+Enter 確定）。"),
-                                            crate::i18n::Locale::En => format!("{n} entries selected; a quick chooser opens on launch (↑↓ move, Space toggle, Cmd/Ctrl+Enter confirm)."),
-                                            crate::i18n::Locale::Ko => format!("{n}개 진입점 선택됨. 실행 시 빠른 선택 패널이 열립니다(↑↓ 이동, Space 선택, Cmd/Ctrl+Enter 확인)."),
-                                        }
+                                        crate::i18n::s().dialogs.entries_chooser_tip(n)
                                     }
                                 } else {
-                                    crate::i18n::tr("开启后可同时勾选多个 .exe 作为作品的启动入口。", "オンにすると複数の .exe を起動エントリーとして登録できます。", "Enable to select multiple .exe files as launch entries.", "켜면 여러 .exe를 실행 진입점으로 선택할 수 있습니다.").to_owned()
+                                    crate::i18n::s().dialogs.multi_exe_tip.to_owned()
                                 })
                                 .text_size(px(11.)),
                             ),
@@ -2601,13 +2499,13 @@ impl WhiskyApp {
             .child(self.form(
                 "executable-scroll",
                 vec![
-                    self.section("executable-folder", crate::i18n::tr("游戏目录", "ゲームフォルダ", "Game Folder", "게임 폴더"), info_rows, cx),
+                    self.section("executable-folder", crate::i18n::s().dialogs.game_folder, info_rows, cx),
                     self.section(
                         "executable-list",
                         if multi_select {
-                            crate::i18n::tr("勾选可执行程序（可多选）", "実行ファイルを選択（複数可）", "Select Executables (Multi-select)", "실행 파일 선택(복수 선택)")
+                            crate::i18n::s().dialogs.select_executables_multi_select
                         } else {
-                            crate::i18n::tr("选择可执行程序 (.exe)", "実行ファイル (.exe) を選択", "Select Executable (.exe)", "실행 파일 (.exe) 선택")
+                            crate::i18n::s().dialogs.select_executable_exe
                         },
                         rows,
                         cx,
@@ -2629,7 +2527,7 @@ impl WhiskyApp {
                 "winetricks-scroll",
                 vec![self.section(
                     "tricks",
-                    crate::i18n::tr("可用组件", "利用可能なコンポーネント", "Available Components", "사용 가능한 구성 요소"),
+                    crate::i18n::s().dialogs.available_components,
                     vec![muted(crate::i18n::s().bottle.select_bottle_first).into_any_element()],
                     cx,
                 )],
@@ -2642,7 +2540,7 @@ impl WhiskyApp {
             col()
                 .gap(px(7.))
                 .py(px(8.))
-                .child(crate::i18n::tr("搜索组件", "コンポーネントを検索", "Search Components", "구성 요소 검색"))
+                .child(crate::i18n::s().dialogs.search_components)
                 .child(
                     Input::new(&self.preview.inputs["dependency-search"])
                         .prefix(icon("search", 13.).text_color(rgb(crate::theme::muted_color())))
@@ -2678,7 +2576,7 @@ impl WhiskyApp {
             let mut filter_line = row().gap(px(14.)).py(px(6.));
             filter_line = filter_line.child(
                 Switch::new("trick-installed-only")
-                    .label(crate::i18n::tr("仅显示已安装", "インストール済みのみ", "Installed Only", "설치됨만 표시"))
+                    .label(crate::i18n::s().dialogs.installed_only)
                     .checked(self.flag("trick-installed-only"))
                     .on_change(cx.listener(|this, checked, _, cx| {
                         this.preview
@@ -2692,7 +2590,7 @@ impl WhiskyApp {
             } else if self.winetricks.installed_pending.contains(&container) {
                 filter_line = filter_line
                     .child(Spinner::new().with_size(px(12.)))
-                    .child(muted(crate::i18n::tr("正在读取已安装组件…", "インストール済みコンポーネントを読み込み中…", "Loading installed components…", "설치된 구성 요소 읽는 중…")));
+                    .child(muted(crate::i18n::s().dialogs.loading_installed_components));
             } else if let Some(error) = self.winetricks.installed_error.get(&container) {
                 filter_line = filter_line.child(muted(error.clone())).child(
                     Button::new("trick-installed-error-retry")
@@ -2704,7 +2602,7 @@ impl WhiskyApp {
             }
             filter_rows.push(filter_line.into_any_element());
         }
-        sections.push(self.section("trick-filter", crate::i18n::tr("搜索与筛选", "検索とフィルター", "Search & Filter", "검색 및 필터"), filter_rows, cx));
+        sections.push(self.section("trick-filter", crate::i18n::s().dialogs.search_filter, filter_rows, cx));
 
         match &self.winetricks.catalog {
             Some(catalog) => {
@@ -2734,7 +2632,7 @@ impl WhiskyApp {
                 {
                     sections.push(self.section(
                         "trick-job",
-                        crate::i18n::tr("安装进度", "インストールの進行状況", "Install Progress", "설치 진행률"),
+                        crate::i18n::s().dialogs.install_progress,
                         self.winetricks_job_rows(job, cx),
                         cx,
                     ));
@@ -2747,7 +2645,7 @@ impl WhiskyApp {
                             .gap(px(8.))
                             .py(px(12.))
                             .child(Spinner::new().with_size(px(14.)))
-                            .child(muted(crate::i18n::tr("正在读取已安装组件…", "インストール済みコンポーネントを読み込み中…", "Loading installed components…", "설치된 구성 요소 읽는 중…")))
+                            .child(muted(crate::i18n::s().dialogs.loading_installed_components))
                             .into_any_element(),
                     );
                 } else if installed_missing {
@@ -2756,7 +2654,7 @@ impl WhiskyApp {
                         .installed_error
                         .get(&container)
                         .cloned()
-                        .unwrap_or_else(|| crate::i18n::tr("尚未读取已安装组件。", "インストール済みコンポーネントはまだ読み込まれていません。", "Installed components have not been loaded yet.", "설치된 구성 요소를 아직 읽지 않았습니다.").to_owned());
+                        .unwrap_or_else(|| crate::i18n::s().dialogs.components_not_loaded.to_owned());
                     rows.push(muted(reason).py(px(10.)).into_any_element());
                     rows.push(
                         Button::new("trick-installed-retry")
@@ -2771,9 +2669,9 @@ impl WhiskyApp {
                     if verbs.is_empty() {
                         rows.push(
                             muted(if installed_only {
-                                crate::i18n::tr("该分类下还没有已安装的组件。", "このカテゴリにはインストール済みコンポーネントがありません。", "No installed components in this category.", "이 카테고리에 설치된 구성 요소가 없습니다.")
+                                crate::i18n::s().dialogs.no_installed_components_in_this_category
                             } else {
-                                crate::i18n::tr("没有匹配的组件。", "一致するコンポーネントがありません。", "No matching components.", "일치하는 구성 요소가 없습니다.")
+                                crate::i18n::s().dialogs.no_matching_components
                             })
                             .py(px(10.))
                             .into_any_element(),
@@ -2788,23 +2686,23 @@ impl WhiskyApp {
                     }
                 } else {
                     rows.push(
-                        muted(crate::i18n::tr("该容器没有可用的组件目录。", "このコンテナで利用可能なコンポーネントカタログがありません。", "No component catalog available for this bottle.", "이 컨테이너에 사용 가능한 구성 요소 카탈로그가 없습니다."))
+                        muted(crate::i18n::s().dialogs.no_component_catalog)
                             .py(px(10.))
                             .into_any_element(),
                     );
                 }
-                sections.push(self.section("tricks", crate::i18n::tr("可用组件", "利用可能なコンポーネント", "Available Components", "사용 가능한 구성 요소"), rows, cx));
+                sections.push(self.section("tricks", crate::i18n::s().dialogs.available_components, rows, cx));
             }
             None if self.winetricks.catalog_pending => {
                 sections.push(self.section(
                     "trick-loading",
-                    crate::i18n::tr("可用组件", "利用可能なコンポーネント", "Available Components", "사용 가능한 구성 요소"),
+                    crate::i18n::s().dialogs.available_components,
                     vec![
                         row()
                             .gap(px(8.))
                             .py(px(12.))
                             .child(Spinner::new().with_size(px(14.)))
-                            .child(muted(crate::i18n::tr("正在读取组件目录…", "コンポーネントカタログを読み込み中…", "Loading component catalog…", "구성 요소 카탈로그 읽는 중…")))
+                            .child(muted(crate::i18n::s().dialogs.loading_component_catalog))
                             .into_any_element(),
                     ],
                     cx,
@@ -2815,10 +2713,10 @@ impl WhiskyApp {
                     .winetricks
                     .catalog_error
                     .clone()
-                    .unwrap_or_else(|| crate::i18n::tr("尚未读取组件目录。", "コンポーネントカタログはまだ読み込まれていません。", "Component catalog has not been loaded yet.", "구성 요소 카탈로그를 아직 읽지 않았습니다.").to_owned());
+                    .unwrap_or_else(|| crate::i18n::s().dialogs.catalog_not_loaded.to_owned());
                 sections.push(self.section(
                     "trick-load-error",
-                    crate::i18n::tr("可用组件", "利用可能なコンポーネント", "Available Components", "사용 가능한 구성 요소"),
+                    crate::i18n::s().dialogs.available_components,
                     vec![
                         muted(reason).py(px(10.)).into_any_element(),
                         Button::new("trick-catalog-retry")
@@ -2871,7 +2769,7 @@ impl WhiskyApp {
         if job.running() {
             rows.push(
                 Button::new("trick-cancel")
-                    .label(crate::i18n::tr("取消安装", "インストールをキャンセル", "Cancel Install", "설치 취소"))
+                    .label(crate::i18n::s().dialogs.cancel_install)
                     .on_click(cx.listener(|this, _, _, cx| this.cancel_winetricks_install(cx)))
                     .into_any_element(),
             );
@@ -2964,15 +2862,15 @@ impl WhiskyApp {
         self.form(
             "winetricks-scroll",
             vec![
-                self.field("dependency-search", crate::i18n::tr("搜索组件", "コンポーネントを検索", "Search Components", "구성 요소 검색")),
+                self.field("dependency-search", crate::i18n::s().dialogs.search_components),
                 self.section(
                     "tricks",
-                    crate::i18n::tr("可用组件", "利用可能なコンポーネント", "Available Components", "사용 가능한 구성 요소"),
+                    crate::i18n::s().dialogs.available_components,
                     [
                         ("vcrun2022", "Visual C++ 2015–2022"),
                         ("d3dx9", "DirectX 9"),
                         ("lavfilters", "LAV Filters"),
-                        ("cjkfonts", crate::i18n::tr("中日韩字体", "CJK フォント", "CJK Fonts", "CJK 글꼴")),
+                        ("cjkfonts", crate::i18n::s().dialogs.cjk_fonts),
                         ("dotnet48", ".NET Framework 4.8"),
                     ]
                     .into_iter()
@@ -3156,7 +3054,8 @@ impl WhiskyApp {
         // Hero summary card: brings title, cover, binding status, and unsaved indicator into focus.
         let mut bound_pills: Vec<AnyElement> = crate::metadata_editor::PROVIDERS
             .iter()
-            .filter_map(|&(source, label)| {
+            .filter_map(|&source| {
+                let label = crate::onboarding::source_label(source);
                 let id = bindings[source].as_str().unwrap_or("");
                 (!id.is_empty()).then(|| {
                     info_pill(
@@ -3169,30 +3068,25 @@ impl WhiskyApp {
             .collect();
         if bound_pills.is_empty() && loaded {
             bound_pills.push(info_pill(
-                crate::i18n::tr("尚未关联在线平台", "オンラインプラットフォーム未連携", "Not linked to an online source", "연결된 온라인 플랫폼 없음"),
+                crate::i18n::s().dialogs.not_linked_to_an_online_source,
                 crate::theme::badge_bg(),
                 crate::theme::warning_fg(),
             ));
         }
         if loaded {
             bound_pills.push(info_pill(
-                match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("默认来源：{}", source_label(&default_source)), crate::i18n::Locale::Ja => format!("既定の取得元：{}", source_label(&default_source)), crate::i18n::Locale::En => format!("Default source: {}", source_label(&default_source)), crate::i18n::Locale::Ko => format!("기본 출처: {}", source_label(&default_source)) },
+                crate::i18n::s().dialogs.default_source(source_label(&default_source)),
                 crate::theme::badge_bg(),
                 crate::theme::badge_text(),
             ));
         }
 
         let hero_warning = if loaded && allowed.is_empty() {
-            Some(crate::i18n::tr("未启用任何元数据平台，请在全局设置中开启来源后再搜索或刷新。", "メタデータソースが有効になっていません。設定で有効にしてから検索または更新してください。", "No metadata sources enabled. Enable sources in Settings before searching or refreshing.", "활성화된 메타데이터 플랫폼이 없습니다. 설정에서 소스를 켠 후 검색하거나 새로 고침하세요.").to_owned())
+            Some(crate::i18n::s().dialogs.no_metadata_sources.to_owned())
         } else if loaded && bindings[&basic_source].as_str().is_none_or(str::is_empty) {
             Some({
                 let src = source_label(&basic_source);
-                match crate::i18n::locale() {
-                    crate::i18n::Locale::ZhHans => format!("当前基本信息来源「{src}」尚未关联作品，请在下方搜索或按 ID 关联。"),
-                    crate::i18n::Locale::Ja => format!("現在の基本情報ソース「{src}」はまだ作品と紐付けられていません。下で検索または ID 連携してください。"),
-                    crate::i18n::Locale::En => format!("Basic info source \"{src}\" is not linked to a title yet; search or link by ID below."),
-                    crate::i18n::Locale::Ko => format!("현재 기본 정보 출처 '{src}'가 아직 작품과 연결되지 않았습니다. 아래에서 검색하거나 ID로 연결하세요."),
-                }
+                crate::i18n::s().dialogs.basic_source_unlinked(src)
             })
         } else {
             None
@@ -3258,7 +3152,7 @@ impl WhiskyApp {
                                     )
                                     .when(dirty, |d| {
                                         d.child(info_pill(
-                                            crate::i18n::tr("有未保存修改", "未保存の変更があります", "Unsaved changes", "저장되지 않은 변경 사항"),
+                                            crate::i18n::s().dialogs.unsaved_changes,
                                             crate::theme::accent_subtle_bg(),
                                             crate::theme::accent_fg(),
                                         ))
@@ -3312,7 +3206,7 @@ impl WhiskyApp {
             )
             .child(
                 Button::new("metadata-bind-id")
-                    .label(crate::i18n::tr("按 ID / 网址关联", "ID / URL で連携", "Link by ID / URL", "ID / URL로 연결"))
+                    .label(crate::i18n::s().dialogs.link_by_id_url)
                     .disabled(!editable || searching)
                     .on_click(cx.listener(|this, _, _, cx| this.bind_metadata_id(cx))),
             )
@@ -3335,12 +3229,13 @@ impl WhiskyApp {
 
         let mut search_rows: Vec<AnyElement> = Vec::new();
         let mut bound_cards: Vec<AnyElement> = Vec::new();
-        for &(source, label) in crate::metadata_editor::PROVIDERS {
+        for &source in &crate::metadata_editor::PROVIDERS {
+            let label = crate::onboarding::source_label(source);
             let id = bindings[source].as_str().unwrap_or("");
             if !id.is_empty() {
                 let snap_title = snapshots[source]["title"].as_str().unwrap_or("");
                 let snap_title = if snap_title.is_empty() {
-                    crate::i18n::tr("尚无快照 · 保存后刷新", "スナップショットなし · 保存後に更新", "No snapshot · save & refresh", "스냅샷 없음 · 저장 후 새로 고침")
+                    crate::i18n::s().dialogs.no_snapshot_save_refresh
                 } else {
                     snap_title
                 };
@@ -3375,7 +3270,7 @@ impl WhiskyApp {
                         .child(
                             Button::new(format!("metadata-unbind-{source}"))
                                 .ghost()
-                                .label(crate::i18n::tr("解除关联", "連携を解除", "Unlink", "연결 해제"))
+                                .label(crate::i18n::s().dialogs.unlink)
                                 .disabled(!editable)
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     this.unbind_metadata_source(source, cx)
@@ -3391,7 +3286,7 @@ impl WhiskyApp {
                     .gap(px(6.))
                     .py(px(4.))
                     .child(
-                        muted(crate::i18n::tr("当前已关联（草稿）", "連携済み（下書き）", "Currently linked (draft)", "현재 연결됨(초안)"))
+                        muted(crate::i18n::s().dialogs.currently_linked_draft)
                             .text_size(px(11.))
                             .font_weight(FontWeight::SEMIBOLD),
                     )
@@ -3409,7 +3304,7 @@ impl WhiskyApp {
                     .gap(px(8.))
                     .py(px(8.))
                     .child(Spinner::new().with_size(px(14.)))
-                    .child(muted(crate::i18n::tr("正在查询所选平台…", "選択したソースを検索中…", "Querying selected sources…", "선택한 플랫폼 조회 중…")))
+                    .child(muted(crate::i18n::s().dialogs.querying_selected_sources))
                     .into_any_element(),
             );
         }
@@ -3467,7 +3362,7 @@ impl WhiskyApp {
             );
             if let Some(provider_error) = &group.error {
                 search_rows.push(
-                    muted(match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("查询失败：{provider_error}"), crate::i18n::Locale::Ja => format!("照会に失敗：{provider_error}"), crate::i18n::Locale::En => format!("Query failed: {provider_error}"), crate::i18n::Locale::Ko => format!("조회 실패: {provider_error}") })
+                    muted(crate::i18n::s().dialogs.query_failed(provider_error))
                         .text_size(px(11.))
                         .into_any_element(),
                 );
@@ -3562,9 +3457,9 @@ impl WhiskyApp {
                         .child(
                             Button::new(format!("metadata-apply:{group_index}:{game_index}"))
                                 .label(if already_bound {
-                                    crate::i18n::tr("✓ 已在草稿", "✓ 下書きに反映済み", "✓ In Draft", "✓ 초안에 적용됨")
+                                    crate::i18n::s().dialogs.in_draft
                                 } else {
-                                    crate::i18n::tr("关联到草稿", "下書きへ連携", "Link to Draft", "초안에 연결")
+                                    crate::i18n::s().dialogs.link_to_draft
                                 })
                                 .disabled(!editable || already_bound)
                                 .on_click(cx.listener(move |this, _, _, cx| {
@@ -3580,7 +3475,7 @@ impl WhiskyApp {
         }
         if groups.is_empty() && !searching {
             search_rows.push(
-                muted(crate::i18n::tr("输入目标平台上的名称搜索，或粘贴作品 ID / 网址直接关联；所有修改仅更新草稿，点击「保存资料」生效。", "タイトル名で検索するか作品 ID / URL を貼り付けて連携します。変更は下書きのみ更新され、「情報を保存」で確定します。", "Search by title on the source or paste a work ID/URL to link. Edits stay in the draft until you click Save Metadata.", "대상 플랫폼에서 제목으로 검색하거나 작품 ID/URL을 붙여 넣어 연결하세요. 저장을 눌러야 반영됩니다."))
+                muted(crate::i18n::s().dialogs.search_or_link_tip)
                     .text_size(px(11.))
                     .line_height(relative(1.4))
                     .into_any_element(),
@@ -3603,9 +3498,9 @@ impl WhiskyApp {
                         .flex_1()
                         .min_w_0()
                         .gap(px(2.))
-                        .child(crate::i18n::tr("自定义封面", "カスタムカバー", "Custom Cover", "사용자 지정 커버"))
+                        .child(crate::i18n::s().dialogs.custom_cover)
                         .child(
-                            muted(crate::i18n::tr("立即生效（不属于资料草稿），本地图片优先级高于在线封面。", "即時反映されます（下書き対象外）。ローカル画像がオンラインカバーより優先されます。", "Takes effect immediately (outside the draft); local image takes priority over online covers.", "즉시 적용되며(초안 미포함) 로컬 이미지가 온라인 커버보다 우선합니다."))
+                            muted(crate::i18n::s().dialogs.local_image_priority_tip)
                                 .text_size(px(11.)),
                         ),
                 )
@@ -3614,13 +3509,13 @@ impl WhiskyApp {
                         .gap(px(8.))
                         .child(self.action(
                             "cover-import",
-                            crate::i18n::tr("选择本地图片…", "ローカル画像を選択…", "Choose Local Image…", "로컬 이미지 선택…"),
+                            crate::i18n::s().dialogs.choose_local_image,
                             Command::MetadataCover,
                             cx,
                         ))
                         .child(self.action(
                             "cover-reset",
-                            crate::i18n::tr("恢复默认封面", "デフォルトカバーに戻す", "Reset to Default Cover", "기본 커버로 복원"),
+                            crate::i18n::s().dialogs.reset_to_default_cover,
                             Command::MetadataCoverReset,
                             cx,
                         ))
@@ -3638,7 +3533,7 @@ impl WhiskyApp {
                 let reason = self.game_info.as_ref().and_then(|page| page.config_error.clone()).unwrap_or_default();
                 config_rows.push(row().gap(px(12.)).py(px(10.))
                     .child(div().flex_1().child(muted(reason)))
-                    .child(Button::new("gamedb-retry").label(crate::i18n::tr("重新读取", "再読み込み", "Reload", "다시 읽기"))
+                    .child(Button::new("gamedb-retry").label(crate::i18n::s().dialogs.reload)
                         .on_click(cx.listener(|this, _, _, cx| this.retry_game_db(cx))))
                     .into_any_element());
             }
@@ -3648,13 +3543,13 @@ impl WhiskyApp {
                         .gap(px(8.))
                         .py(px(8.))
                         .child(Spinner::new().with_size(px(14.)))
-                        .child(muted(crate::i18n::tr("正在匹配本地 GameDB…", "ローカル GameDB と照合中…", "Matching local GameDB…", "로컬 GameDB 매칭 중…")))
+                        .child(muted(crate::i18n::s().dialogs.matching_local_gamedb))
                         .into_any_element(),
                 );
             }
             Some(matches) if matches.is_empty() => {
                 config_rows.push(
-                    muted(crate::i18n::tr("本地 GameDB 中没有匹配条目。仍可使用在线元数据或手动调整运行设置。", "ローカル GameDB に一致する項目がありません。オンラインメタデータや手動設定をご利用ください。", "No matching entry in local GameDB. You can still use online metadata or adjust run settings manually.", "로컬 GameDB에 일치하는 항목이 없습니다. 온라인 메타데이터나 수동 설정을 이용하세요."))
+                    muted(crate::i18n::s().dialogs.no_gamedb_match)
                         .into_any_element(),
                 );
             }
@@ -3664,15 +3559,15 @@ impl WhiskyApp {
                         .entry
                         .get("title")
                         .and_then(|value| value.as_str())
-                        .unwrap_or(crate::i18n::tr("GameDB 条目", "GameDB 項目", "GameDB Entry", "GameDB 항목"));
+                        .unwrap_or(crate::i18n::s().dialogs.gamedb_entry);
                     let rating = matched
                         .entry
                         .get("rating")
                         .and_then(|value| value.as_str())
                         .unwrap_or("");
-                    let pct = matched.confidence * 100.; let mut detail = match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("{pct:.0}% 匹配"), crate::i18n::Locale::Ja => format!("一致度 {pct:.0}%"), crate::i18n::Locale::En => format!("{pct:.0}% match"), crate::i18n::Locale::Ko => format!("{pct:.0}% 일치") };
+                    let pct = matched.confidence * 100.; let mut detail = crate::i18n::s().dialogs.match_pct(format!("{:.0}", pct));
                     if matched.reference_platform == "macos" {
-                        detail.push_str(crate::i18n::tr(" · macOS 参考记录", " · macOS 参考記録", " · macOS reference", " · macOS 참고 기록"));
+                        detail.push_str(crate::i18n::s().dialogs.macos_reference);
                     }
                     if !rating.is_empty() {
                         detail.push_str(" · ");
@@ -3695,8 +3590,8 @@ impl WhiskyApp {
                             .child(
                                 Button::new(format!("gamedb-apply:{index}"))
                                     .label(if matched.apply_available(self.service_available("gameConfig.apply")) {
-                                        crate::i18n::tr("应用推荐配置", "推奨設定を適用", "Apply Recommended", "권장 설정 적용")
-                                    } else { crate::i18n::tr("配置参考", "設定リファレンス", "Config Reference", "설정 참고") })
+                                        crate::i18n::s().dialogs.apply_recommended
+                                    } else { crate::i18n::s().dialogs.config_reference })
                                     .primary()
                                     .disabled(applying || !matched.apply_available(self.service_available("gameConfig.apply")))
                                     .on_click(cx.listener(move |this, _, _, cx| {
@@ -3745,15 +3640,15 @@ impl WhiskyApp {
             "game-info-scroll",
             vec![
                 hero_card.into_any_element(),
-                self.section("game-metadata-search", crate::i18n::tr("在线匹配与关联", "オンライン検索と連携", "Online Match & Link", "온라인 검색 및 연결"), search_rows, cx),
-                self.section("game-metadata-edit", crate::i18n::tr("手动编辑与封面", "手動編集とカバー", "Manual Edit & Cover", "수동 편집 및 커버"), edit_rows, cx),
-                self.section("game-metadata-sources", crate::i18n::tr("来源策略与角色预览", "ソース方針とキャラクタープレビュー", "Sources & Character Preview", "출처 정책 및 캐릭터 미리보기"), source_rows, cx),
+                self.section("game-metadata-search", crate::i18n::s().dialogs.online_match_link, search_rows, cx),
+                self.section("game-metadata-edit", crate::i18n::s().dialogs.manual_edit_cover, edit_rows, cx),
+                self.section("game-metadata-sources", crate::i18n::s().dialogs.sources_character_preview, source_rows, cx),
                 self.section(
                     "game-gamedb",
                     if self.service_available("gameConfig.apply") {
-                        crate::i18n::tr("GameDB 推荐配置", "GameDB 推奨設定", "GameDB Recommended Config", "GameDB 권장 설정")
+                        crate::i18n::s().dialogs.gamedb_recommended_config
                     } else {
-                        crate::i18n::tr("GameDB 配置参考", "GameDB 設定リファレンス", "GameDB Config Reference", "GameDB 설정 참고")
+                        crate::i18n::s().dialogs.gamedb_config_reference
                     },
                     config_rows,
                     cx,
@@ -3901,7 +3796,7 @@ impl WhiskyApp {
                                 ),
                                 self.create_engine_choice(cx),
                                 self.info(crate::i18n::s().common.location, &location),
-                                self.info(crate::i18n::s().common.architecture, crate::i18n::s().common.bits_64),
+                                self.info(crate::i18n::s().common.architecture, crate::i18n::s().common.bits64),
                             ],
                             cx,
                         )],
@@ -3915,14 +3810,14 @@ impl WhiskyApp {
                     "dll-overrides",
                     crate::i18n::s().dialogs.sheet_dll,
                     vec![
-                        self.info("d3dcompiler_47", crate::i18n::tr("原生优先，内建后备", "ネイティブ優先、内蔵フォールバック", "Native then Builtin", "네이티브 우선, 내장 후순위")),
-                        self.field("dll-name", crate::i18n::tr("添加覆盖", "オーバーライドを追加", "Add Override", "재정의 추가")),
+                        self.info("d3dcompiler_47", crate::i18n::s().dialogs.native_then_builtin),
+                        self.field("dll-name", crate::i18n::s().dialogs.add_override),
                         self.choice(
                             "dll-mode",
-                            crate::i18n::tr("加载顺序", "読み込み順序", "Load Order", "로드 순서"),
+                            crate::i18n::s().dialogs.load_order,
                             &[
-                                crate::i18n::tr("原生优先，内建后备", "ネイティブ優先、内蔵フォールバック", "Native then Builtin", "네이티브 우선, 내장 후순위"),
-                                crate::i18n::tr("内建优先，原生后备", "内蔵優先、ネイティブフォールバック", "Builtin then Native", "내장 우선, 네이티브 후순위"),
+                                crate::i18n::s().dialogs.native_then_builtin,
+                                crate::i18n::s().dialogs.builtin_then_native,
                                 crate::i18n::s().program_settings.dll_native_only,
                                 crate::i18n::s().program_settings.dll_builtin_only,
                                 crate::i18n::s().program_settings.dll_disabled,
@@ -3937,7 +3832,7 @@ impl WhiskyApp {
                 "graphics-scroll",
                 vec![self.section(
                     "advanced-graphics",
-                    crate::i18n::tr("图形调试", "グラフィックスデバッグ", "Graphics Debugging", "그래픽 디버깅"),
+                    crate::i18n::s().dialogs.graphics_debugging,
                     #[cfg(not(target_os = "linux"))]
                     vec![
                         self.toggle("metal-hud", "Metal HUD", "", cx),
@@ -3956,14 +3851,14 @@ impl WhiskyApp {
             ),
             PreviewSheet::Audio => {
                 let mut rows = vec![
-                    self.info(crate::i18n::tr("1. 输出设备", "1. 出力デバイス", "1. Output Device", "1. 출력 장치"), crate::i18n::tr("系统默认输出", "システム既定出力", "System Default Output", "시스템 기본 출력")),
-                    self.info(crate::i18n::tr("2. 测试方式", "2. テスト方式", "2. Test Method", "2. 테스트 방식"), crate::i18n::tr("Wine WinMM 440 Hz 测试音", "Wine WinMM 440 Hz テストトーン", "Wine WinMM 440 Hz Test Tone", "Wine WinMM 440 Hz 테스트 톤")),
+                    self.info(crate::i18n::s().dialogs.n_1_output_device, crate::i18n::s().dialogs.system_default_output),
+                    self.info(crate::i18n::s().dialogs.n_2_test_method, crate::i18n::s().dialogs.wine_winmm_440_hz_test_tone),
                     self.action(
                         "test-audio",
                         if self.audio_pending {
-                            crate::i18n::tr("正在播放测试音…", "テストトーン再生中…", "Playing Test Tone…", "테스트 톤 재생 중…")
+                            crate::i18n::s().dialogs.playing_test_tone
                         } else {
-                            crate::i18n::tr("播放测试音频", "テスト音声を再生", "Play Test Audio", "테스트 오디오 재생")
+                            crate::i18n::s().dialogs.play_test_audio
                         },
                         Command::TestAudio,
                         cx,
@@ -3975,7 +3870,7 @@ impl WhiskyApp {
                             .gap(px(8.))
                             .py(px(8.))
                             .child(Spinner::new().with_size(px(14.)))
-                            .child(muted(crate::i18n::tr("正在启动 Wine 音频测试…", "Wine オーディオテストを開始中…", "Starting Wine audio test…", "Wine 오디오 테스트 시작 중…")))
+                            .child(muted(crate::i18n::s().dialogs.starting_wine_audio_test))
                             .into_any_element(),
                     );
                 }
@@ -3991,7 +3886,7 @@ impl WhiskyApp {
                         "skipped" => c.skipped,
                         _ => result.status.as_str(),
                     };
-                    rows.push(self.info(crate::i18n::tr("测试结果", "テスト結果", "Test Result", "테스트 결과"), status));
+                    rows.push(self.info(crate::i18n::s().dialogs.test_result, status));
                     rows.push(self.info(crate::i18n::s().library.summary, result.summary.clone()));
                     for line in result.evidence.iter().take(12) {
                         rows.push(muted(line.clone()).text_size(px(11.)).into_any_element());
@@ -4003,50 +3898,50 @@ impl WhiskyApp {
                                 finding
                                     .suggested_action
                                     .clone()
-                                    .unwrap_or_else(|| crate::i18n::tr("检查 Wine 音频驱动设置", "Wine オーディオドライバ設定を確認してください", "Check Wine audio driver settings", "Wine 오디오 드라이버 설정 확인").to_owned()),
+                                    .unwrap_or_else(|| crate::i18n::s().dialogs.check_wine_audio_driver_settings.to_owned()),
                             ),
                         );
                     }
                     rows.push(
-                        muted(crate::i18n::tr("若能听到测试音，说明 Wine 音频链路正常；若没有声音，请检查系统输出设备与音频驱动。", "テストトーンが聞こえれば Wine オーディオは正常です。聞こえない場合は出力デバイスとオーディオドライバを確認してください。", "If you hear the tone, Wine audio output works; otherwise check your output device and audio driver.", "테스트 톤이 들리면 Wine 오디오가 정상입니다. 들리지 않으면 출력 장치와 오디오 드라이버를 확인하세요."))
+                        muted(crate::i18n::s().dialogs.audio_test_tip)
                             .text_size(px(11.))
                             .into_any_element(),
                     );
                 }
                 self.form(
                     "audio-wizard-scroll",
-                    vec![self.section("audio-check", crate::i18n::tr("检查音频输出", "オーディオ出力の確認", "Check Audio Output", "오디오 출력 확인"), rows, cx)],
+                    vec![self.section("audio-check", crate::i18n::s().dialogs.check_audio_output, rows, cx)],
                 )
             }
             PreviewSheet::Diagnostics => {
                 let symptoms: Vec<&'static str> = if cfg!(target_os = "linux") {
                     vec![
-                        crate::i18n::tr("容器文件或导入异常", "コンテナまたはインポートエラー", "Bottle Files or Import Error", "컨테이너 또는 가져오기 오류"),
-                        crate::i18n::tr("文件权限或存储空间", "ファイル権限または空き容量", "Permissions or Storage Space", "파일 권한 또는 저장 공간"),
-                        crate::i18n::tr("主机环境信息", "ホスト環境情報", "Host Environment Info", "호스트 환경 정보"),
+                        crate::i18n::s().dialogs.bottle_files_or_import_error,
+                        crate::i18n::s().dialogs.permissions_or_storage_space,
+                        crate::i18n::s().dialogs.host_environment_info,
                     ]
                 } else {
                     vec![
-                        crate::i18n::tr("游戏无法启动", "ゲームが起動しない", "Game Won't Launch", "게임이 실행되지 않음"),
-                        crate::i18n::tr("黑屏或画面异常", "画面が暗い／表示異常", "Black Screen or Glitches", "검은 화면 또는 그래픽 오류"),
-                        crate::i18n::tr("没有声音", "音が出ない", "No Audio", "소리 없음"),
-                        crate::i18n::tr("文字乱码", "文字化け", "Garbled Text", "문자 깨짐"),
-                        crate::i18n::tr("游戏运行缓慢", "動作が重い", "Slow Performance", "성능 저하"),
+                        crate::i18n::s().dialogs.game_won_t_launch,
+                        crate::i18n::s().dialogs.black_screen_or_glitches,
+                        crate::i18n::s().dialogs.no_audio,
+                        crate::i18n::s().dialogs.garbled_text,
+                        crate::i18n::s().dialogs.slow_performance,
                     ]
                 };
                 let mut rows = vec![
                     self.choice(
                         "diagnosis-symptom",
-                        crate::i18n::tr("遇到了什么问题？", "どのような問題が発生していますか？", "What issue are you experiencing?", "어떤 문제가 발생했나요?"),
+                        crate::i18n::s().dialogs.what_issue_are_you_experiencing,
                         &symptoms,
                         cx,
                     ),
                     self.action(
                         "checks",
                         if self.checks_pending {
-                            crate::i18n::tr("正在运行自动检查…", "自動チェックを実行中…", "Running Auto Checks…", "자동 검사 실행 중…")
+                            crate::i18n::s().dialogs.running_auto_checks
                         } else {
-                            crate::i18n::tr("运行自动检查", "自動チェックを実行", "Run Auto Checks", "자동 검사 실행")
+                            crate::i18n::s().dialogs.run_auto_checks
                         },
                         Command::RunBottleChecks,
                         cx,
@@ -4054,11 +3949,11 @@ impl WhiskyApp {
                     self.action(
                         "analyze",
                         if self.diagnostics_pending {
-                            crate::i18n::tr("正在收集诊断信息…", "診断情報を収集中…", "Collecting Diagnostics…", "진단 정보 수집 중…")
+                            crate::i18n::s().dialogs.collecting_diagnostics
                         } else if cfg!(target_os = "linux") {
-                            crate::i18n::tr("收集主机与容器信息", "ホストとコンテナ情報を収集", "Collect Host & Bottle Info", "호스트 및 컨테이너 정보 수집")
+                            crate::i18n::s().dialogs.collect_host_bottle_info
                         } else {
-                            crate::i18n::tr("分析运行日志", "実行ログを分析", "Analyze Run Logs", "실행 로그 분석")
+                            crate::i18n::s().dialogs.analyze_run_logs
                         },
                         Command::RunDiagnostics,
                         cx,
@@ -4070,7 +3965,7 @@ impl WhiskyApp {
                             .gap(px(8.))
                             .py(px(8.))
                             .child(Spinner::new().with_size(px(14.)))
-                            .child(muted(crate::i18n::tr("正在收集预检数据并运行检查项…", "プリフライトデータを収集してチェックを実行中…", "Collecting preflight data and running checks…", "사전 데이터 수집 및 검사 실행 중…")))
+                            .child(muted(crate::i18n::s().dialogs.preflight_running))
                             .into_any_element(),
                     );
                 }
@@ -4079,24 +3974,24 @@ impl WhiskyApp {
                         let c = &crate::i18n::s().common;
                         let (label, symbol, color) = match check.outcome.as_str() {
                             "pass" => (c.passed, "check", crate::theme::installed_fg()),
-                            "already_configured" => (crate::i18n::tr("已配置", "設定済み", "Configured", "설정됨"), "check", crate::theme::installed_fg()),
-                            "fail" => (crate::i18n::tr("未通过", "不合格", "Failed", "실패"), "triangle-alert", crate::theme::warning_fg()),
+                            "already_configured" => (crate::i18n::s().dialogs.configured, "check", crate::theme::installed_fg()),
+                            "fail" => (crate::i18n::s().dialogs.failed, "triangle-alert", crate::theme::warning_fg()),
                             "warning" => (c.warning, "triangle-alert", crate::theme::warning_fg()),
                             "error" => (c.error, "x", crate::theme::danger_fg()),
                             _ => (c.unknown, "info", crate::theme::muted_color()),
                         };
                         let check_label = match check.check_id.as_str() {
-                            "crash.log_classify" => crate::i18n::tr("崩溃日志", "クラッシュログ", "Crash Logs", "충돌 로그"),
+                            "crash.log_classify" => crate::i18n::s().dialogs.crash_logs,
                             "launcher.type_check" => crate::i18n::config::field_title("config.field.launcherMode", "launcherMode", "Launcher Type"),
                             "process.running_check" => crate::i18n::s().bottle.running_processes,
-                            "audio.device_check" => crate::i18n::tr("音频设备", "オーディオデバイス", "Audio Device", "오디오 장치"),
+                            "audio.device_check" => crate::i18n::s().dialogs.audio_device,
                             "audio.driver_check" => crate::i18n::config::field_title("config.field.audioDriver", "audioDriver", "Audio Driver"),
-                            "game.config_available" => crate::i18n::tr("GameDB 配置", "GameDB 設定", "GameDB Config", "GameDB 설정"),
-                            "diagnostics.can_enhance" => crate::i18n::tr("诊断日志级别", "診断ログレベル", "Diagnostic Log Level", "진단 로그 수준"),
-                            "host.container_metadata" => crate::i18n::tr("容器元数据", "コンテナメタデータ", "Bottle Metadata", "컨테이너 메타데이터"),
-                            "host.drive_c" => crate::i18n::tr("容器目录", "コンテナフォルダ", "Bottle Directory", "컨테이너 폴더"),
-                            "host.container_write" => crate::i18n::tr("文件权限", "ファイル権限", "File Permissions", "파일 권한"),
-                            "host.storage" => crate::i18n::tr("可用空间", "空き容量", "Available Storage", "사용 가능 공간"),
+                            "game.config_available" => crate::i18n::s().dialogs.gamedb_config,
+                            "diagnostics.can_enhance" => crate::i18n::s().dialogs.diagnostic_log_level,
+                            "host.container_metadata" => crate::i18n::s().dialogs.bottle_metadata,
+                            "host.drive_c" => crate::i18n::s().dialogs.bottle_directory,
+                            "host.container_write" => crate::i18n::s().dialogs.file_permissions,
+                            "host.storage" => crate::i18n::s().dialogs.available_storage,
                             _ => check.check_id.as_str(),
                         };
                         let mut detail = format!("{check_label}：{label} · {}", check.summary);
@@ -4120,7 +4015,7 @@ impl WhiskyApp {
                             .gap(px(8.))
                             .py(px(8.))
                             .child(Spinner::new().with_size(px(14.)))
-                            .child(muted(crate::i18n::tr("正在读取系统信息与最近日志…", "システム情報と最近のログを読み込み中…", "Reading system info and recent logs…", "시스템 정보 및 최근 로그 읽는 중…")))
+                            .child(muted(crate::i18n::s().dialogs.reading_system_info_and_recent_logs))
                             .into_any_element(),
                     );
                 }
@@ -4145,7 +4040,7 @@ impl WhiskyApp {
                     );
                     rows.push(self.action(
                         "export",
-                        crate::i18n::tr("导出诊断报告…", "診断レポートを書き出す…", "Export Diagnostics Report…", "진단 보고서 내보내기…"),
+                        crate::i18n::s().dialogs.export_diagnostics_report,
                         Command::ExportDiagnostics,
                         cx,
                     ));
@@ -4153,7 +4048,7 @@ impl WhiskyApp {
                 if cfg!(target_os = "macos") {
                     rows.push(self.action(
                         "audio-link",
-                        crate::i18n::tr("音频故障排查…", "オーディオのトラブルシューティング…", "Audio Troubleshooter…", "오디오 문제 해결…"),
+                        crate::i18n::s().dialogs.audio_troubleshooter,
                         Command::Sheet(PreviewSheet::Audio),
                         cx,
                     ));
@@ -4162,7 +4057,7 @@ impl WhiskyApp {
                     "diagnostics-scroll",
                     vec![self.section(
                         "guided-diagnostics",
-                        crate::i18n::tr("引导式故障排查", "ガイド付きトラブルシューティング", "Guided Diagnostics", "단계별 문제 해결"),
+                        crate::i18n::s().dialogs.guided_diagnostics,
                         rows,
                         cx,
                     )],
@@ -4305,7 +4200,7 @@ impl WhiskyApp {
                             .when(cfg!(target_os = "linux") && !self.demo
                                 && matches!(sheet, PreviewSheet::CreateBottle), |d| {
                                 d.child(Button::new("import-existing-bottle")
-                                    .label(crate::i18n::tr("导入已有容器…", "既存ボトルをインポート…", "Import Existing Bottle…", "기존 컨테이너 가져오기…"))
+                                    .label(crate::i18n::s().dialogs.import_existing_bottle)
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.preview.sheet = None;
                                         this.restore_preview_sheet_focus(window, cx);
@@ -4381,22 +4276,12 @@ impl WhiskyApp {
                                             let n = picker.selected.len();
                                             if picker.launch_after {
                                                 if n > 1 {
-                                                    match crate::i18n::locale() {
-                                                        crate::i18n::Locale::ZhHans => format!("继续启动 ({n})"),
-                                                        crate::i18n::Locale::Ja => format!("起動を続行 ({n})"),
-                                                        crate::i18n::Locale::En => format!("Continue Launch ({n})"),
-                                                        crate::i18n::Locale::Ko => format!("계속 실행 ({n})"),
-                                                    }
+                                                    crate::i18n::s().dialogs.continue_launch(n)
                                                 } else {
                                                     d.save_and_launch.to_owned()
                                                 }
                                             } else {
-                                                match crate::i18n::locale() {
-                                                    crate::i18n::Locale::ZhHans => format!("保存入口 ({n})"),
-                                                    crate::i18n::Locale::Ja => format!("エントリーを保存 ({n})"),
-                                                    crate::i18n::Locale::En => format!("Save Entries ({n})"),
-                                                    crate::i18n::Locale::Ko => format!("진입점 저장 ({n})"),
-                                                }
+                                                crate::i18n::s().dialogs.save_entries(n)
                                             }
                                         } else if !self.demo
                                             && matches!(sheet, PreviewSheet::RunSettings(_))
@@ -5067,11 +4952,11 @@ impl WhiskyApp {
         let d = &crate::i18n::s().dialogs;
         let stage = self.setup_stage.as_deref().map(|stage| match stage {
             "checking" => r.checking_launch,
-            "downloading" => crate::i18n::tr("正在下载 Wine 运行时…", "Wine ランタイムをダウンロード中…", "Downloading Wine runtime…", "Wine 런타임 다운로드 중…"),
-            "verifying" => crate::i18n::tr("正在校验下载完整性…", "ダウンロードの整合性を検証中…", "Verifying download…", "다운로드 무결성 검증 중…"),
-            "installing" => crate::i18n::tr("正在解压并安装运行时…", "ランタイムを展開してインストール中…", "Extracting and installing runtime…", "런타임 압축 해제 및 설치 중…"),
-            "rosetta" => crate::i18n::tr("正在安装 Rosetta 2…", "Rosetta 2 をインストール中…", "Installing Rosetta 2…", "Rosetta 2 설치 중…"),
-            _ => crate::i18n::tr("正在准备…", "準備中…", "Preparing…", "준비 중…"),
+            "downloading" => crate::i18n::s().dialogs.downloading_wine_runtime,
+            "verifying" => crate::i18n::s().dialogs.verifying_download,
+            "installing" => crate::i18n::s().dialogs.extracting_and_installing_runtime,
+            "rosetta" => crate::i18n::s().dialogs.installing_rosetta_2,
+            _ => crate::i18n::s().runtime.preparing,
         });
         let mut rows: Vec<AnyElement> = vec![
             muted(d.setup_desc)
@@ -5131,7 +5016,7 @@ impl WhiskyApp {
                     .gap(px(10.))
                     .py(px(10.))
                     .child(Spinner::new().with_size(px(16.)))
-                    .child(stage.unwrap_or(crate::i18n::tr("正在安装…", "インストール中…", "Installing…", "설치 중…")).to_owned())
+                    .child(stage.unwrap_or(crate::i18n::s().dialogs.installing).to_owned())
                     .into_any_element(),
             );
             if let Some((received, total)) = self.setup_progress.filter(|(_, total)| *total > 0) {
@@ -5692,7 +5577,7 @@ impl WhiskyApp {
             return Vec::new();
         };
         if !page.editor.loaded {
-            return vec![muted(crate::i18n::tr("正在读取本地资料配置…", "ローカルのメタデータ設定を読み込み中…", "Loading local metadata config…", "로컬 메타데이터 설정 읽는 중…")).text_size(px(11.)).into_any_element()];
+            return vec![muted(crate::i18n::s().dialogs.loading_local_metadata_config).text_size(px(11.)).into_any_element()];
         }
         let editable = !page.editor.busy;
         let title = self.metadata_editor_input("manualTitle", window, cx);
@@ -5712,7 +5597,7 @@ impl WhiskyApp {
                 .py(px(4.))
                 .child(
                     Switch::new("metadata-manual-title")
-                        .label(crate::i18n::tr("手动编辑标题", "タイトルを手動編集", "Manually Edit Title", "제목 수동 편집"))
+                        .label(crate::i18n::s().dialogs.manually_edit_title)
                         .checked(title_enabled)
                         .disabled(!editable)
                         .on_change(cx.listener(|this, enabled, _, cx| {
@@ -5722,7 +5607,7 @@ impl WhiskyApp {
                 .when(title_enabled, |d| d.child(Input::new(&title).disabled(!editable)))
                 .child(
                     Switch::new("metadata-manual-summary")
-                        .label(crate::i18n::tr("手动编辑简介", "概要を手動編集", "Manually Edit Summary", "줄거리 수동 편집"))
+                        .label(crate::i18n::s().dialogs.manually_edit_summary)
                         .checked(summary_enabled)
                         .disabled(!editable)
                         .on_change(cx.listener(|this, enabled, _, cx| {
@@ -5731,7 +5616,7 @@ impl WhiskyApp {
                 )
                 .when(summary_enabled, |d| d.child(Input::new(&summary).disabled(!editable)))
                 .child(
-                    muted(crate::i18n::tr("手动内容优先于平台资料；关闭开关可恢复来源内容，取消或关闭窗口将丢弃未保存修改。", "手動入力の内容がソース情報より優先されます。オフにすると取得元の内容に戻ります。キャンセルまたは閉じると未保存の変更は破棄されます。", "Manual text overrides source data; turn off to restore source content. Cancelling or closing discards unsaved changes.", "수동 입력 내용이 출처 데이터보다 우선합니다. 끄면 원본 내용이 복원되며 취소하거나 닫으면 저장되지 않은 변경 사항이 사라집니다."))
+                    muted(crate::i18n::s().dialogs.manual_override_tip)
                         .text_size(px(11.))
                         .line_height(relative(1.4)),
                 )
@@ -5745,7 +5630,7 @@ impl WhiskyApp {
         };
         let snapshots = &page.editor.record["snapshots"];
         let mut rows = vec![
-            muted(crate::i18n::tr("默认来源用于所有字段；仅需对个别字段使用不同平台时再设置分类例外。", "既定のソースが全項目に適用されます。特定項目だけ別ソースを使う場合にカテゴリ例外を設定してください。", "The default source applies to all fields; add per-category overrides only when needed.", "기본 출처가 모든 필드에 적용되며, 특정 필드에만 다른 출처를 쓸 때 분류 예외를 설정하세요."))
+            muted(crate::i18n::s().dialogs.default_source_tip)
                 .text_size(px(11.))
                 .line_height(relative(1.4))
                 .into_any_element(),
@@ -5754,7 +5639,7 @@ impl WhiskyApp {
 
         let category_cell = |category: &'static str, label: &'static str| -> AnyElement {
             if category == "characters"
-                && !crate::metadata_editor::PROVIDERS.iter().any(|(source, _)| {
+                && !crate::metadata_editor::PROVIDERS.iter().any(|source| {
                     page.editor.capabilities[*source]["characters"].as_bool() == Some(true)
                 })
             {
@@ -5790,7 +5675,7 @@ impl WhiskyApp {
                 .border_1()
                 .border_color(rgba(crate::theme::card_border()))
                 .child(
-                    muted(crate::i18n::tr("分类例外（默认跟随上方来源）", "カテゴリ別オーバーライド（既定は上のソースを継承）", "Category Overrides (Follow Default Above)", "분류별 예외(기본값은 위 출처 따름)"))
+                    muted(crate::i18n::s().dialogs.category_overrides_follow_default_above)
                         .text_size(px(11.))
                         .font_weight(FontWeight::SEMIBOLD),
                 )
@@ -5812,7 +5697,7 @@ impl WhiskyApp {
                     row()
                         .gap(px(6.))
                         .child(
-                            muted(match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("角色资料 · {}", source_label(character_source)), crate::i18n::Locale::Ja => format!("キャラクター · {}", source_label(character_source)), crate::i18n::Locale::En => format!("Characters · {}", source_label(character_source)), crate::i18n::Locale::Ko => format!("등장인물 · {}", source_label(character_source)) })
+                            muted(crate::i18n::s().dialogs.characters(source_label(character_source)))
                                 .text_size(px(11.5))
                                 .font_weight(FontWeight::SEMIBOLD),
                         )
@@ -5850,7 +5735,7 @@ impl WhiskyApp {
                         .iter()
                         .take(limit)
                         .map(|character| {
-                            let name = character["name"].as_str().unwrap_or(crate::i18n::tr("未命名", "名称未設定", "Unnamed", "이름 없음"));
+                            let name = character["name"].as_str().unwrap_or(crate::i18n::s().dialogs.unnamed);
                             let original = character["originalName"].as_str().unwrap_or("");
                             let role = character["role"].as_str().unwrap_or("");
                             row()
@@ -5901,14 +5786,14 @@ impl WhiskyApp {
                 }
                 Some(_) => {
                     rows.push(
-                        muted(crate::i18n::tr("该作品未返回角色资料。", "この作品のキャラクター情報は返されませんでした。", "No character data returned for this title.", "이 작품의 캐릭터 정보가 없습니다."))
+                        muted(crate::i18n::s().dialogs.no_character_data)
                             .text_size(px(11.))
                             .into_any_element(),
                     );
                 }
                 None => {
                     rows.push(
-                        muted(crate::i18n::tr("尚无角色快照；关联作品并保存后，可点击左下角「刷新已保存的关联」获取角色。", "キャラクタースナップショットがありません。作品を連携・保存後、左下の「保存済みの連携を更新」で取得できます。", "No character snapshot yet; link and save, then click Refresh Saved Links in the bottom-left.", "캐릭터 스냅샷이 없습니다. 작품을 연결하고 저장한 뒤 왼쪽 아래 \"저장된 연결 새로고침\"을 누르세요."))
+                        muted(crate::i18n::s().dialogs.no_character_snapshot)
                             .text_size(px(11.))
                             .into_any_element(),
                     );
@@ -5918,12 +5803,7 @@ impl WhiskyApp {
             rows.push(
                 muted({
                     let src = source_label(character_source);
-                    match crate::i18n::locale() {
-                        crate::i18n::Locale::ZhHans => format!("当前角色来源「{src}」不支持角色资料；可从上方选择支持的分类来源。"),
-                        crate::i18n::Locale::Ja => format!("現在のキャラクターソース「{src}」はキャラクター取得に対応していません。上から対応ソースを選択してください。"),
-                        crate::i18n::Locale::En => format!("Character source \"{src}\" does not provide characters; pick a supported source above."),
-                        crate::i18n::Locale::Ko => format!("현재 등장인물 출처 '{src}'는 캐릭터 정보를 지원하지 않습니다. 위에서 지원하는 출처를 선택하세요."),
-                    }
+                    crate::i18n::s().dialogs.source_no_characters(src)
                 })
                 .text_size(px(11.))
                 .into_any_element(),
@@ -5932,7 +5812,7 @@ impl WhiskyApp {
 
         if self.metadata_editor_dirty(cx) {
             rows.push(
-                muted(crate::i18n::tr("存在未保存修改；请先点击「保存资料」，再执行按平台 ID 刷新。", "未保存の変更があります。先に「情報を保存」してからプラットフォーム ID で更新してください。", "Unsaved changes present; click Save Metadata before refreshing bound links.", "저장되지 않은 변경 사항이 있습니다. 먼저 정보 저장을 클릭한 후 새로 고침하세요."))
+                muted(crate::i18n::s().dialogs.unsaved_before_refresh)
                     .text_size(px(11.))
                     .into_any_element(),
             );
@@ -5959,7 +5839,8 @@ impl WhiskyApp {
                             let _ = view.update(cx, |this, cx| this.set_metadata_source(category, "", cx));
                         }));
                     }
-                    for &(source, label) in crate::metadata_editor::PROVIDERS {
+                    for &source in &crate::metadata_editor::PROVIDERS {
+                        let label = crate::onboarding::source_label(source);
                         if !allowed.iter().any(|enabled| enabled == source) { continue; }
                         if category == "characters" && capabilities[source]["characters"].as_bool() != Some(true) {
                             continue;
@@ -5979,9 +5860,10 @@ impl WhiskyApp {
         let Some(page) = self.game_info.as_ref() else { return div().into_any_element(); };
         let allowed = self.metadata_sources();
         let mut line = row().gap(px(6.)).py(px(4.)).items_center().flex_wrap().child(
-            muted(crate::i18n::tr("搜索平台", "検索ソース", "Search Sources", "검색 출처")).text_size(px(11.5)).mr(px(4.)),
+            muted(crate::i18n::s().dialogs.search_sources).text_size(px(11.5)).mr(px(4.)),
         );
-        for &(source, label) in crate::metadata_editor::PROVIDERS {
+        for &source in &crate::metadata_editor::PROVIDERS {
+            let label = crate::onboarding::source_label(source);
             let active = page.editor.search_source == source;
             let disabled = page.searching
                 || page.editor.busy
@@ -6027,11 +5909,11 @@ fn source_label(source: &str) -> &str {
 
 fn compat_label(rating: &str) -> &str {
     match rating {
-        "unverified" => crate::i18n::tr("待验证", "未検証", "Unverified", "미검증"),
-        "verified" => crate::i18n::tr("已验证", "検証済み", "Verified", "검증됨"),
-        "playable" => crate::i18n::tr("可玩", "プレイ可能", "Playable", "플레이 가능"),
-        "runs" => crate::i18n::tr("可运行", "起動可能", "Runs", "실행 가능"),
-        "unplayable" => crate::i18n::tr("不可玩", "動作不可", "Unplayable", "실행 불가"),
+        "unverified" => crate::i18n::s().dialogs.unverified,
+        "verified" => crate::i18n::s().dialogs.verified,
+        "playable" => crate::i18n::s().dialogs.playable,
+        "runs" => crate::i18n::s().dialogs.runs,
+        "unplayable" => crate::i18n::s().dialogs.unplayable,
         _ => rating,
     }
 }
@@ -6039,7 +5921,7 @@ fn compat_label(rating: &str) -> &str {
 /// Bytes as the sheet shows them. The helper reports the raw byte count.
 fn clipboard_size(bytes: i64) -> String {
     if bytes <= 0 {
-        return crate::i18n::tr("大小未知", "サイズ不明", "Unknown size", "크기 알 수 없음").to_owned();
+        return crate::i18n::s().dialogs.unknown_size.to_owned();
     }
     if bytes < 1024 {
         return crate::i18n::s().common.bytes_human(bytes as u64);
@@ -6282,12 +6164,7 @@ impl WhiskyApp {
                 crate::i18n::s().program_settings.multi_exe_none_selected.to_owned()
             } else {
                 let n = executables.len();
-                match crate::i18n::locale() {
-                    crate::i18n::Locale::ZhHans => format!("已配置 {n} 个启动入口，每次启动将提示选择"),
-                    crate::i18n::Locale::Ja => format!("{n} 個の起動エントリーを設定済み（起動時に毎回選択）"),
-                    crate::i18n::Locale::En => format!("{n} launch entries configured; prompts on launch"),
-                    crate::i18n::Locale::Ko => format!("{n}개 실행 진입점 설정됨 (실행 시 선택 표시)"),
-                }
+                crate::i18n::s().dialogs.launch_entries_prompt(n)
             };
             rows.push(
                 row()
@@ -6527,7 +6404,7 @@ impl WhiskyApp {
                     .border_t_1()
                     .border_color(rgba(crate::theme::divider()))
                     .child(
-                        muted(match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("当前启动程序：{label}"), crate::i18n::Locale::Ja => format!("現在の起動プログラム：{label}"), crate::i18n::Locale::En => format!("Current launch program: {label}"), crate::i18n::Locale::Ko => format!("현재 실행 프로그램: {label}") })
+                        muted(crate::i18n::s().dialogs.current_launch_program(label))
                             .flex_1()
                             .min_w_0()
                             .truncate()

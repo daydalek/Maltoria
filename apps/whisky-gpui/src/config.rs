@@ -356,28 +356,13 @@ pub(crate) fn environment_payload(container: &str, key: &str, value: Option<&str
 pub(crate) fn validate_environment_name(raw: &str) -> Result<&str, &'static str> {
     let key = raw.trim();
     if key.is_empty() {
-        return Err(crate::i18n::tr(
-            "变量名不能为空",
-            "変数名を入力してください",
-            "Variable name cannot be empty",
-            "변수 이름을 입력하세요",
-        ));
+        return Err(crate::i18n::s().program_settings.variable_name_cannot_be_empty);
     }
     if key.contains('=') {
-        return Err(crate::i18n::tr(
-            "变量名不能包含 =",
-            "変数名に = は使用できません",
-            "Variable name cannot contain '='",
-            "변수 이름에 '='을 포함할 수 없습니다",
-        ));
+        return Err(crate::i18n::s().program_settings.variable_name_cannot_contain);
     }
     if key.contains('\0') {
-        return Err(crate::i18n::tr(
-            "变量名不能包含空字符",
-            "変数名に NUL 文字は使用できません",
-            "Variable name cannot contain NUL",
-            "변수 이름에 NUL 문자를 포함할 수 없습니다",
-        ));
+        return Err(crate::i18n::s().program_settings.variable_name_cannot_contain_nul);
     }
     Ok(key)
 }

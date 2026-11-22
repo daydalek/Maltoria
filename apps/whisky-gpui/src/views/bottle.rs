@@ -901,10 +901,10 @@ impl WhiskyApp {
                             &["Windows 11", "Windows 10", "Windows 7", "Windows XP"],
                             cx,
                         ),
-                        self.field("build", crate::i18n::tr("内部版本号", "ビルド番号", "Build Version", "빌드 버전")),
-                        self.choice("retina", crate::i18n::tr("Retina 模式", "Retina モード", "Retina Mode", "Retina 모드"), &[crate::i18n::s().common.off, crate::i18n::s().common.on], cx),
+                        self.field("build", crate::i18n::s().bottle.build_version),
+                        self.choice("retina", crate::i18n::s().bottle.retina_mode, &[crate::i18n::s().common.off, crate::i18n::s().common.on], cx),
                         self.choice("sync", crate::i18n::config::field_title("config.field.enhancedSync", "enhancedSync", "Sync"), &["MSync", "ESync", crate::i18n::s().common.off], cx),
-                        self.field("dpi", crate::i18n::tr("屏幕分辨率（DPI）", "画面解像度 (DPI)", "Screen Resolution (DPI)", "화면 해상도 (DPI)")),
+                        self.field("dpi", crate::i18n::s().bottle.screen_resolution_dpi),
                     ],
                     #[cfg(target_os = "linux")]
                     vec![
@@ -914,9 +914,9 @@ impl WhiskyApp {
                             &["Windows 11", "Windows 10", "Windows 7", "Windows XP"],
                             cx,
                         ),
-                        self.field("build", crate::i18n::tr("内部版本号", "ビルド番号", "Build Version", "빌드 버전")),
+                        self.field("build", crate::i18n::s().bottle.build_version),
                         self.choice("sync", crate::i18n::config::field_title("config.field.enhancedSync", "enhancedSync", "Sync"), &["FSync", "ESync", crate::i18n::s().common.off], cx),
-                        self.field("dpi", crate::i18n::tr("屏幕分辨率（DPI）", "画面解像度 (DPI)", "Screen Resolution (DPI)", "화면 해상도 (DPI)")),
+                        self.field("dpi", crate::i18n::s().bottle.screen_resolution_dpi),
                     ],
                     cx,
                 ),
@@ -928,10 +928,10 @@ impl WhiskyApp {
                         self.toggle(
                             "launcher-mode",
                             crate::i18n::config::field_title("config.field.launcherCompatibilityMode", "launcherCompatibilityMode", "Launcher"),
-                            crate::i18n::tr("为常见游戏启动器使用兼容设置。", "一般的なゲームランチャー向けの互換設定を使用します。", "Use compatibility settings for common game launchers.", "일반 게임 런처에 호환 설정을 사용합니다."),
+                            crate::i18n::s().bottle.launcher_compat_tip,
                             cx,
                         ),
-                        self.choice("launcher-type", crate::i18n::config::field_title("config.field.launcherMode", "launcherMode", "Mode"), &[crate::i18n::s().common.auto, crate::i18n::tr("手动", "手動", "Manual", "수동")], cx),
+                        self.choice("launcher-type", crate::i18n::config::field_title("config.field.launcherMode", "launcherMode", "Mode"), &[crate::i18n::s().common.auto, crate::i18n::s().bottle.manual], cx),
                         self.toggle("gpu-spoof", crate::i18n::config::field_title("config.field.gpuSpoofing", "gpuSpoofing", "GPU"), "", cx),
                     ],
                     #[cfg(target_os = "linux")]
@@ -939,7 +939,7 @@ impl WhiskyApp {
                         self.toggle(
                             "launcher-mode",
                             crate::i18n::config::field_title("config.field.launcherCompatibilityMode", "launcherCompatibilityMode", "Launcher"),
-                            crate::i18n::tr("为常见游戏启动器使用兼容设置。", "一般的なゲームランチャー向けの互換設定を使用します。", "Use compatibility settings for common game launchers.", "일반 게임 런처에 호환 설정을 사용합니다."),
+                            crate::i18n::s().bottle.launcher_compat_tip,
                             cx,
                         ),
                         self.toggle("gpu-spoof", crate::i18n::config::field_title("config.field.gpuSpoofing", "gpuSpoofing", "GPU"), "", cx),
@@ -961,7 +961,7 @@ impl WhiskyApp {
                     crate::i18n::config::section_title("graphics"),
                     #[cfg(not(target_os = "linux"))]
                     vec![
-                        self.choice("graphics-mode", crate::i18n::tr("设置模式", "設定モード", "Mode", "설정 모드"), &[crate::i18n::tr("简单", "簡易", "Simple", "간단히"), crate::i18n::tr("高级", "詳細", "Advanced", "고급")], cx),
+                        self.choice("graphics-mode", crate::i18n::s().bottle.mode, &[crate::i18n::s().bottle.simple, crate::i18n::s().bottle.advanced], cx),
                         self.choice(
                             "backend",
                             crate::i18n::config::field_title("config.field.graphicsBackend", "graphicsBackend", "Backend"),
@@ -987,14 +987,14 @@ impl WhiskyApp {
                         self.toggle("framegen", crate::i18n::config::field_title("config.field.frameGeneration", "frameGeneration", "FrameGen"), "", cx),
                         self.action(
                             "graphics-detail",
-                            crate::i18n::tr("高级图形设置…", "詳細グラフィックス設定…", "Advanced Graphics…", "고급 그래픽 설정…"),
+                            crate::i18n::s().bottle.advanced_graphics,
                             Command::Sheet(PreviewSheet::Graphics),
                             cx,
                         ),
                     ],
                     #[cfg(target_os = "linux")]
                     vec![
-                        self.choice("graphics-mode", crate::i18n::tr("设置模式", "設定モード", "Mode", "설정 모드"), &[crate::i18n::tr("简单", "簡易", "Simple", "간단히"), crate::i18n::tr("高级", "詳細", "Advanced", "고급")], cx),
+                        self.choice("graphics-mode", crate::i18n::s().bottle.mode, &[crate::i18n::s().bottle.simple, crate::i18n::s().bottle.advanced], cx),
                         self.choice(
                             "backend",
                             crate::i18n::config::field_title("config.field.graphicsBackend", "graphicsBackend", "Backend"),
@@ -1003,7 +1003,7 @@ impl WhiskyApp {
                         ),
                         self.action(
                             "graphics-detail",
-                            crate::i18n::tr("高级图形设置…", "詳細グラフィックス設定…", "Advanced Graphics…", "고급 그래픽 설정…"),
+                            crate::i18n::s().bottle.advanced_graphics,
                             Command::Sheet(PreviewSheet::Graphics),
                             cx,
                         ),
@@ -1016,10 +1016,10 @@ impl WhiskyApp {
                     #[cfg(not(target_os = "linux"))]
                     vec![
                         self.info(
-                            crate::i18n::tr("默认输出设备", "既定の出力デバイス", "Default Output Device", "기본 출력 장치"),
-                            crate::i18n::tr("系统默认输出 · 48,000 Hz · 立体声", "システム既定 · 48,000 Hz · ステレオ", "System Default · 48,000 Hz · Stereo", "시스템 기본값 · 48,000 Hz · 스테레오"),
+                            crate::i18n::s().bottle.default_output_device,
+                            crate::i18n::s().bottle.system_default_48_000_hz_stereo,
                         ),
-                        self.choice("audio-mode", crate::i18n::tr("设置模式", "設定モード", "Mode", "설정 모드"), &[crate::i18n::tr("简单", "簡易", "Simple", "간단히"), crate::i18n::tr("高级", "詳細", "Advanced", "고급")], cx),
+                        self.choice("audio-mode", crate::i18n::s().bottle.mode, &[crate::i18n::s().bottle.simple, crate::i18n::s().bottle.advanced], cx),
                         self.choice(
                             "audio-driver",
                             crate::i18n::config::field_title("config.field.audioDriver", "audioDriver", "Audio Driver"),
@@ -1028,13 +1028,13 @@ impl WhiskyApp {
                         ),
                         self.action(
                             "audio-test",
-                            crate::i18n::tr("测试音频", "オーディオテスト", "Test Audio", "오디오 테스트"),
+                            crate::i18n::s().bottle.test_audio,
                             Command::Sheet(PreviewSheet::Audio),
                             cx,
                         ),
                         self.action(
                             "audio-diagnosis",
-                            crate::i18n::tr("音频故障排查…", "オーディオ診断…", "Audio Troubleshooting…", "오디오 문제 해결…"),
+                            crate::i18n::s().bottle.audio_troubleshooting,
                             Command::Sheet(PreviewSheet::Audio),
                             cx,
                         ),
@@ -1042,10 +1042,10 @@ impl WhiskyApp {
                     #[cfg(target_os = "linux")]
                     vec![
                         self.info(
-                            crate::i18n::tr("默认输出设备", "既定の出力デバイス", "Default Output Device", "기본 출력 장치"),
-                            crate::i18n::tr("系统默认输出 · 48,000 Hz · 立体声", "システム既定 · 48,000 Hz · ステレオ", "System Default · 48,000 Hz · Stereo", "시스템 기본값 · 48,000 Hz · 스테레오"),
+                            crate::i18n::s().bottle.default_output_device,
+                            crate::i18n::s().bottle.system_default_48_000_hz_stereo,
                         ),
-                        self.choice("audio-mode", crate::i18n::tr("设置模式", "設定モード", "Mode", "설정 모드"), &[crate::i18n::tr("简单", "簡易", "Simple", "간단히"), crate::i18n::tr("高级", "詳細", "Advanced", "고급")], cx),
+                        self.choice("audio-mode", crate::i18n::s().bottle.mode, &[crate::i18n::s().bottle.simple, crate::i18n::s().bottle.advanced], cx),
                         self.choice(
                             "audio-driver",
                             crate::i18n::config::field_title("config.field.audioDriver", "audioDriver", "Audio Driver"),
@@ -1062,7 +1062,7 @@ impl WhiskyApp {
                         self.toggle(
                             "virtual-desktop",
                             crate::i18n::config::field_title("config.field.virtualDesktopEnabled", "virtualDesktopEnabled", "Virtual Desktop"),
-                            crate::i18n::tr("下次启动时生效。", "次回起動時から適用されます。", "Takes effect on next launch.", "다음 실행부터 적용됩니다."),
+                            crate::i18n::s().bottle.takes_effect_on_next_launch,
                             cx,
                         ),
                         self.choice(
@@ -1089,18 +1089,18 @@ impl WhiskyApp {
                         self.toggle(
                             "shader",
                             crate::i18n::config::field_title("config.field.shaderCacheEnabled", "shaderCacheEnabled", "Shader Cache"),
-                            crate::i18n::tr("缓存编译后的着色器，减少重复编译。", "コンパイル済みシェーダーをキャッシュして再コンパイルを減らします。", "Cache compiled shaders to reduce recompilation.", "컴파일된 셰이더를 캐시하여 재컴파일을 줄입니다."),
+                            crate::i18n::s().bottle.shader_cache_tip,
                             cx,
                         ),
                         self.toggle(
                             "appnap",
                             crate::i18n::config::field_title("config.field.disableAppNap", "disableAppNap", "Disable App Nap"),
-                            crate::i18n::tr("游戏运行期间防止应用被系统暂停。", "ゲーム実行中にシステムによるアプリの一時停止を防ぎます。", "Prevent macOS from throttling while a game is running.", "게임 실행 중 시스템이 앱을 일시 중단하지 않도록 방지합니다."),
+                            crate::i18n::s().bottle.prevent_throttling_tip,
                             cx,
                         ),
                         self.action(
                             "vcredist",
-                            crate::i18n::tr("安装 Visual C++ 运行库…", "Visual C++ ランタイムを導入…", "Install Visual C++ Runtime…", "Visual C++ 런타임 설치…"),
+                            crate::i18n::s().bottle.install_visual_c_runtime,
                             Command::Sheet(PreviewSheet::Winetricks),
                             cx,
                         ),
@@ -1110,12 +1110,12 @@ impl WhiskyApp {
                         self.toggle(
                             "shader",
                             crate::i18n::config::field_title("config.field.shaderCacheEnabled", "shaderCacheEnabled", "Shader Cache"),
-                            crate::i18n::tr("缓存编译后的着色器，减少重复编译。", "コンパイル済みシェーダーをキャッシュして再コンパイルを減らします。", "Cache compiled shaders to reduce recompilation.", "컴파일된 셰이더를 캐시하여 재컴파일을 줄입니다."),
+                            crate::i18n::s().bottle.shader_cache_tip,
                             cx,
                         ),
                         self.action(
                             "vcredist",
-                            crate::i18n::tr("安装 Visual C++ 运行库…", "Visual C++ ランタイムを導入…", "Install Visual C++ Runtime…", "Visual C++ 런타임 설치…"),
+                            crate::i18n::s().bottle.install_visual_c_runtime,
                             Command::Sheet(PreviewSheet::Winetricks),
                             cx,
                         ),
@@ -1126,10 +1126,10 @@ impl WhiskyApp {
                     "dll",
                     crate::i18n::s().dialogs.sheet_dll,
                     vec![
-                        self.info("d3dcompiler_47", crate::i18n::tr("原生优先，内建后备", "ネイティブ優先、ビルトイン代替", "Native then Builtin", "네이티브 우선, 내장 대체")),
+                        self.info("d3dcompiler_47", crate::i18n::s().bottle.native_then_builtin),
                         self.action(
                             "dll-edit",
-                            crate::i18n::tr("编辑 DLL 覆盖…", "DLL オーバーライドを編集…", "Edit DLL Overrides…", "DLL 재정의 편집…"),
+                            crate::i18n::s().bottle.edit_dll_overrides,
                             Command::Sheet(PreviewSheet::Dll),
                             cx,
                         ),
@@ -1138,12 +1138,12 @@ impl WhiskyApp {
                 ),
                 self.section(
                     "dependencies",
-                    crate::i18n::tr("依赖组件", "依存コンポーネント", "Dependencies", "종속 구성 요소"),
+                    crate::i18n::s().bottle.dependencies,
                     vec![
                         self.info("Visual C++ 2015–2022", crate::i18n::s().common.installed),
                         self.action(
                             "deps",
-                            crate::i18n::tr("管理组件…", "コンポーネントを管理…", "Manage Components…", "구성 요소 관리…"),
+                            crate::i18n::s().bottle.manage_components,
                             Command::Sheet(PreviewSheet::Winetricks),
                             cx,
                         ),
@@ -1152,39 +1152,39 @@ impl WhiskyApp {
                 ),
                 self.section(
                     "diagnostics",
-                    crate::i18n::tr("诊断", "診断", "Diagnostics", "진단"),
+                    crate::i18n::s().dialogs.diagnostics,
                     #[cfg(not(target_os = "linux"))]
                     vec![
                         self.action(
                             "guided",
-                            crate::i18n::tr("开始引导式故障排查…", "ガイド付き診断を開始…", "Start Guided Troubleshooting…", "안내형 문제 해결 시작…"),
+                            crate::i18n::s().bottle.start_guided_troubleshooting,
                             Command::Sheet(PreviewSheet::Diagnostics),
                             cx,
                         ),
-                        self.action("export", crate::i18n::tr("导出诊断报告…", "診断レポートをエクスポート…", "Export Diagnostics…", "진단 보고서 내보내기…"), Command::ExportDiagnostics, cx),
-                        self.action("repair", crate::i18n::tr("修复容器…", "コンテナを修復…", "Repair Bottle…", "컨테이너 복구…"), Command::BottleRepair, cx),
+                        self.action("export", crate::i18n::s().bottle.export_diagnostics, Command::ExportDiagnostics, cx),
+                        self.action("repair", crate::i18n::s().bottle.repair_bottle, Command::BottleRepair, cx),
                     ],
                     #[cfg(target_os = "linux")]
                     vec![
-                        self.action("export", crate::i18n::tr("导出诊断报告…", "診断レポートをエクスポート…", "Export Diagnostics…", "진단 보고서 내보내기…"), Command::ExportDiagnostics, cx),
+                        self.action("export", crate::i18n::s().bottle.export_diagnostics, Command::ExportDiagnostics, cx),
                     ],
                     cx,
                 ),
                 self.section(
                     "cleanup",
-                    crate::i18n::tr("存储与清理", "ストレージと整理", "Storage & Cleanup", "저장 공간 및 정리"),
+                    crate::i18n::s().bottle.storage_cleanup,
                     #[cfg(not(target_os = "linux"))]
                     vec![
-                        self.info(crate::i18n::tr("容器大小", "コンテナサイズ", "Bottle Size", "컨테이너 크기"), "2.4 GB"),
+                        self.info(crate::i18n::s().bottle.bottle_size, "2.4 GB"),
                         self.action(
                             "cache-clean",
-                            crate::i18n::tr("清理着色器缓存…", "シェーダーキャッシュを削除…", "Clean Shader Cache…", "셰이더 캐시 지우기…"),
+                            crate::i18n::s().bottle.clean_shader_cache,
                             Command::CleanShaderCache,
                             cx,
                         ),
                     ],
                     #[cfg(target_os = "linux")]
-                    vec![self.info(crate::i18n::tr("容器大小", "コンテナサイズ", "Bottle Size", "컨테이너 크기"), "2.4 GB")],
+                    vec![self.info(crate::i18n::s().bottle.bottle_size, "2.4 GB")],
                     cx,
                 ),
             ],

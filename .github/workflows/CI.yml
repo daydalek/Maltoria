@@ -85,6 +85,10 @@ jobs:
           python3 scripts/check-third-party.py
           python3 -m unittest discover -s scripts/distribution -p 'test_native_sources.py' -v
           python3 -m unittest discover -s scripts/distribution -p 'test_native_host_protocol.py' -v
+      - name: Check i18n resources
+        run: |
+          python3 scripts/i18n.py check
+          python3 -m unittest discover -s scripts -p 'test_i18n.py' -v
 
   # Run the Swift tests for both validation and packaging builds.
   test:
@@ -275,10 +279,6 @@ jobs:
             ${{ runner.os }}-cargo-${{ hashFiles('apps/whisky-gpui/Cargo.lock') }}
       - name: Run WhiskyBridge tests
         run: swift test --package-path WhiskyBridge
-      - name: Check i18n resources
-        run: |
-          python3 scripts/i18n.py check
-          python3 -m unittest discover -s scripts -p 'test_i18n.py' -v
       - name: Run GPUI tests
         run: cargo test --locked --manifest-path apps/whisky-gpui/Cargo.toml
       - name: Download pinned LunaHook payloads

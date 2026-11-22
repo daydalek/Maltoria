@@ -414,7 +414,7 @@ impl CandidateDto {
 /// Human-friendly relative directory label for `.exe` paths in pickers & choosers.
 /// Returns `(label, is_root)` where root files map to `("根目录", true)`.
 pub(crate) fn relative_directory_label(path: &str, folder: &str) -> (String, bool) {
-    let root_label = || crate::i18n::tr("根目录", "ルートディレクトリ", "Root Folder", "루트 폴더").to_owned();
+    let root_label = || crate::i18n::s().bridge.root_folder.to_owned();
     let file_path = std::path::Path::new(path);
     let base_path = std::path::Path::new(folder);
     let parent = file_path.parent();
@@ -994,7 +994,7 @@ impl EntryDto {
             characters: metadata.characters.unwrap_or_default(),
             metadata_sources: metadata.provenance.into_iter().filter_map(|(category, origin)| {
                 let label = if origin.manual {
-                    Some(crate::i18n::tr("本地编辑", "ローカル編集", "Manual Edit", "수동 편집").to_owned())
+                    Some(crate::i18n::s().bridge.manual_edit.to_owned())
                 } else {
                     origin.source.map(|source| crate::onboarding::source_label(&source).to_owned())
                 };

@@ -2194,7 +2194,7 @@ impl WhiskyApp {
                     } else if position == 1 {
                         crate::i18n::s().library.demo_time_odd
                     } else {
-                        crate::i18n::s().library.demo_time_3
+                        crate::i18n::s().library.demo_time_evening
                     }))
                     .child(badge("package", self.bottle_name_at(g.bottle)))
                     .child(badge("clock-3", crate::i18n::s().library.demo_duration_8m));

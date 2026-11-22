@@ -448,12 +448,12 @@ pub(crate) struct MetadataGroup {
 }
 
 /// Scraper sources: toggle key, wire name, label.
-pub(crate) const METADATA_SOURCES: [(&str, &str, &str); 5] = [
-    ("src-steam", "steam", "Steam"),
-    ("src-bangumi", "bangumi", "Bangumi"),
-    ("src-vndb", "vndb", "VNDB"),
-    ("src-ymgal", "ymgal", "月幕"),
-    ("src-nextmoe", "nextmoe", "NextMoe"),
+pub(crate) const METADATA_SOURCES: [(&str, &str); 5] = [
+    ("src-steam", "steam"),
+    ("src-bangumi", "bangumi"),
+    ("src-vndb", "vndb"),
+    ("src-ymgal", "ymgal"),
+    ("src-nextmoe", "nextmoe"),
 ];
 
 /// The Game Info sheet: metadata search, cover choice and GameDB matches for
@@ -5064,10 +5064,10 @@ impl WhiskyApp {
         if let Some(preference) = Self::toggle_preference(key) {
             self.persist(preference, json!(value), cx);
         }
-        if METADATA_SOURCES.iter().any(|(toggle, _, _)| *toggle == key) {
+        if METADATA_SOURCES.iter().any(|(toggle, _)| *toggle == key) {
             self.metadata_preferences.enabled_sources = METADATA_SOURCES.iter()
-                .filter(|(toggle, _, _)| self.flag(toggle))
-                .map(|(_, source, _)| (*source).to_owned()).collect();
+                .filter(|(toggle, _)| self.flag(toggle))
+                .map(|(_, source)| (*source).to_owned()).collect();
             self.bridge.save_metadata_preferences(json!({
                 crate::onboarding::ENABLED: self.metadata_preferences.enabled_sources.join(",")
             }), false);
@@ -5690,7 +5690,7 @@ impl WhiskyApp {
         self.onboarding_completed = values.get(crate::onboarding::COMPLETED)
             .and_then(serde_json::Value::as_bool).unwrap_or(false);
         self.metadata_preferences = crate::onboarding::MetadataPreferences::read(values);
-        for (toggle, source, _) in METADATA_SOURCES {
+        for (toggle, source) in METADATA_SOURCES {
             self.preview.toggles.insert(toggle,
                 self.metadata_preferences.enabled_sources.iter().any(|id| id == source));
         }
@@ -8816,8 +8816,8 @@ impl WhiskyApp {
     pub(crate) fn metadata_sources(&self) -> Vec<String> {
         let mut sources: Vec<String> = METADATA_SOURCES
             .iter()
-            .filter(|(key, _, _)| self.flag(key))
-            .map(|(_, source, _)| (*source).to_owned())
+            .filter(|(key, _)| self.flag(key))
+            .map(|(_, source)| (*source).to_owned())
             .collect();
         sources.sort_by_key(|source| source != &self.metadata_preferences.default_source);
         sources

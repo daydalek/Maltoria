@@ -6,29 +6,16 @@ use serde_json::{Value, json};
 pub(crate) const COMPLETED: &str = "libraryOnboardingCompleted";
 pub(crate) const ENABLED: &str = "libraryMetadataEnabledSources";
 pub(crate) const DEFAULT_SOURCE: &str = "libraryMetadataDefaultSource";
-pub(crate) const SOURCES: [(&str, &str); 5] = [
-    ("bangumi", "Bangumi"),
-    ("vndb", "VNDB"),
-    ("steam", "Steam"),
-    ("ymgal", "月幕"),
-    ("nextmoe", "NextMoe"),
-];
-pub(crate) const CATEGORIES: [(&str, &str, &str); 4] = [
-    ("basic", "名称与基本信息", "libraryMetadataBasicSource"),
-    ("summary", "简介", "libraryMetadataSummarySource"),
-    ("cover", "封面", "libraryMetadataCoverSource"),
-    ("characters", "人物", "libraryMetadataCharactersSource"),
+pub(crate) const SOURCES: [&str; 5] = ["bangumi", "vndb", "steam", "ymgal", "nextmoe"];
+pub(crate) const CATEGORIES: [(&str, &str); 4] = [
+    ("basic", "libraryMetadataBasicSource"),
+    ("summary", "libraryMetadataSummarySource"),
+    ("cover", "libraryMetadataCoverSource"),
+    ("characters", "libraryMetadataCharactersSource"),
 ];
 
 pub(crate) fn source_label(id: &str) -> &str {
-    match id {
-        "bangumi" => "Bangumi",
-        "vndb" => "VNDB",
-        "steam" => "Steam",
-        "ymgal" => crate::i18n::s().metadata.ymgal_name,
-        "nextmoe" => "NextMoe",
-        other => other,
-    }
+    crate::i18n::lookup(crate::i18n::s().maps.source_label, id).unwrap_or(id)
 }
 
 pub(crate) fn category_label(id: &str) -> &str {
@@ -54,13 +41,13 @@ impl Default for MetadataPreferences {
         Self {
             default_source: "bangumi".into(),
             category_sources: BTreeMap::new(),
-            enabled_sources: SOURCES.iter().map(|(id, _)| (*id).into()).collect(),
+            enabled_sources: SOURCES.iter().map(|id| (*id).into()).collect(),
         }
     }
 }
 
 fn known(source: &str) -> bool {
-    SOURCES.iter().any(|(id, _)| *id == source)
+    SOURCES.iter().any(|id| *id == source)
 }
 
 impl MetadataPreferences {
@@ -73,7 +60,7 @@ impl MetadataPreferences {
         {
             result.default_source = source.into();
         }
-        for (category, _, key) in CATEGORIES {
+        for (category, key) in CATEGORIES {
             if let Some(source) = values.get(key).and_then(Value::as_str).filter(|s| known(s)) {
                 result
                     .category_sources
@@ -84,8 +71,8 @@ impl MetadataPreferences {
             // An explicit empty list is intentional, not a request for defaults.
             result.enabled_sources = SOURCES
                 .iter()
-                .filter(|(id, _)| enabled.split(',').any(|part| part.trim() == *id))
-                .map(|(id, _)| (*id).into())
+                .filter(|id| enabled.split(',').any(|part| part.trim() == **id))
+                .map(|id| (*id).into())
                 .collect();
         }
         result
@@ -95,7 +82,7 @@ impl MetadataPreferences {
         let mut values = serde_json::Map::new();
         values.insert(DEFAULT_SOURCE.into(), json!(self.default_source));
         values.insert(ENABLED.into(), json!(self.enabled_sources.join(",")));
-        for (category, _, key) in CATEGORIES {
+        for (category, key) in CATEGORIES {
             values.insert(
                 key.into(),
                 json!(

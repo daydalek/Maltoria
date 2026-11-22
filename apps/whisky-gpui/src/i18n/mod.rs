@@ -196,28 +196,6 @@ pub(crate) fn locale() -> Locale {
     Locale::from_u8(ACTIVE_LOCALE.load(Ordering::Relaxed))
 }
 
-/// Pick a value for the current active locale.
-#[inline]
-pub(crate) fn pick<T: Copy>(zh: T, ja: T, en: T, ko: T) -> T {
-    match locale() {
-        Locale::ZhHans => zh,
-        Locale::Ja => ja,
-        Locale::En => en,
-        Locale::Ko => ko,
-    }
-}
-
-/// Select a localized string slice for the current active locale.
-#[inline]
-pub(crate) fn tr(
-    zh: &'static str,
-    ja: &'static str,
-    en: &'static str,
-    ko: &'static str,
-) -> &'static str {
-    pick(zh, ja, en, ko)
-}
-
 /// Access the static string table for the current active locale.
 #[inline]
 pub(crate) fn s() -> &'static Strings {
@@ -511,7 +489,6 @@ mod tests {
             assert!(!tbl.library.title.is_empty());
             assert!(!tbl.dialogs.about_title.is_empty());
             assert!(!tbl.capture.title.is_empty());
-            assert!(!tbl.translation.title_providers.is_empty());
         }
         assert_ne!(
             {
@@ -566,6 +543,128 @@ mod tests {
             assert_eq!(opts[2], ("日本語", "ja"));
             assert_eq!(opts[3], ("English", "en"));
             assert_eq!(opts[4], ("한국어", "ko"));
+        }
+    }
+}
+
+#[cfg(test)]
+mod coverage_tests {
+    //! Every runtime ID the app looks up must have a map entry in every locale.
+    use super::*;
+
+    #[test]
+    fn provider_spec_kinds_have_labels_and_tips_in_every_locale() {
+        for loc in Locale::ALL {
+            let _guard = LocaleGuard::new(loc);
+            let maps = &s().maps;
+            for spec in crate::translation::PROVIDER_SPECS {
+                assert!(
+                    lookup(maps.provider_label, spec.kind).is_some(),
+                    "{loc:?}: provider_label missing {}",
+                    spec.kind
+                );
+                assert!(
+                    lookup(maps.provider_short_label, spec.kind).is_some(),
+                    "{loc:?}: provider_short_label missing {}",
+                    spec.kind
+                );
+                assert!(
+                    !spec.display_tip().is_empty(),
+                    "{loc:?}: display_tip empty for {}",
+                    spec.kind
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn provider_presets_have_names_and_tags_in_every_locale() {
+        for loc in Locale::ALL {
+            let _guard = LocaleGuard::new(loc);
+            let maps = &s().maps;
+            for preset in crate::translation::PROVIDER_PRESETS {
+                assert!(
+                    lookup(maps.provider_preset_name, preset.id).is_some(),
+                    "{loc:?}: provider_preset_name missing {}",
+                    preset.id
+                );
+                assert!(
+                    lookup(maps.provider_preset_tag, preset.id).is_some(),
+                    "{loc:?}: provider_preset_tag missing {}",
+                    preset.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn metadata_source_ids_have_labels_in_every_locale() {
+        for loc in Locale::ALL {
+            let _guard = LocaleGuard::new(loc);
+            let map = s().maps.source_label;
+            let mut ids: std::collections::BTreeSet<&str> =
+                crate::onboarding::SOURCES.iter().copied().collect();
+            ids.extend(crate::metadata_editor::PROVIDERS.iter().copied());
+            ids.extend(
+                crate::state::METADATA_SOURCES
+                    .iter()
+                    .map(|(_, id)| *id),
+            );
+            for id in ids {
+                assert!(
+                    lookup(map, id).is_some(),
+                    "{loc:?}: source_label missing {id}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn config_ids_have_titles_in_every_locale() {
+        let en = strings::table_for(Locale::En);
+        for loc in Locale::ALL {
+            let _guard = LocaleGuard::new(loc);
+            let maps = &s().maps;
+            for spec in crate::config::SECTIONS {
+                assert!(
+                    lookup(maps.config_section, spec.id).is_some(),
+                    "{loc:?}: config_section missing {}",
+                    spec.id
+                );
+            }
+            for (field_id, key) in config::FIELD_TITLE_KEYS {
+                assert!(
+                    lookup(maps.config_field, key).is_some(),
+                    "{loc:?}: config_field missing {key} (field {field_id})"
+                );
+            }
+            // Every option/feature the en map defines resolves in this locale.
+            for (key, _) in en.maps.config_option {
+                assert!(
+                    lookup(maps.config_option, key).is_some(),
+                    "{loc:?}: config_option missing {key}"
+                );
+            }
+            for (key, _) in en.maps.config_feature {
+                assert!(
+                    lookup(maps.config_feature, key).is_some(),
+                    "{loc:?}: config_feature missing {key}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn month_names_cover_one_through_twelve_in_every_locale() {
+        for loc in Locale::ALL {
+            let _guard = LocaleGuard::new(loc);
+            let map = s().maps.month_name;
+            for month in 1..=12 {
+                assert!(
+                    lookup(map, &month.to_string()).is_some(),
+                    "{loc:?}: month_name missing {month}"
+                );
+            }
         }
     }
 }

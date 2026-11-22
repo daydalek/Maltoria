@@ -673,12 +673,7 @@ impl HudController {
                     if app.capture.provider_id.is_none() {
                         app.capture.error = Some(
                             if providers.is_empty() {
-                                crate::i18n::tr(
-                                    "未配置翻译提供商，请先在 Maltoria 中配置",
-                                    "翻訳プロバイダーが未設定です。先に Maltoria で設定してください",
-                                    "No translation provider configured; configure one in Maltoria first",
-                                    "번역 제공자가 설정되지 않았습니다. 먼저 Maltoria에서 설정하세요",
-                                )
+                                crate::i18n::s().linux_hud.no_provider_notice
                             } else {
                                 crate::i18n::s().linux_hud.pick_provider_then_scan
                             }
@@ -789,20 +784,7 @@ impl HudController {
                 Err(error) => {
                     entity.update(cx, |app, cx| {
                         app.capture.hud.hide();
-                        app.capture.error = Some(match crate::i18n::locale() {
-                            crate::i18n::Locale::ZhHans => {
-                                format!("无法打开悬浮捕获窗：{error}")
-                            }
-                            crate::i18n::Locale::Ja => {
-                                format!("フローティングキャプチャウィンドウを開けません：{error}")
-                            }
-                            crate::i18n::Locale::En => {
-                                format!("Unable to open floating capture window: {error}")
-                            }
-                            crate::i18n::Locale::Ko => {
-                                format!("플로팅 캡처 창을 열 수 없습니다: {error}")
-                            }
-                        });
+                        app.capture.error = Some(crate::i18n::s().linux_hud.unable_to_open_floating_capture_window(error));
                         cx.notify();
                     });
                 }

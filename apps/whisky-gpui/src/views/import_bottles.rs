@@ -95,7 +95,7 @@ impl WhiskyApp {
             );
         }
         let select_label = if state.candidates.len() > 128 {
-            strings.import_bottles.select_first_128
+            strings.import_bottles.select_first
         } else {
             strings.common.select_all
         };

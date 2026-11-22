@@ -54,11 +54,11 @@ fn credential_storage_modes() -> [(&'static str, &'static str); 3] {
 fn debounce_presets() -> [(u64, &'static str); 5] {
     let t = &crate::i18n::s().translation;
     [
-        (0, t.debounce_0),
-        (150, t.debounce_150),
-        (300, t.debounce_300),
-        (500, t.debounce_500),
-        (1000, t.debounce_1000),
+        (0, t.debounce_immediate),
+        (150, t.debounce_recommended),
+        (300, t.debounce_balanced),
+        (500, t.debounce_antiskip),
+        (1000, t.debounce_patient),
     ]
 }
 
@@ -128,19 +128,9 @@ impl WhiskyApp {
                 let active_filter = page.sidebar_category_filter == Some(cat);
                 let (fg, bg, border) = cat.colors();
                 let tip = if !available && count == 0 {
-                    match crate::i18n::locale() {
-                        crate::i18n::Locale::ZhHans => format!("{}：当前构建未启用", cat.label()),
-                        crate::i18n::Locale::Ja => format!("{}：現在のビルドでは無効です", cat.label()),
-                        crate::i18n::Locale::En => format!("{}: not enabled in this build", cat.label()),
-                        crate::i18n::Locale::Ko => format!("{}: 현재 빌드에서 비활성화됨", cat.label()),
-                    }
+                    crate::i18n::s().translation.kind_not_enabled(cat.label())
                 } else {
-                    match crate::i18n::locale() {
-                        crate::i18n::Locale::ZhHans => format!("{}（{} 个）— {}\n点击筛选左侧列表，再次点击取消筛选", cat.label(), count, cat.tooltip()),
-                        crate::i18n::Locale::Ja => format!("{}（{} 件）— {}\nクリックで左のリストを絞り込み、再クリックで解除", cat.label(), count, cat.tooltip()),
-                        crate::i18n::Locale::En => format!("{} ({}) — {}\nClick to filter list; click again to clear", cat.label(), count, cat.tooltip()),
-                        crate::i18n::Locale::Ko => format!("{} ({}개) — {}\n클릭하여 왼쪽 목록 필터링, 다시 클릭하여 해제", cat.label(), count, cat.tooltip()),
-                    }
+                    crate::i18n::s().translation.filter_toggle_tip(count, cat.label(), cat.tooltip())
                 };
 
                 summary_pills.push(
@@ -462,7 +452,7 @@ impl WhiskyApp {
                                     .text_size(px(11.))
                                     .font_weight(FontWeight::MEDIUM)
                                     .text_color(rgb(fg))
-                                    .child(match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("筛选：{}", filter_cat.label()), crate::i18n::Locale::Ja => format!("絞り込み：{}", filter_cat.label()), crate::i18n::Locale::En => format!("Filter: {}", filter_cat.label()), crate::i18n::Locale::Ko => format!("필터: {}", filter_cat.label()) }),
+                                    .child(crate::i18n::s().translation.filter(filter_cat.label())),
                             ),
                     )
                     .child(
@@ -483,7 +473,7 @@ impl WhiskyApp {
             let draft_cat = provider_category(&page.draft.kind);
             let (fg, bg, border) = draft_cat.colors();
             let draft_name = if page.draft.name.trim().is_empty() {
-                match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("新建{}", provider_short_label(&page.draft.kind)), crate::i18n::Locale::Ja => format!("新規 {}", provider_short_label(&page.draft.kind)), crate::i18n::Locale::En => format!("New {}", provider_short_label(&page.draft.kind)), crate::i18n::Locale::Ko => format!("새 {}", provider_short_label(&page.draft.kind)) }
+                crate::i18n::s().translation.new_provider(provider_short_label(&page.draft.kind))
             } else {
                 page.draft.name.clone()
             };
@@ -598,12 +588,7 @@ impl WhiskyApp {
 
         if total_shown == 0 && !creating_new {
             let empty_msg = match page.sidebar_category_filter {
-                Some(cat) => match crate::i18n::locale() {
-                    crate::i18n::Locale::ZhHans => format!("暂无{}提供商", cat.label()),
-                    crate::i18n::Locale::Ja => format!("{}プロバイダーはありません", cat.label()),
-                    crate::i18n::Locale::En => format!("No {} providers yet", cat.label()),
-                    crate::i18n::Locale::Ko => format!("{} 제공자가 없습니다", cat.label()),
-                },
+                Some(cat) => crate::i18n::s().translation.no_providers(cat.label()),
                 None => crate::i18n::s().translation.no_providers_generic.to_owned(),
             };
             list_items.push(
@@ -786,7 +771,7 @@ impl WhiskyApp {
         } else {
             let draft_name = self.translation_page.draft.name.trim();
             if draft_name.is_empty() {
-                match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("新建 {}", provider_short_label(&kind)), crate::i18n::Locale::Ja => format!("新規 {}", provider_short_label(&kind)), crate::i18n::Locale::En => format!("New {}", provider_short_label(&kind)), crate::i18n::Locale::Ko => format!("새 {}", provider_short_label(&kind)) }
+                crate::i18n::s().translation.new_preset(provider_short_label(&kind))
             } else {
                 draft_name.to_owned()
             }
@@ -882,14 +867,14 @@ impl WhiskyApp {
                 Some(n) => {
                     let prov = provenance_label(&m.context_window_provenance);
                     pill_badge(
-                        match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("{} 上下文", format_context_window(n)), crate::i18n::Locale::Ja => format!("{} コンテキスト", format_context_window(n)), crate::i18n::Locale::En => format!("{} ctx", format_context_window(n)), crate::i18n::Locale::Ko => format!("{} 컨텍스트", format_context_window(n)) },
+                        crate::i18n::s().translation.ctx_badge(format_context_window(n)),
                         installed_bg(),
                         installed_fg(),
                         None,
                     )
                     .id("model-context-badge")
                     .tooltip(hover_tip(
-                        match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("当前模型上下文窗口：{n} tokens（来源：{prov}）。"), crate::i18n::Locale::Ja => format!("現在のモデルのコンテキストウィンドウ：{n} tokens（取得元：{prov}）。"), crate::i18n::Locale::En => format!("Current model context window: {n} tokens (source: {prov})."), crate::i18n::Locale::Ko => format!("현재 모델 컨텍스트 창: {n} tokens (출처: {prov}).") }
+                        crate::i18n::s().translation.model_ctx_window(prov, n)
                     ))
                     .into_any_element()
                 }
@@ -1053,19 +1038,9 @@ impl WhiskyApp {
             _ => t.storage_generic,
         };
         let storage_tip = if is_plaintext_storage {
-            match crate::i18n::locale() {
-                crate::i18n::Locale::ZhHans => format!("当前存储方式：{storage_label}。以 0600 权限明文落盘免弹窗；切换存储模式后需在此重新保存密钥。"),
-                crate::i18n::Locale::Ja => format!("現在の保存方式：{storage_label}。0600 権限の平文ファイルに保存し確認ダイアログを避けます。保存方式を変更した場合はここでキーを再保存してください。"),
-                crate::i18n::Locale::En => format!("Current storage: {storage_label}. Stored in plaintext with 0600 permissions; re-save the key here after changing storage mode."),
-                crate::i18n::Locale::Ko => format!("현재 저장 방식: {storage_label}. 0600 권한 평문 파일로 저장되며, 저장 모드를 바꾼 후 여기서 키를 다시 저장해야 합니다."),
-            }
+            crate::i18n::s().translation.storage_plaintext_tip(storage_label)
         } else {
-            match crate::i18n::locale() {
-                crate::i18n::Locale::ZhHans => format!("当前存储方式：{storage_label}。密钥仅写入安全凭据存储，接口不会回显明文。"),
-                crate::i18n::Locale::Ja => format!("現在の保存方式：{storage_label}。キーは安全な資格情報ストアに保存され、平文は表示されません。"),
-                crate::i18n::Locale::En => format!("Current storage: {storage_label}. Key is stored in secure credential storage and never echoed back."),
-                crate::i18n::Locale::Ko => format!("현재 저장 방식: {storage_label}. 키는 보안 자격 증명 저장소에 저장되며 평문으로 반환되지 않습니다."),
-            }
+            crate::i18n::s().translation.storage_secure_tip(storage_label)
         };
         let storage_badge = row()
             .id("editor-storage-badge")
@@ -1233,7 +1208,7 @@ impl WhiskyApp {
                     ))
                     .child(labeled_stack_with_tip(
                         crate::i18n::s().translation.service_url,
-                        Some(("ollama-ep-tip", match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("默认本机端口：{default_ep}"), crate::i18n::Locale::Ja => format!("既定のローカルポート：{default_ep}"), crate::i18n::Locale::En => format!("Default local endpoint: {default_ep}"), crate::i18n::Locale::Ko => format!("기본 로컬 엔드포인트: {default_ep}") })),
+                        Some(("ollama-ep-tip", crate::i18n::s().translation.default_local_endpoint(default_ep))),
                         row()
                             .gap(px(8.))
                             .child(div().flex_1().min_w_0().child(endpoint_input))
@@ -1281,7 +1256,7 @@ impl WhiskyApp {
                     ))
                     .child(labeled_stack_with_tip(
                         crate::i18n::s().translation.api_endpoint,
-                        Some(("api-ep-tip", match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("当前协议默认端点：{default_ep}"), crate::i18n::Locale::Ja => format!("このプロトコルの既定エンドポイント：{default_ep}"), crate::i18n::Locale::En => format!("Default endpoint for this protocol: {default_ep}"), crate::i18n::Locale::Ko => format!("현재 프로토콜 기본 엔드포인트: {default_ep}") })),
+                        Some(("api-ep-tip", crate::i18n::s().translation.default_endpoint_for_this_protocol(default_ep))),
                         row()
                             .gap(px(8.))
                             .child(div().flex_1().min_w_0().child(endpoint_input))
@@ -1788,14 +1763,14 @@ impl WhiskyApp {
                 .or(runtime.loaded_model_id.as_deref())
                 .unwrap_or(crate::i18n::s().translation.local_model);
             pill_badge(
-                match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("● 运行中 · {loaded_name}"), crate::i18n::Locale::Ja => format!("● 実行中 · {loaded_name}"), crate::i18n::Locale::En => format!("● Running · {loaded_name}"), crate::i18n::Locale::Ko => format!("● 실행 중 · {loaded_name}") },
+                crate::i18n::s().translation.running(loaded_name),
                 installed_bg(),
                 installed_fg(),
                 None,
             )
             .id("local-runtime-pill")
             .tooltip(hover_tip(
-                match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("llama.cpp 正在运行（{gpu_tag}），空闲 5 分钟后自动释放内存。"), crate::i18n::Locale::Ja => format!("llama.cpp は実行中です（{gpu_tag}）。5 分間アイドル後にメモリを自動解放します。"), crate::i18n::Locale::En => format!("llama.cpp is running ({gpu_tag}); memory is released after 5 minutes idle."), crate::i18n::Locale::Ko => format!("llama.cpp가 실행 중입니다({gpu_tag}). 5분 유휴 후 메모리를 자동 해제합니다.") }
+                crate::i18n::s().translation.llama_status_running(gpu_tag)
             ))
         } else if runtime.installed {
             let ver = runtime
@@ -1803,18 +1778,18 @@ impl WhiskyApp {
                 .as_deref()
                 .unwrap_or(&runtime.pinned_version);
             pill_badge(
-                match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("✓ 引擎就绪 · {gpu_tag}"), crate::i18n::Locale::Ja => format!("✓ エンジン準備完了 · {gpu_tag}"), crate::i18n::Locale::En => format!("✓ Engine ready · {gpu_tag}"), crate::i18n::Locale::Ko => format!("✓ 엔진 준비됨 · {gpu_tag}") },
+                crate::i18n::s().translation.engine_ready(gpu_tag),
                 installed_bg(),
                 installed_fg(),
                 None,
             )
             .id("local-runtime-pill")
             .tooltip(hover_tip(
-                match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("llama.cpp {ver}（{gpu_tag}）已安装，开始翻译时按需启动。"), crate::i18n::Locale::Ja => format!("llama.cpp {ver}（{gpu_tag}）はインストール済みです。翻訳開始時にオンデマンドで起動します。"), crate::i18n::Locale::En => format!("llama.cpp {ver} ({gpu_tag}) is installed and will start on demand when translating."), crate::i18n::Locale::Ko => format!("llama.cpp {ver}({gpu_tag})가 설치되어 있으며 번역 시작 시 필요할 때 실행됩니다.") }
+                crate::i18n::s().translation.llama_status_ready(gpu_tag, ver)
             ))
         } else {
             pill_badge(
-                match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("未安装引擎 · {}", format_bytes_human(runtime.size_bytes)), crate::i18n::Locale::Ja => format!("エンジン未導入 · {}", format_bytes_human(runtime.size_bytes)), crate::i18n::Locale::En => format!("Engine not installed · {}", format_bytes_human(runtime.size_bytes)), crate::i18n::Locale::Ko => format!("엔진 미설치 · {}", format_bytes_human(runtime.size_bytes)) },
+                crate::i18n::s().translation.engine_missing_badge(format_bytes_human(runtime.size_bytes)),
                 badge_bg(),
                 badge_text(),
                 None,
@@ -1822,19 +1797,14 @@ impl WhiskyApp {
             .id("local-runtime-pill")
             .tooltip(hover_tip({
                 let sz = format_bytes_human(runtime.size_bytes);
-                match crate::i18n::locale() {
-                    crate::i18n::Locale::ZhHans => format!("首次下载模型时将自动安装 llama.cpp（{gpu_tag}，约 {sz}）。"),
-                    crate::i18n::Locale::Ja => format!("初回モデルダウンロード時に llama.cpp（{gpu_tag}、約 {sz}）が自動インストールされます。"),
-                    crate::i18n::Locale::En => format!("llama.cpp ({gpu_tag}, ~{sz}) will be installed automatically on first model download."),
-                    crate::i18n::Locale::Ko => format!("첫 모델 다운로드 시 llama.cpp({gpu_tag}, 약 {sz})가 자동으로 설치됩니다."),
-                }
+                crate::i18n::s().translation.llama_status_pending(gpu_tag, sz)
             }))
         };
 
         let mirror_control = if let Some(override_url) = status.hf_endpoint_override.as_deref() {
             pill_badge(crate::i18n::s().translation.env_mirror_badge, badge_bg(), accent_fg(), None)
                 .id("local-mirror-override")
-                .tooltip(hover_tip(match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("下载源已被环境变量覆盖为：{override_url}"), crate::i18n::Locale::Ja => format!("ダウンロード元は環境変数で上書きされています：{override_url}"), crate::i18n::Locale::En => format!("Download source overridden by env var: {override_url}"), crate::i18n::Locale::Ko => format!("환경 변수로 다운로드 미러가 재정의됨: {override_url}") }))
+                .tooltip(hover_tip(crate::i18n::s().translation.download_source_overridden_by_env_var(override_url)))
                 .into_any_element()
         } else {
             let mirror_tip = if status.use_china_mirror {
@@ -2070,7 +2040,7 @@ impl WhiskyApp {
                         .min_w_0()
                         .text_size(px(11.))
                         .text_color(rgb(danger_fg()))
-                        .child(match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("下载失败：{err}"), crate::i18n::Locale::Ja => format!("ダウンロード失敗：{err}"), crate::i18n::Locale::En => format!("Download failed: {err}"), crate::i18n::Locale::Ko => format!("다운로드 실패: {err}") }),
+                        .child(crate::i18n::s().translation.download_failed(err)),
                 )
                 .into_any_element()
         });
@@ -2149,19 +2119,9 @@ impl WhiskyApp {
         };
 
         let specs_summary = if model.recommended_ram_gb > 0 {
-            match crate::i18n::locale() {
-                crate::i18n::Locale::ZhHans => format!("{size_label} · 上下文 {ctx_label} · 建议 {} GB 内存", model.recommended_ram_gb),
-                crate::i18n::Locale::Ja => format!("{size_label} · コンテキスト {ctx_label} · 推奨メモリ {} GB", model.recommended_ram_gb),
-                crate::i18n::Locale::En => format!("{size_label} · {ctx_label} ctx · {} GB+ RAM recommended", model.recommended_ram_gb),
-                crate::i18n::Locale::Ko => format!("{size_label} · 컨텍스트 {ctx_label} · 권장 메모리 {} GB", model.recommended_ram_gb),
-            }
+            crate::i18n::s().translation.ctx_ram_tip(ctx_label, model.recommended_ram_gb, size_label)
         } else {
-            match crate::i18n::locale() {
-                crate::i18n::Locale::ZhHans => format!("{size_label} · 上下文 {ctx_label}"),
-                crate::i18n::Locale::Ja => format!("{size_label} · コンテキスト {ctx_label}"),
-                crate::i18n::Locale::En => format!("{size_label} · {ctx_label} ctx"),
-                crate::i18n::Locale::Ko => format!("{size_label} · 컨텍스트 {ctx_label}"),
-            }
+            crate::i18n::s().translation.ctx_size_badge(ctx_label, size_label)
         };
 
         col()
@@ -3062,12 +3022,7 @@ impl WhiskyApp {
                                                 m.installed_size_bytes.unwrap_or(m.size_bytes),
                                             );
                                             let ctx_label = format_context_window(m.context_window);
-                                            match crate::i18n::locale() {
-                                                crate::i18n::Locale::ZhHans => format!("{sz} · {ctx_label} 上下文"),
-                                                crate::i18n::Locale::Ja => format!("{sz} · {ctx_label} コンテキスト"),
-                                                crate::i18n::Locale::En => format!("{sz} · {ctx_label} ctx"),
-                                                crate::i18n::Locale::Ko => format!("{sz} · {ctx_label} 컨텍스트"),
-                                            }
+                                            crate::i18n::s().translation.ctx_est_badge(ctx_label, sz)
                                         },
                                         m.installed,
                                     )
@@ -3192,7 +3147,7 @@ impl WhiskyApp {
                         crate::i18n::s().translation.api_endpoint,
                         Some((
                             "wiz-ep-tip",
-                            match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("默认地址：{}", default_endpoint(&kind)), crate::i18n::Locale::Ja => format!("既定アドレス：{}", default_endpoint(&kind)), crate::i18n::Locale::En => format!("Default URL: {}", default_endpoint(&kind)), crate::i18n::Locale::Ko => format!("기본 주소: {}", default_endpoint(&kind)) },
+                            crate::i18n::s().translation.default_url(default_endpoint(&kind)),
                         )),
                         wiz_endpoint,
                     ));
@@ -3418,20 +3373,20 @@ impl WhiskyApp {
             .gap(px(6.))
             .flex_wrap()
             .child(pill_badge(
-                match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("已缓存 {total_count} 条"), crate::i18n::Locale::Ja => format!("キャッシュ {total_count} 件"), crate::i18n::Locale::En => format!("{total_count} cached"), crate::i18n::Locale::Ko => format!("캐시 {total_count}개") },
+                crate::i18n::s().translation.cached(total_count),
                 badge_bg(),
                 badge_text(),
                 None,
             ))
             .child(pill_badge(
-                match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("占用 {}", format_cache_bytes(total_bytes)), crate::i18n::Locale::Ja => format!("使用量 {}", format_cache_bytes(total_bytes)), crate::i18n::Locale::En => format!("Size {}", format_cache_bytes(total_bytes)), crate::i18n::Locale::Ko => format!("사용량 {}", format_cache_bytes(total_bytes)) },
+                crate::i18n::s().translation.size(format_cache_bytes(total_bytes)),
                 badge_bg(),
                 badge_text(),
                 None,
             ));
         if only_current {
             stats_row = stats_row.child(pill_badge(
-                match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("当前游戏 {game_count} 条"), crate::i18n::Locale::Ja => format!("このゲーム {game_count} 件"), crate::i18n::Locale::En => format!("{game_count} for this game"), crate::i18n::Locale::Ko => format!("현재 게임 {game_count}개") },
+                crate::i18n::s().translation.for_this_game(game_count),
                 accent_subtle_bg(),
                 accent_fg(),
                 Some(accent_subtle_border()),
@@ -3664,9 +3619,9 @@ fn provider_sidebar_card(
 fn wizard_stepper(step: WizardStep) -> AnyElement {
     let t = &crate::i18n::s().translation;
     let steps = [
-        (WizardStep::ChooseCategory, "1", t.wiz_nav_1),
-        (WizardStep::ChoosePreset, "2", t.wiz_nav_2),
-        (WizardStep::Configure, "3", t.wiz_nav_3),
+        (WizardStep::ChooseCategory, "1", t.wiz_nav_connection),
+        (WizardStep::ChoosePreset, "2", t.wiz_nav_service),
+        (WizardStep::Configure, "3", t.wiz_nav_quick),
     ];
     let current_idx = match step {
         WizardStep::ChooseCategory => 0,
@@ -4139,14 +4094,14 @@ fn cache_entry_row(
             d.child(pill_badge(lp, badge_bg(), badge_text(), None))
         })
         .child(pill_badge(
-            match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("命中 {} 次", entry.hit_count), crate::i18n::Locale::Ja => format!("ヒット {} 回", entry.hit_count), crate::i18n::Locale::En => format!("{} hits", entry.hit_count), crate::i18n::Locale::Ko => format!("적중 {}회", entry.hit_count) },
+            crate::i18n::s().translation.hits(entry.hit_count),
             installed_bg(),
             installed_fg(),
             None,
         ));
     if !compact && !entry.game_id.trim().is_empty() {
         badges = badges.child(pill_badge(
-            match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("游戏 {}", entry.game_id), crate::i18n::Locale::Ja => format!("ゲーム {}", entry.game_id), crate::i18n::Locale::En => format!("Game {}", entry.game_id), crate::i18n::Locale::Ko => format!("게임 {}", entry.game_id) },
+            crate::i18n::s().translation.game(&entry.game_id),
             badge_bg(),
             badge_text(),
             None,

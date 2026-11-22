@@ -60,8 +60,8 @@ impl WhiskyApp {
         let strings = crate::i18n::s();
         let label = SOURCES
             .iter()
-            .find(|(id, _)| *id == selected)
-            .map(|(id, _)| source_label(id))
+            .find(|id| **id == selected)
+            .map(|id| source_label(id))
             .unwrap_or(strings.onboarding.follow_default);
         let view = cx.entity().downgrade();
         Button::new(format!(
@@ -76,7 +76,7 @@ impl WhiskyApp {
                 .map(|_| vec![("inherit", follow_default)])
                 .unwrap_or_default()
                 .into_iter()
-                .chain(SOURCES.iter().map(|(id, _)| (*id, source_label(id))));
+                .chain(SOURCES.iter().map(|id| (*id, source_label(id))));
             for (id, label) in choices {
                 // Only providers with a character endpoint may be selected.
                 if category == Some("characters") && !["inherit", "bangumi", "vndb", "nextmoe"].contains(&id) {
@@ -165,7 +165,7 @@ impl WhiskyApp {
                         cx.notify();
                     })));
             if state.expanded {
-                for (category, _, _) in CATEGORIES {
+                for (category, _) in CATEGORIES {
                     content = content.child(
                         row()
                             .justify_between()
@@ -179,7 +179,7 @@ impl WhiskyApp {
                 );
             }
             let mut sources = row().gap(px(8.)).flex_wrap();
-            for (id, _) in SOURCES {
+            for id in SOURCES {
                 let label = source_label(id);
                 let selected = state
                     .draft

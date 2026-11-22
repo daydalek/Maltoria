@@ -12,13 +12,7 @@ use crate::state::WhiskyApp;
 
 static NEXT_GENERATION: AtomicU64 = AtomicU64::new(1);
 
-pub(crate) const PROVIDERS: &[(&str, &str)] = &[
-    ("steam", "Steam"),
-    ("bangumi", "Bangumi"),
-    ("vndb", "VNDB"),
-    ("ymgal", "月幕"),
-    ("nextmoe", "NextMoe"),
-];
+pub(crate) const PROVIDERS: [&str; 5] = ["steam", "bangumi", "vndb", "ymgal", "nextmoe"];
 #[cfg(test)]
 pub(crate) const CATEGORIES: &[(&str, &str)] = &[
     ("basic", "基本信息"),
@@ -122,7 +116,7 @@ impl Default for MetadataEditor {
 impl MetadataEditor {
     /// The network allow-list does not forbid using already local metadata.
     pub(crate) fn policy_sources(&self, mut allowed: Vec<String>) -> Vec<String> {
-        for &(source, _) in PROVIDERS {
+        for &source in &PROVIDERS {
             if self.record["bindings"][source].is_string()
                 || self.record["snapshots"][source].is_object() {
                 if !allowed.iter().any(|enabled| enabled == source) {
@@ -505,9 +499,9 @@ mod tests {
 
     #[test]
     fn editor_providers_match_search_and_preference_providers() {
-        let editor: std::collections::BTreeSet<_> = PROVIDERS.iter().map(|(id, _)| *id).collect();
-        let settings: std::collections::BTreeSet<_> = crate::onboarding::SOURCES.iter().map(|(id, _)| *id).collect();
-        let search: std::collections::BTreeSet<_> = crate::state::METADATA_SOURCES.iter().map(|(_, id, _)| *id).collect();
+        let editor: std::collections::BTreeSet<_> = PROVIDERS.iter().map(|id| *id).collect();
+        let settings: std::collections::BTreeSet<_> = crate::onboarding::SOURCES.iter().map(|id| *id).collect();
+        let search: std::collections::BTreeSet<_> = crate::state::METADATA_SOURCES.iter().map(|(_, id)| *id).collect();
         assert_eq!(editor, settings);
         assert_eq!(editor, search);
     }

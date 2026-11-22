@@ -51,12 +51,12 @@ impl Config {
 
 pub(super) fn status() -> &'static str {
     match STATUS.load(Ordering::Relaxed) {
-        STATUS_READY => crate::i18n::tr("组件已就绪", "コンポーネント準備完了", "Component ready", "구성 요소 준비됨"),
-        STATUS_WORKING => crate::i18n::tr("正在处理封面", "カバーを処理中", "Processing cover", "커버 처리 중"),
-        STATUS_CPU => crate::i18n::tr("CPU 兼容模式", "CPU 互換モード", "CPU compatibility mode", "CPU 호환 모드"),
-        STATUS_MISSING => crate::i18n::tr("组件缺失或损坏", "コンポーネントが見つからないか破損しています", "Component missing or corrupted", "구성 요소가 없거나 손상됨"),
-        STATUS_FAILED => crate::i18n::tr("超分失败，保留原图", "超解像に失敗したため元画像を保持します", "Upscale failed; keeping original", "업스케일 실패, 원본 유지"),
-        _ => crate::i18n::tr("组件随应用提供，首次使用时校验", "コンポーネントはアプリに同梱され、初回使用時に検証されます", "Component bundled with app; verified on first use", "구성 요소는 앱에 포함되어 있으며 첫 사용 시 검증됩니다"),
+        STATUS_READY => crate::i18n::s().state.component_ready,
+        STATUS_WORKING => crate::i18n::s().state.processing_cover,
+        STATUS_CPU => crate::i18n::s().state.cpu_compatibility_mode,
+        STATUS_MISSING => crate::i18n::s().state.component_missing_or_corrupted,
+        STATUS_FAILED => crate::i18n::s().state.upscale_failed_keeping_original,
+        _ => crate::i18n::s().state.component_bundled_notice,
     }
 }
 

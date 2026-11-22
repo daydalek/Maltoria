@@ -1338,20 +1338,7 @@ impl CaptureState {
                                 self.auto_attach_on_preset_load = false;
                                 self.preset_needs_apply = false;
                             }
-                            self.error = Some(match crate::i18n::locale() {
-                                crate::i18n::Locale::ZhHans => {
-                                    format!("无效的捕获预设数据：{error}")
-                                }
-                                crate::i18n::Locale::Ja => {
-                                    format!("無効なキャプチャプリセットデータ：{error}")
-                                }
-                                crate::i18n::Locale::En => {
-                                    format!("Invalid capture preset data: {error}")
-                                }
-                                crate::i18n::Locale::Ko => {
-                                    format!("잘못된 캡처 프리셋 데이터: {error}")
-                                }
-                            });
+                            self.error = Some(crate::i18n::s().capture.invalid_capture_preset_data(error));
                         }
                     }
                 }

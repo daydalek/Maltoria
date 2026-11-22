@@ -76,7 +76,7 @@ chmod +x .git/hooks/pre-commit
 
 User-facing strings are maintained within the application frontend (`apps/whisky-gpui`). The legacy SwiftUI string catalog (`Whisky/Localizable.xcstrings`) has been deprecated and removed.
 
-GPUI strings live in `apps/whisky-gpui/locales/{en,zh-Hans,ja,ko}.toml` — one TOML file per locale, one top-level table per UI section. `build.rs` compiles them into the `s()` string tables at build time. **`en.toml` is the reference locale**: every other file must define the same sections, keys, array lengths, placeholder sets and plural categories; a mismatch is a build error.
+GPUI strings live in `apps/whisky-gpui/locales/{en,zh-Hans,ja,ko}.toml` — one TOML file per locale, one top-level table per UI section. `build.rs` compiles them into the `s()` string tables at build time; `src/i18n/fmt.rs` holds composition logic only — all text goes in the TOML files. **`en.toml` is the reference locale**: every other file must define the same sections, keys, array lengths, placeholder sets and plural categories; a mismatch is a build error.
 
 Value kinds:
 
@@ -94,9 +94,9 @@ Method parameters are the placeholder names in alphabetical order (reordering wo
 
 `[maps.<name>]` tables hold runtime-keyed lookups (bridge error codes, bottle-config titles) and generate `s().maps.<name>` sorted key→text slices read via `crate::i18n::lookup`. Map values must not contain placeholders.
 
-Adding a string: add the key under the same section in **all four** files — `en` first decides the kind — then use `s().section.key` or `s().section.method(args)`. Adding a locale: create `locales/<code>.toml`, add the `Locale`/`LanguageMode` variants in `src/i18n/mod.rs`, and add a menu action where languages are picked. Adding a Swift `BridgeFailure` code needs a matching `maps.bridge_*` key in `en.toml` (or a `bridge_untranslated` allowlist entry).
+Adding a string: add the key under the same section in **all four** files — `en` first decides the kind — then use `s().section.key` or `s().section.method(args)`. Name keys by role, not by their English text (`snake_case`, at most 40 characters, e.g. `llama_cpp_ready_detail`, `prevent_throttling_tip`), and give placeholders descriptive names (`{count}`, `{label}`, not `{n}` or `{p01}`); `i18n.py check` enforces this. Name keys by role, not by their English text (`snake_case`, at most 40 characters, e.g. `llama_cpp_ready_detail`, `prevent_throttling_tip`), and give placeholders descriptive names (`{count}`, `{label}`, not `{n}` or `{p01}`); `i18n.py check` enforces this. Adding a locale: create `locales/<code>.toml`, add the `Locale`/`LanguageMode` variants in `src/i18n/mod.rs`, and add a menu action where languages are picked. Adding a Swift `BridgeFailure` code needs a matching `maps.bridge_*` key in `en.toml` (or a `bridge_untranslated` allowlist entry).
 
-`python3 scripts/i18n.py check` is the CI gate: it re-validates the locale files, fails on unused keys, banned inline-locale patterns outside `src/i18n/`, hard-coded user-facing literals, and unlocalized bridge codes, and warns on en-identical translations. `stats` prints coverage counts; `find <text>` locates a UI string by content. Legitimate exceptions are keyed by file plus literal/code in `apps/whisky-gpui/locales/i18n-allowlist.toml`, each with a `reason` (proper nouns and the copyright line get permanent reasons; migration leftovers are marked "pending H2 migration").
+`python3 scripts/i18n.py check` is the CI gate: it re-validates the locale files, fails on unused keys, banned inline-locale patterns outside `src/i18n/`, hard-coded user-facing literals, and unlocalized bridge codes, and warns on en-identical translations. `stats` prints coverage counts; `find <text>` locates a UI string by content. Legitimate exceptions are keyed by file plus literal/code in `apps/whisky-gpui/locales/i18n-allowlist.toml`, each with a `reason` — permanent reasons only (proper nouns, native language names, wire-schema titles, the copyright line, dynamic `BridgeFailure` code expressions under `bridge_dynamic`, and legitimately en-identical values under `identical`).
 
 ## Changelog
 

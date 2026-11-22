@@ -111,5 +111,94 @@ class TestBridgeCodes(unittest.TestCase):
         self.assertEqual(check, "disconnected")
 
 
+class TestBridgeDynamicCalls(unittest.TestCase):
+    def _with_swift(self, content):
+        tmp = tempfile.TemporaryDirectory()
+        root = Path(tmp.name)
+        (root / "swift").mkdir()
+        (root / "swift" / "Service.swift").write_text(content)
+        old_src, old_root = i18n.SWIFT_SRC, i18n.ROOT
+        i18n.SWIFT_SRC = root / "swift"
+        i18n.ROOT = root
+        self.addCleanup(self._restore, tmp, old_src, old_root)
+
+    def _restore(self, tmp, old_src, old_root):
+        i18n.SWIFT_SRC = old_src
+        i18n.ROOT = old_root
+        tmp.cleanup()
+
+    def test_literal_codes_are_not_dynamic(self):
+        self._with_swift('throw BridgeFailure("busy", "x")\nthrow BridgeFailure(code: "offline", "y")')
+        self.assertEqual(i18n.bridge_dynamic_calls(), {})
+
+    def test_nonliteral_codes_are_reported(self):
+        self._with_swift('throw BridgeFailure("capture_" + code, "x")\nthrow BridgeFailure(code, "y")')
+        calls = i18n.bridge_dynamic_calls()
+        self.assertEqual(sorted(calls), ['"capture_" + code', 'code'])
+
+    def test_code_label_dynamic(self):
+        self._with_swift('throw BridgeFailure(code: Self.engineErrorCode(error), "y")')
+        calls = i18n.bridge_dynamic_calls()
+        self.assertEqual(list(calls), ['Self.engineErrorCode(error)'])
+
+
+class TestAllowlistCategories(unittest.TestCase):
+    def test_new_categories_parse(self):
+        tmp = tempfile.TemporaryDirectory()
+        path = Path(tmp.name) / "allow.toml"
+        path.write_text(
+            '[bridge_dynamic."F.swift::code"]\nreason = "r"\n'
+            '[identical."sec.key"]\nreason = "r2"\n'
+        )
+        old = i18n.ALLOWLIST_PATH
+        i18n.ALLOWLIST_PATH = path
+        try:
+            allow = i18n.load_allowlist()
+        finally:
+            i18n.ALLOWLIST_PATH = old
+            tmp.cleanup()
+        self.assertEqual(allow["bridge_dynamic"]["F.swift::code"]["reason"], "r")
+        self.assertEqual(allow["identical"]["sec.key"]["reason"], "r2")
+
+
 if __name__ == "__main__":
     unittest.main()
+
+class TestNaming(unittest.TestCase):
+    def test_clean_en(self):
+        en = {
+            "library": {"loading_library": "Loading…", "items": "{count} items"},
+            "maps": {"provider_label": {"openAIChat": "OpenAI"}},
+        }
+        self.assertEqual(i18n.naming_errors(en), [])
+
+    def test_long_key(self):
+        en = {"sec": {"a" * 41: "x"}}
+        errs = i18n.naming_errors(en)
+        self.assertEqual(len(errs), 1)
+        self.assertIn("40", errs[0])
+
+    def test_bad_key_pattern(self):
+        en = {"sec": {"Key_Name": "x", "9lives": "y"}}
+        errs = i18n.naming_errors(en)
+        self.assertEqual(len(errs), 2)
+
+    def test_single_char_placeholder(self):
+        en = {"sec": {"k": "at {h}"}}
+        errs = i18n.naming_errors(en)
+        self.assertEqual(len(errs), 1)
+        self.assertIn("{h}", errs[0])
+
+    def test_numeric_placeholder(self):
+        en = {"sec": {"k": "{p01} done", "k2": "{p1} x"}}
+        errs = i18n.naming_errors(en)
+        self.assertEqual(len(errs), 2)
+
+    def test_plural_placeholders_checked(self):
+        en = {"sec": {"k": {"one": "{count} {h}", "other": "{count} ok"}}}
+        errs = i18n.naming_errors(en)
+        self.assertEqual(len(errs), 1)
+
+    def test_maps_exempt(self):
+        en = {"maps": {"m": {"openAIChat_kind_too_long_over_forty_chars_xx": "v"}}}
+        self.assertEqual(i18n.naming_errors(en), [])

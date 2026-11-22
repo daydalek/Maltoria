@@ -47,15 +47,8 @@ pub(crate) struct ModelDescriptorDto {
     pub(crate) capabilities: Vec<String>,
 }
 
-pub(crate) const THINKING_LEVELS: [(&str, &str); 8] = [
-    ("default", "模型默认"),
-    ("off", "关闭"),
-    ("low", "Low"),
-    ("medium", "Medium"),
-    ("high", "High"),
-    ("xhigh", "XHigh"),
-    ("max", "Max"),
-    ("ultra", "Ultra"),
+pub(crate) const THINKING_LEVELS: [&str; 8] = [
+    "default", "off", "low", "medium", "high", "xhigh", "max", "ultra",
 ];
 
 pub(crate) fn default_thinking_level() -> String {
@@ -79,8 +72,8 @@ pub(crate) fn normalize_thinking_level(value: &str) -> String {
     let normalized = value.trim().to_ascii_lowercase();
     THINKING_LEVELS
         .iter()
-        .find(|(code, _)| *code == normalized)
-        .map(|(code, _)| (*code).to_owned())
+        .find(|code| **code == normalized)
+        .map(|code| (*code).to_owned())
         .unwrap_or_else(default_thinking_level)
 }
 
@@ -160,12 +153,7 @@ pub(crate) fn normalize_credential_storage_mode(mode: &str) -> String {
 pub(crate) fn credential_storage_label(storage: &str) -> String {
     let t = &crate::i18n::s().translation;
     match storage {
-        "persistentKeychain" => crate::i18n::tr(
-            "macOS 钥匙串",
-            "macOS キーチェーン",
-            "macOS Keychain",
-            "macOS 키체인",
-        )
+        "persistentKeychain" => crate::i18n::s().translation.macos_keychain
         .to_owned(),
         "persistentSecretService" => t.cred_secret_service.to_owned(),
         "unavailable" => t.cred_unavailable.to_owned(),
@@ -538,76 +526,52 @@ impl ProviderCategory {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct ProviderSpec {
     pub(crate) kind: &'static str,
-    pub(crate) label: &'static str,
-    pub(crate) short_label: &'static str,
     pub(crate) category: ProviderCategory,
     pub(crate) icon: &'static str,
-    pub(crate) tip: &'static str,
     pub(crate) required_service: Option<&'static str>,
 }
 
 pub(crate) const PROVIDER_SPECS: &[ProviderSpec] = &[
     ProviderSpec {
         kind: "localBuiltIn",
-        label: "内置本地模型 (PLaMo 3)",
-        short_label: "内置 PLaMo 3",
         category: ProviderCategory::Local,
         icon: "hard-drive",
-        tip: "由 Maltoria 自动管理本地 llama.cpp 推理进程（Metal / Vulkan），离线零费用，首次下载自动校验 SHA-256。",
         required_service: None,
     },
     ProviderSpec {
         kind: "ollama",
-        label: "Ollama（本地）",
-        short_label: "Ollama",
         category: ProviderCategory::Local,
         icon: "terminal",
-        tip: "连接本机或局域网运行的 Ollama 服务，支持本地开源模型且通常无需 API 密钥。",
         required_service: None,
     },
     ProviderSpec {
         kind: "openAIChat",
-        label: "OpenAI Chat Completions",
-        short_label: "OpenAI Chat",
         category: ProviderCategory::Api,
         icon: "sparkles",
-        tip: "标准 /chat/completions 接口，兼容 OpenAI、DeepSeek、OpenRouter 及多数自建或中转端点。",
         required_service: None,
     },
     ProviderSpec {
         kind: "anthropic",
-        label: "Anthropic",
-        short_label: "Anthropic",
         category: ProviderCategory::Api,
         icon: "brain",
-        tip: "Anthropic Messages 接口，适用于 Claude 系列模型。",
         required_service: None,
     },
     ProviderSpec {
         kind: "gemini",
-        label: "Gemini",
-        short_label: "Gemini",
         category: ProviderCategory::Api,
         icon: "wand-sparkles",
-        tip: "Google Gemini API（v1beta），支持 Gemini 系列快速翻译与思考深度控制。",
         required_service: None,
     },
     ProviderSpec {
         kind: "deepL",
-        label: "DeepL",
-        short_label: "DeepL",
         category: ProviderCategory::Api,
         icon: "languages",
-        tip: "DeepL 专用机器翻译引擎，无需指定模型 ID。",
         required_service: None,
     },
     ProviderSpec {
         kind: "openAICompletions",
-        label: "OpenAI Legacy Completions",
-        short_label: "OpenAI Legacy",
         category: ProviderCategory::Api,
         icon: "server",
-        tip: "兼容旧版 /completions 纯文本补全接口的自定义端点。",
         required_service: None,
     },
 ];
@@ -624,161 +588,52 @@ pub(crate) fn provider_category(kind: &str) -> ProviderCategory {
 
 impl ProviderSpec {
     pub(crate) fn display_label(&self) -> &'static str {
-        let t = &crate::i18n::s().translation;
-        match self.kind {
-            "localBuiltIn" => t.kind_local_builtin,
-            "ollama" => t.kind_ollama,
-            _ => self.label,
-        }
+        crate::i18n::lookup(crate::i18n::s().maps.provider_label, self.kind).unwrap_or_default()
     }
 
     pub(crate) fn display_short_label(&self) -> &'static str {
-        let t = &crate::i18n::s().translation;
-        match self.kind {
-            "localBuiltIn" => t.kind_local_builtin_short,
-            _ => self.short_label,
-        }
+        crate::i18n::lookup(crate::i18n::s().maps.provider_short_label, self.kind)
+            .unwrap_or_default()
     }
 
     pub(crate) fn display_tip(&self) -> &'static str {
         match self.kind {
-            "localBuiltIn" => crate::i18n::tr(
-                "由 Maltoria 自动管理本地 llama.cpp 推理进程（Metal / Vulkan），离线零费用，首次下载自动校验 SHA-256。",
-                "Maltoria がローカル llama.cpp 推論プロセス（Metal / Vulkan）を自動管理します。オフライン・無料で初回ダウンロード時に SHA-256 を検証します。",
-                "Maltoria manages the local llama.cpp inference process (Metal / Vulkan) offline at zero cost, with SHA-256 verification on first download.",
-                "Maltoria가 로컬 llama.cpp 추론 프로세스(Metal / Vulkan)를 자동 관리하며, 오프라인 무료이고 첫 다운로드 시 SHA-256을 자동 검증합니다.",
-            ),
-            "ollama" => crate::i18n::tr(
-                "连接本机或局域网运行的 Ollama 服务，支持本地开源模型且通常无需 API 密钥。",
-                "ローカルまたは LAN 上の Ollama サービスに接続します。オープンソースモデルに対応し、通常 API キーは不要です。",
-                "Connect to a local or LAN Ollama service supporting local open-source models, usually without an API key.",
-                "로컬 또는 LAN에서 실행 중인 Ollama 서비스에 연결하며, 오픈소스 모델을 지원하고 보통 API 키가 필요하지 않습니다.",
-            ),
-            "openAIChat" => crate::i18n::tr(
-                "标准 /chat/completions 接口，兼容 OpenAI、DeepSeek、OpenRouter 及多数自建或中转端点。",
-                "標準 /chat/completions API。OpenAI、DeepSeek、OpenRouter や多くの互換エンドポイントに対応しています。",
-                "Standard /chat/completions endpoint compatible with OpenAI, DeepSeek, OpenRouter, and most proxies.",
-                "표준 /chat/completions 인터페이스로 OpenAI, DeepSeek, OpenRouter 및 대부분의 호환 엔드포인트와 호환됩니다.",
-            ),
-            "anthropic" => crate::i18n::tr(
-                "Anthropic Messages 接口，适用于 Claude 系列模型。",
-                "Claude シリーズ向けの Anthropic Messages API です。",
-                "Anthropic Messages API for the Claude model family.",
-                "Claude 계열 모델용 Anthropic Messages API입니다.",
-            ),
-            "gemini" => crate::i18n::tr(
-                "Google Gemini API（v1beta），支持 Gemini 系列快速翻译与思考深度控制。",
-                "Google Gemini API（v1beta）。Gemini 系の高速翻訳と思考深度の制御に対応しています。",
-                "Google Gemini API (v1beta) with fast translation and thinking-level control.",
-                "Google Gemini API(v1beta)로 Gemini 시리즈의 빠른 번역과 사고 수준 제어를 지원합니다.",
-            ),
-            "deepL" => crate::i18n::tr(
-                "DeepL 专用机器翻译引擎，无需指定模型 ID。",
-                "DeepL 専用の機械翻訳エンジンです。モデル ID の指定は不要です。",
-                "Dedicated DeepL machine translation engine; no model ID required.",
-                "DeepL 전용 기계 번역 엔진으로 모델 ID를 지정할 필요가 없습니다.",
-            ),
-            "openAICompletions" => crate::i18n::tr(
-                "兼容旧版 /completions 纯文本补全接口的自定义端点。",
-                "レガシーな /completions テキスト補完 API 互換のカスタムエンドポイントです。",
-                "Custom endpoint compatible with legacy /completions text completion API.",
-                "레거시 /completions 텍스트 완성 API와 호환되는 사용자 지정 엔드포인트입니다.",
-            ),
-            _ => self.tip,
+            "localBuiltIn" => crate::i18n::s().translation.builtin_llama_tip,
+            "ollama" => crate::i18n::s().translation.ollama_tip,
+            "openAIChat" => crate::i18n::s().translation.openai_chat_tip,
+            "anthropic" => crate::i18n::s().translation.anthropic_tip,
+            "gemini" => crate::i18n::s().translation.gemini_tip,
+            "deepL" => crate::i18n::s().translation.deepl_tip,
+            "openAICompletions" => crate::i18n::s().translation.openai_legacy_tip,
+            _ => "",
         }
     }
 }
 
 impl ProviderPreset {
     pub(crate) fn display_name(&self) -> &'static str {
-        match self.id {
-            "builtin-plamo" => crate::i18n::s().translation.kind_local_builtin_short,
-            "api-custom-openai" => crate::i18n::tr(
-                "自定义 OpenAI 兼容",
-                "カスタム OpenAI 互換",
-                "Custom OpenAI-Compatible",
-                "사용자 지정 OpenAI 호환",
-            ),
-            _ => self.name,
-        }
+        crate::i18n::lookup(crate::i18n::s().maps.provider_preset_name, self.id)
+            .unwrap_or_default()
     }
 
     pub(crate) fn display_tag(&self) -> &'static str {
-        match self.id {
-            "builtin-plamo" => crate::i18n::tr("推荐 · 离线", "おすすめ・オフライン", "Recommended · Offline", "추천 · 오프라인"),
-            "api-deepseek" => crate::i18n::tr("高性价比", "高コスパ", "Cost-effective", "가성비"),
-            "api-openai" => crate::i18n::tr("官方 API", "公式 API", "Official API", "공식 API"),
-            "api-openrouter" => crate::i18n::tr("多模型聚合", "マルチモデル", "Multi-Model", "멀티 모델"),
-            "api-deepl" => crate::i18n::tr("专业机翻", "高精度翻訳", "Machine Translation", "전문 번역"),
-            "api-custom-openai" => crate::i18n::tr("中转 / 自建", "プロキシ / 自前", "Proxy / Self-hosted", "프록시 / 자체 호스팅"),
-            "api-openai-legacy" => crate::i18n::tr("旧版补全", "旧版補完", "Legacy Completions", "레거시 완성"),
-            _ => self.tag,
-        }
+        crate::i18n::lookup(crate::i18n::s().maps.provider_preset_tag, self.id)
+            .unwrap_or_default()
     }
 
     pub(crate) fn display_tip(&self) -> &'static str {
         match self.id {
-            "builtin-plamo" => crate::i18n::tr(
-                "零配置离线日语翻译引擎，自动托管 llama.cpp（Metal / Vulkan）并支持断点续传。",
-                "設定不要のオフライン日本語翻訳エンジン。llama.cpp（Metal / Vulkan）を自動管理しレジュームに対応します。",
-                "Zero-config offline Japanese translation engine with managed llama.cpp (Metal / Vulkan) and resumable downloads.",
-                "별도 설정이 필요 없는 오프라인 일본어 번역 엔진으로, llama.cpp(Metal / Vulkan)를 자동 관리하며 이어받기를 지원합니다.",
-            ),
-            "local-ollama" => crate::i18n::tr(
-                "连接本机已运行的 Ollama（默认 11434 端口），支持一键发现已拉取模型。",
-                "ローカルで実行中の Ollama（標準ポート 11434）に接続し、取得済みモデルを検出します。",
-                "Connect to a local Ollama instance (default port 11434) with one-click model discovery.",
-                "로컬에서 실행 중인 Ollama(기본 포트 11434)에 연결해 받은 모델을 한 번에 검색합니다.",
-            ),
-            "api-deepseek" => crate::i18n::tr(
-                "DeepSeek 官方 OpenAI 兼容接口，日中对白翻译速度快、成本低。",
-                "DeepSeek 公式 OpenAI 互換 API。日本語対話の翻訳が高速かつ低コストです。",
-                "Official DeepSeek OpenAI-compatible API: fast and low-cost dialogue translation.",
-                "DeepSeek 공식 OpenAI 호환 API로 대사 번역이 빠르고 비용이 저렴합니다.",
-            ),
-            "api-openai" => crate::i18n::tr(
-                "OpenAI 官方 API，支持保存后在线发现模型并按模型调整思考程度。",
-                "OpenAI 公式 API。保存後にモデル検出や思考深度の調整が可能です。",
-                "Official OpenAI API with online model discovery and per-model thinking-level control.",
-                "OpenAI 공식 API로 저장 후 모델 검색 및 사고 수준 조정을 지원합니다.",
-            ),
-            "api-openrouter" => crate::i18n::tr(
-                "使用单个 API Key 聚合多家主流模型，保存后点击「发现模型」即可挑选。",
-                "1 つの API キーで主要モデルを集約。保存後に「モデル検出」から選択できます。",
-                "Access multiple leading models with a single API key; click Discover Models after saving.",
-                "하나의 API 키로 여러 주요 모델을 사용할 수 있으며, 저장 후 모델 검색으로 선택할 수 있습니다.",
-            ),
-            "api-anthropic" => crate::i18n::tr(
-                "Anthropic 官方 Claude 接口，擅长长对话语境与角色口吻保持。",
-                "Anthropic 公式 Claude API。長い会話の文脈やキャラクターの口調維持に優れています。",
-                "Official Anthropic Claude API, strong at long dialogue context and character voice.",
-                "Anthropic 공식 Claude API로 긴 대화 맥락과 캐릭터 말투 유지에 뛰어납니다.",
-            ),
-            "api-gemini" => crate::i18n::tr(
-                "Google Gemini 官方 API，Flash 系列响应延迟极低。",
-                "Google Gemini 公式 API。Flash シリーズは応答が非常に高速です。",
-                "Official Google Gemini API; Flash models provide very low response latency.",
-                "Google Gemini 공식 API로 Flash 시리즈는 응답 지연이 매우 낮습니다.",
-            ),
-            "api-deepl" => crate::i18n::tr(
-                "DeepL 专用机器翻译（Free 版可将端点改为 https://api-free.deepl.com）。",
-                "DeepL 専用の機械翻訳です（Free 版は https://api-free.deepl.com を指定）。",
-                "Dedicated DeepL translation (use https://api-free.deepl.com for Free plans).",
-                "DeepL 전용 기계 번역(무료 플랜은 https://api-free.deepl.com 사용)입니다.",
-            ),
-            "api-custom-openai" => crate::i18n::tr(
-                "适配 OneAPI、NewAPI、cli-proxy、vLLM 或 LM Studio 等兼容服务。",
-                "OneAPI、NewAPI、cli-proxy、vLLM、LM Studio などの互換サービスに対応します。",
-                "Works with OneAPI, NewAPI, cli-proxy, vLLM, LM Studio, and other compatible servers.",
-                "OneAPI, NewAPI, cli-proxy, vLLM, LM Studio 등 호환 서비스에 맞춰 연결합니다.",
-            ),
-            "api-openai-legacy" => crate::i18n::tr(
-                "兼容旧版 /completions 文本补全协议。",
-                "レガシーな /completions テキスト補完プロトコル互換です。",
-                "Compatible with the legacy /completions text completion protocol.",
-                "레거시 /completions 텍스트 완성 프로토콜과 호환됩니다.",
-            ),
-            _ => self.tip,
+            "builtin-plamo" => crate::i18n::s().translation.preset_plamo_tip,
+            "local-ollama" => crate::i18n::s().translation.preset_ollama_tip,
+            "api-deepseek" => crate::i18n::s().translation.preset_deepseek_tip,
+            "api-openai" => crate::i18n::s().translation.preset_openai_tip,
+            "api-openrouter" => crate::i18n::s().translation.preset_openrouter_tip,
+            "api-anthropic" => crate::i18n::s().translation.preset_anthropic_tip,
+            "api-gemini" => crate::i18n::s().translation.preset_gemini_tip,
+            "api-deepl" => crate::i18n::s().translation.preset_deepl_tip,
+            "api-custom-openai" => crate::i18n::s().translation.preset_custom_tip,
+            "api-openai-legacy" => crate::i18n::s().translation.preset_legacy_tip,
+            _ => "",
         }
     }
 }
@@ -798,136 +653,103 @@ pub(crate) fn provider_icon(kind: &str) -> &'static str {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct ProviderPreset {
     pub(crate) id: &'static str,
-    pub(crate) name: &'static str,
-    pub(crate) tag: &'static str,
     pub(crate) kind: &'static str,
     pub(crate) category: ProviderCategory,
     pub(crate) icon: &'static str,
     pub(crate) endpoint: &'static str,
     pub(crate) default_model: &'static str,
-    pub(crate) tip: &'static str,
     pub(crate) required_service: Option<&'static str>,
 }
 
 pub(crate) const PROVIDER_PRESETS: &[ProviderPreset] = &[
     ProviderPreset {
         id: "builtin-plamo",
-        name: "内置 PLaMo 3",
-        tag: "推荐 · 离线",
         kind: "localBuiltIn",
         category: ProviderCategory::Local,
         icon: "hard-drive",
         endpoint: "http://127.0.0.1:18080",
         default_model: "",
-        tip: "零配置离线日语翻译引擎，自动托管 llama.cpp（Metal / Vulkan）并支持断点续传。",
         required_service: None,
     },
     ProviderPreset {
         id: "local-ollama",
-        name: "Ollama",
-        tag: "localhost",
         kind: "ollama",
         category: ProviderCategory::Local,
         icon: "terminal",
         endpoint: "http://localhost:11434",
         default_model: "",
-        tip: "连接本机已运行的 Ollama（默认 11434 端口），支持一键发现已拉取模型。",
         required_service: None,
     },
     ProviderPreset {
         id: "api-deepseek",
-        name: "DeepSeek",
-        tag: "高性价比",
         kind: "openAIChat",
         category: ProviderCategory::Api,
         icon: "sparkles",
         endpoint: "https://api.deepseek.com/v1",
         default_model: "deepseek-chat",
-        tip: "DeepSeek 官方 OpenAI 兼容接口，日中对白翻译速度快、成本低。",
         required_service: None,
     },
     ProviderPreset {
         id: "api-openai",
-        name: "OpenAI",
-        tag: "官方 API",
         kind: "openAIChat",
         category: ProviderCategory::Api,
         icon: "bot",
         endpoint: "https://api.openai.com/v1",
         default_model: "gpt-4o-mini",
-        tip: "OpenAI 官方 API，支持保存后在线发现模型并按模型调整思考程度。",
         required_service: None,
     },
     ProviderPreset {
         id: "api-openrouter",
-        name: "OpenRouter",
-        tag: "多模型聚合",
         kind: "openAIChat",
         category: ProviderCategory::Api,
         icon: "globe",
         endpoint: "https://openrouter.ai/api/v1",
         default_model: "",
-        tip: "使用单个 API Key 聚合多家主流模型，保存后点击「发现模型」即可挑选。",
         required_service: None,
     },
     ProviderPreset {
         id: "api-anthropic",
-        name: "Anthropic",
-        tag: "Claude",
         kind: "anthropic",
         category: ProviderCategory::Api,
         icon: "brain",
         endpoint: "https://api.anthropic.com/v1",
         default_model: "claude-sonnet-4-20250514",
-        tip: "Anthropic 官方 Claude 接口，擅长长对话语境与角色口吻保持。",
         required_service: None,
     },
     ProviderPreset {
         id: "api-gemini",
-        name: "Google Gemini",
-        tag: "Gemini",
         kind: "gemini",
         category: ProviderCategory::Api,
         icon: "wand-sparkles",
         endpoint: "https://generativelanguage.googleapis.com/v1beta",
         default_model: "gemini-2.5-flash",
-        tip: "Google Gemini 官方 API，Flash 系列响应延迟极低。",
         required_service: None,
     },
     ProviderPreset {
         id: "api-deepl",
-        name: "DeepL",
-        tag: "专业机翻",
         kind: "deepL",
         category: ProviderCategory::Api,
         icon: "languages",
         endpoint: "https://api.deepl.com",
         default_model: "",
-        tip: "DeepL 专用机器翻译（Free 版可将端点改为 https://api-free.deepl.com）。",
         required_service: None,
     },
     ProviderPreset {
         id: "api-custom-openai",
-        name: "自定义 OpenAI 兼容",
-        tag: "中转 / 自建",
         kind: "openAIChat",
         category: ProviderCategory::Api,
         icon: "plug",
         endpoint: "https://api.openai.com/v1",
         default_model: "",
-        tip: "适配 OneAPI、NewAPI、cli-proxy、vLLM 或 LM Studio 等兼容服务。",
         required_service: None,
     },
     ProviderPreset {
         id: "api-openai-legacy",
-        name: "OpenAI Legacy",
-        tag: "旧版补全",
         kind: "openAICompletions",
         category: ProviderCategory::Api,
         icon: "server",
         endpoint: "https://api.openai.com/v1",
         default_model: "",
-        tip: "兼容旧版 /completions 文本补全协议。",
         required_service: None,
     },
 ];
@@ -1105,12 +927,7 @@ impl TranslationPage {
         self.pending_credential.clear();
         if had_pending {
             let msg = match reason {
-                Some(reason) => match crate::i18n::locale() {
-                    crate::i18n::Locale::ZhHans => format!("桥接连接中断：{reason}"),
-                    crate::i18n::Locale::Ja => format!("ブリッジ接続が切断されました：{reason}"),
-                    crate::i18n::Locale::En => format!("Bridge disconnected: {reason}"),
-                    crate::i18n::Locale::Ko => format!("브리지 연결이 끊어졌습니다: {reason}"),
-                },
+                Some(reason) => crate::i18n::s().translation.bridge_disconnected(reason),
                 None => crate::i18n::s().translation.msg_bridge_cancelled.into(),
             };
             self.error = Some(msg);
@@ -1195,7 +1012,7 @@ impl TranslationPage {
                                 }
                             }
                         }
-                        Err(error) => self.error = Some(match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("无效的提供商数据：{error}"), crate::i18n::Locale::Ja => format!("無効なプロバイダーデータ：{error}"), crate::i18n::Locale::En => format!("Invalid provider data: {error}"), crate::i18n::Locale::Ko => format!("잘못된 제공자 데이터: {error}") }),
+                        Err(error) => self.error = Some(crate::i18n::s().translation.invalid_provider_data(error)),
                     }
                 }
                 "translation.settings/get" | "translation.settings/save" => {
@@ -1209,7 +1026,7 @@ impl TranslationPage {
                                 );
                                 self.message = Some(crate::i18n::s().translation.msg_settings_loaded.into());
                             }
-                            Err(error) => self.error = Some(match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("无效的翻译设置：{error}"), crate::i18n::Locale::Ja => format!("無効な翻訳設定：{error}"), crate::i18n::Locale::En => format!("Invalid translation settings: {error}"), crate::i18n::Locale::Ko => format!("잘못된 번역 설정: {error}") }),
+                            Err(error) => self.error = Some(crate::i18n::s().translation.invalid_translation_settings(error)),
                         }
                     }
                 }
@@ -1240,7 +1057,7 @@ impl TranslationPage {
                         }
                         Err(error) if selection_current && draft_current => {
                             self.pending_credential.clear();
-                            self.error = Some(match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("无效的提供商响应：{error}"), crate::i18n::Locale::Ja => format!("無効なプロバイダー応答：{error}"), crate::i18n::Locale::En => format!("Invalid provider response: {error}"), crate::i18n::Locale::Ko => format!("잘못된 제공자 응답: {error}") })
+                            self.error = Some(crate::i18n::s().translation.invalid_provider_response(error))
                         }
                         Err(_) => {}
                     }
@@ -1321,7 +1138,7 @@ impl TranslationPage {
                         self.message = value
                             .get("translation")
                             .and_then(Value::as_str)
-                            .map(|s| match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("连接测试成功：{s}"), crate::i18n::Locale::Ja => format!("接続テスト成功：{s}"), crate::i18n::Locale::En => format!("Connection test succeeded: {s}"), crate::i18n::Locale::Ko => format!("연결 테스트 성공: {s}") });
+                            .map(|s| crate::i18n::s().translation.connection_test_succeeded(s));
                     }
                     if self.draft.kind == "localBuiltIn" {
                         self.refresh_local_status_silent(bridge);
@@ -1357,7 +1174,7 @@ impl TranslationPage {
                             }
                         }
                         Err(error) if method != "translation.local.status" => {
-                            self.error = Some(match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("无效的本地模型状态：{error}"), crate::i18n::Locale::Ja => format!("無効なローカルモデル状態：{error}"), crate::i18n::Locale::En => format!("Invalid local model status: {error}"), crate::i18n::Locale::Ko => format!("잘못된 로컬 모델 상태: {error}") });
+                            self.error = Some(crate::i18n::s().translation.invalid_local_model_status(error));
                         }
                         Err(_) => {}
                     }
@@ -1391,7 +1208,7 @@ impl TranslationPage {
                                 self.cache.error = None;
                             }
                             Err(error) => {
-                                self.cache.error = Some(match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("无效的缓存列表数据：{error}"), crate::i18n::Locale::Ja => format!("無効なキャッシュ一覧データ：{error}"), crate::i18n::Locale::En => format!("Invalid cache list data: {error}"), crate::i18n::Locale::Ko => format!("잘못된 캐시 목록 데이터: {error}") });
+                                self.cache.error = Some(crate::i18n::s().translation.invalid_cache_list_data(error));
                             }
                         }
                     }
@@ -1413,7 +1230,7 @@ impl TranslationPage {
                             }
                         }
                         Err(error) => {
-                            self.cache.error = Some(match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("无效的删除缓存响应：{error}"), crate::i18n::Locale::Ja => format!("無効なキャッシュ削除応答：{error}"), crate::i18n::Locale::En => format!("Invalid cache delete response: {error}"), crate::i18n::Locale::Ko => format!("잘못된 캐시 삭제 응답: {error}") });
+                            self.cache.error = Some(crate::i18n::s().translation.invalid_cache_delete_response(error));
                         }
                     }
                 }
@@ -1437,7 +1254,7 @@ impl TranslationPage {
                             }
                         }
                         Err(error) => {
-                            self.cache.error = Some(match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("无效的清空缓存响应：{error}"), crate::i18n::Locale::Ja => format!("無効なキャッシュ消去応答：{error}"), crate::i18n::Locale::En => format!("Invalid cache clear response: {error}"), crate::i18n::Locale::Ko => format!("잘못된 캐시 비우기 응답: {error}") });
+                            self.cache.error = Some(crate::i18n::s().translation.invalid_cache_clear_response(error));
                         }
                     }
                 }
@@ -2537,7 +2354,7 @@ impl TranslationPage {
         };
         self.draft = ProviderDraft {
             name: if is_local {
-                crate::i18n::tr("内置 PLaMo 3 本地翻译", "内蔵 PLaMo 3 ローカル翻訳", "Built-in PLaMo 3 Local Translation", "내장 PLaMo 3 로컬 번역").into()
+                crate::i18n::s().translation.built_in_plamo_3_local_translation.into()
             } else {
                 String::new()
             },
@@ -3977,7 +3794,22 @@ mod tests {
         assert!(!PROVIDER_SPECS
             .iter()
             .any(|spec| spec.category == ProviderCategory::OAuth));
-        assert_eq!(provider_short_label("localBuiltIn"), "内置 PLaMo 3");
+        for locale in [
+            crate::i18n::Locale::ZhHans,
+            crate::i18n::Locale::Ja,
+            crate::i18n::Locale::En,
+            crate::i18n::Locale::Ko,
+        ] {
+            let _guard = crate::i18n::LocaleGuard::new(locale);
+            assert_eq!(
+                provider_short_label("localBuiltIn"),
+                crate::i18n::lookup(
+                    crate::i18n::s().maps.provider_short_label,
+                    "localBuiltIn"
+                )
+                .unwrap()
+            );
+        }
         assert_eq!(provider_icon("ollama"), "terminal");
         assert_eq!(provider_icon("openAIChat"), "sparkles");
     }
