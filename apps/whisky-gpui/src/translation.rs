@@ -13,6 +13,10 @@ use uuid::Uuid;
 
 use crate::bridge::BridgeSupervisor;
 use crate::state::WhiskyApp;
+use crate::theme::{
+    cat_api_bg, cat_api_border, cat_api_fg, cat_local_bg, cat_local_border, cat_local_fg,
+    cat_oauth_bg, cat_oauth_border, cat_oauth_fg,
+};
 
 static NEXT_REQUEST: AtomicU64 = AtomicU64::new(1);
 
@@ -448,6 +452,321 @@ pub(crate) fn draft_from_provider(profile: &ProviderDto) -> ProviderDraft {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum ProviderCategory {
+    Local,
+    OAuth,
+    Api,
+}
+
+impl ProviderCategory {
+    pub(crate) const ALL: [Self; 3] = [Self::Local, Self::OAuth, Self::Api];
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Local => "本地模型",
+            Self::OAuth => "OAuth 账号",
+            Self::Api => "API 密钥",
+        }
+    }
+
+    pub(crate) fn short_label(self) -> &'static str {
+        match self {
+            Self::Local => "本地",
+            Self::OAuth => "OAuth",
+            Self::Api => "API",
+        }
+    }
+
+    pub(crate) fn icon(self) -> &'static str {
+        match self {
+            Self::Local => "cpu",
+            Self::OAuth => "user-round-check",
+            Self::Api => "key-round",
+        }
+    }
+
+    pub(crate) fn tagline(self) -> &'static str {
+        match self {
+            Self::Local => "离线运行 · 零费用",
+            Self::OAuth => "浏览器授权 · 免密钥",
+            Self::Api => "云端模型 · 自定义端点",
+        }
+    }
+
+    pub(crate) fn tooltip(self) -> &'static str {
+        match self {
+            Self::Local => "内置 PLaMo 3（llama.cpp 托管）或本机 Ollama 服务；数据保留在本地，无需云端 API 密钥。",
+            Self::OAuth => "通过浏览器 OAuth 登录绑定订阅账号进行翻译，无需手动申请或复制 API 密钥。",
+            Self::Api => "使用 API Key 接入 OpenAI、DeepSeek、Anthropic、Gemini、DeepL 或兼容中转端点。",
+        }
+    }
+
+    pub(crate) fn colors(self) -> (u32, u32, u32) {
+        match self {
+            Self::Local => (cat_local_fg(), cat_local_bg(), cat_local_border()),
+            Self::OAuth => (cat_oauth_fg(), cat_oauth_bg(), cat_oauth_border()),
+            Self::Api => (cat_api_fg(), cat_api_bg(), cat_api_border()),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ProviderSpec {
+    pub(crate) kind: &'static str,
+    pub(crate) label: &'static str,
+    pub(crate) short_label: &'static str,
+    pub(crate) category: ProviderCategory,
+    pub(crate) icon: &'static str,
+    pub(crate) tip: &'static str,
+    pub(crate) required_service: Option<&'static str>,
+}
+
+pub(crate) const PROVIDER_SPECS: &[ProviderSpec] = &[
+    ProviderSpec {
+        kind: "localBuiltIn",
+        label: "内置本地模型 (PLaMo 3)",
+        short_label: "内置 PLaMo 3",
+        category: ProviderCategory::Local,
+        icon: "hard-drive",
+        tip: "由 Maltoria 自动管理本地 llama.cpp 推理进程（Metal / Vulkan），离线零费用，首次下载自动校验 SHA-256。",
+        required_service: None,
+    },
+    ProviderSpec {
+        kind: "ollama",
+        label: "Ollama（本地）",
+        short_label: "Ollama",
+        category: ProviderCategory::Local,
+        icon: "terminal",
+        tip: "连接本机或局域网运行的 Ollama 服务，支持本地开源模型且通常无需 API 密钥。",
+        required_service: None,
+    },
+    ProviderSpec {
+        kind: "openAIChat",
+        label: "OpenAI Chat Completions",
+        short_label: "OpenAI Chat",
+        category: ProviderCategory::Api,
+        icon: "sparkles",
+        tip: "标准 /chat/completions 接口，兼容 OpenAI、DeepSeek、OpenRouter 及多数自建或中转端点。",
+        required_service: None,
+    },
+    ProviderSpec {
+        kind: "anthropic",
+        label: "Anthropic",
+        short_label: "Anthropic",
+        category: ProviderCategory::Api,
+        icon: "brain",
+        tip: "Anthropic Messages 接口，适用于 Claude 系列模型。",
+        required_service: None,
+    },
+    ProviderSpec {
+        kind: "gemini",
+        label: "Gemini",
+        short_label: "Gemini",
+        category: ProviderCategory::Api,
+        icon: "wand-sparkles",
+        tip: "Google Gemini API（v1beta），支持 Gemini 系列快速翻译与思考深度控制。",
+        required_service: None,
+    },
+    ProviderSpec {
+        kind: "deepL",
+        label: "DeepL",
+        short_label: "DeepL",
+        category: ProviderCategory::Api,
+        icon: "languages",
+        tip: "DeepL 专用机器翻译引擎，无需指定模型 ID。",
+        required_service: None,
+    },
+    ProviderSpec {
+        kind: "openAICompletions",
+        label: "OpenAI Legacy Completions",
+        short_label: "OpenAI Legacy",
+        category: ProviderCategory::Api,
+        icon: "server",
+        tip: "兼容旧版 /completions 纯文本补全接口的自定义端点。",
+        required_service: None,
+    },
+];
+
+pub(crate) fn provider_spec(kind: &str) -> Option<&'static ProviderSpec> {
+    PROVIDER_SPECS.iter().find(|spec| spec.kind == kind)
+}
+
+pub(crate) fn provider_category(kind: &str) -> ProviderCategory {
+    provider_spec(kind)
+        .map(|spec| spec.category)
+        .unwrap_or(ProviderCategory::Api)
+}
+
+pub(crate) fn provider_short_label(kind: &str) -> &str {
+    provider_spec(kind)
+        .map(|spec| spec.short_label)
+        .unwrap_or_else(|| provider_kind_label(kind))
+}
+
+pub(crate) fn provider_icon(kind: &str) -> &'static str {
+    provider_spec(kind)
+        .map(|spec| spec.icon)
+        .unwrap_or("plug")
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ProviderPreset {
+    pub(crate) id: &'static str,
+    pub(crate) name: &'static str,
+    pub(crate) tag: &'static str,
+    pub(crate) kind: &'static str,
+    pub(crate) category: ProviderCategory,
+    pub(crate) icon: &'static str,
+    pub(crate) endpoint: &'static str,
+    pub(crate) default_model: &'static str,
+    pub(crate) tip: &'static str,
+    pub(crate) required_service: Option<&'static str>,
+}
+
+pub(crate) const PROVIDER_PRESETS: &[ProviderPreset] = &[
+    ProviderPreset {
+        id: "builtin-plamo",
+        name: "内置 PLaMo 3",
+        tag: "推荐 · 离线",
+        kind: "localBuiltIn",
+        category: ProviderCategory::Local,
+        icon: "hard-drive",
+        endpoint: "http://127.0.0.1:18080",
+        default_model: "",
+        tip: "零配置离线日语翻译引擎，自动托管 llama.cpp（Metal / Vulkan）并支持断点续传。",
+        required_service: None,
+    },
+    ProviderPreset {
+        id: "local-ollama",
+        name: "Ollama",
+        tag: "localhost",
+        kind: "ollama",
+        category: ProviderCategory::Local,
+        icon: "terminal",
+        endpoint: "http://localhost:11434",
+        default_model: "",
+        tip: "连接本机已运行的 Ollama（默认 11434 端口），支持一键发现已拉取模型。",
+        required_service: None,
+    },
+    ProviderPreset {
+        id: "api-deepseek",
+        name: "DeepSeek",
+        tag: "高性价比",
+        kind: "openAIChat",
+        category: ProviderCategory::Api,
+        icon: "sparkles",
+        endpoint: "https://api.deepseek.com/v1",
+        default_model: "deepseek-chat",
+        tip: "DeepSeek 官方 OpenAI 兼容接口，日中对白翻译速度快、成本低。",
+        required_service: None,
+    },
+    ProviderPreset {
+        id: "api-openai",
+        name: "OpenAI",
+        tag: "官方 API",
+        kind: "openAIChat",
+        category: ProviderCategory::Api,
+        icon: "bot",
+        endpoint: "https://api.openai.com/v1",
+        default_model: "gpt-4o-mini",
+        tip: "OpenAI 官方 API，支持保存后在线发现模型并按模型调整思考程度。",
+        required_service: None,
+    },
+    ProviderPreset {
+        id: "api-openrouter",
+        name: "OpenRouter",
+        tag: "多模型聚合",
+        kind: "openAIChat",
+        category: ProviderCategory::Api,
+        icon: "globe",
+        endpoint: "https://openrouter.ai/api/v1",
+        default_model: "",
+        tip: "使用单个 API Key 聚合多家主流模型，保存后点击「发现模型」即可挑选。",
+        required_service: None,
+    },
+    ProviderPreset {
+        id: "api-anthropic",
+        name: "Anthropic",
+        tag: "Claude",
+        kind: "anthropic",
+        category: ProviderCategory::Api,
+        icon: "brain",
+        endpoint: "https://api.anthropic.com/v1",
+        default_model: "claude-sonnet-4-20250514",
+        tip: "Anthropic 官方 Claude 接口，擅长长对话语境与角色口吻保持。",
+        required_service: None,
+    },
+    ProviderPreset {
+        id: "api-gemini",
+        name: "Google Gemini",
+        tag: "Gemini",
+        kind: "gemini",
+        category: ProviderCategory::Api,
+        icon: "wand-sparkles",
+        endpoint: "https://generativelanguage.googleapis.com/v1beta",
+        default_model: "gemini-2.5-flash",
+        tip: "Google Gemini 官方 API，Flash 系列响应延迟极低。",
+        required_service: None,
+    },
+    ProviderPreset {
+        id: "api-deepl",
+        name: "DeepL",
+        tag: "专业机翻",
+        kind: "deepL",
+        category: ProviderCategory::Api,
+        icon: "languages",
+        endpoint: "https://api.deepl.com",
+        default_model: "",
+        tip: "DeepL 专用机器翻译（Free 版可将端点改为 https://api-free.deepl.com）。",
+        required_service: None,
+    },
+    ProviderPreset {
+        id: "api-custom-openai",
+        name: "自定义 OpenAI 兼容",
+        tag: "中转 / 自建",
+        kind: "openAIChat",
+        category: ProviderCategory::Api,
+        icon: "plug",
+        endpoint: "https://api.openai.com/v1",
+        default_model: "",
+        tip: "适配 OneAPI、NewAPI、cli-proxy、vLLM 或 LM Studio 等兼容服务。",
+        required_service: None,
+    },
+    ProviderPreset {
+        id: "api-openai-legacy",
+        name: "OpenAI Legacy",
+        tag: "旧版补全",
+        kind: "openAICompletions",
+        category: ProviderCategory::Api,
+        icon: "server",
+        endpoint: "https://api.openai.com/v1",
+        default_model: "",
+        tip: "兼容旧版 /completions 文本补全协议。",
+        required_service: None,
+    },
+];
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum WizardStep {
+    #[default]
+    ChooseCategory,
+    ChoosePreset,
+    Configure,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ProviderWizardState {
+    pub(crate) step: WizardStep,
+    pub(crate) category: Option<ProviderCategory>,
+    pub(crate) preset_id: Option<&'static str>,
+    pub(crate) kind: String,
+    pub(crate) name: String,
+    pub(crate) base_url: String,
+    pub(crate) model_id: String,
+    pub(crate) error: Option<String>,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum TranslationTab {
     #[default]
@@ -465,6 +784,9 @@ pub(crate) struct TranslationPage {
     pub(crate) providers_loaded: bool,
     pub(crate) selected_id: Option<String>,
     pub(crate) draft: ProviderDraft,
+    pub(crate) wizard: Option<ProviderWizardState>,
+    pub(crate) sidebar_category_filter: Option<ProviderCategory>,
+    pub(crate) ollama_credential_expanded: bool,
     pub(crate) settings: Option<TranslationSettingsDto>,
     pub(crate) remote_enabled: bool,
     pub(crate) credential_storage: String,
@@ -499,6 +821,9 @@ impl Default for TranslationPage {
             providers_loaded: false,
             selected_id: None,
             draft: ProviderDraft::default(),
+            wizard: None,
+            sidebar_category_filter: None,
+            ollama_credential_expanded: false,
             settings: None,
             remote_enabled: false,
             credential_storage: String::new(),
@@ -1314,14 +1639,16 @@ impl TranslationPage {
             let state = InputState::new(window, cx)
                 .placeholder(hint)
                 .default_value(initial);
-            if key == "credential" {
+            if matches!(key, "credential" | "wiz-credential") {
                 state.masked(true)
             } else {
                 state
             }
         });
         cx.subscribe(&input, move |this, input, event: &InputEvent, cx| {
-            let value = if matches!(event, InputEvent::Change) && key != "credential" {
+            let value = if matches!(event, InputEvent::Change)
+                && !matches!(key, "credential" | "wiz-credential")
+            {
                 Some(input.read(cx).value().to_string())
             } else {
                 None
@@ -1389,6 +1716,7 @@ impl TranslationPage {
         self.selection_generation = self.selection_generation.wrapping_add(1);
         self.draft_generation = self.draft_generation.wrapping_add(1);
         self.selected_id = id.clone();
+        self.ollama_credential_expanded = false;
         self.pending_credential.clear();
         self.clear_provider_inputs();
         self.models.clear();
@@ -1603,7 +1931,25 @@ impl TranslationPage {
                 self.draft_generation = self.draft_generation.wrapping_add(1);
                 self.draft.target_language = value.to_owned();
             }
-            "credential" => {}
+            "credential" | "wiz-credential" => {}
+            "wiz-name" => {
+                if let Some(wizard) = &mut self.wizard {
+                    wizard.name = value.to_owned();
+                    wizard.error = None;
+                }
+            }
+            "wiz-endpoint" => {
+                if let Some(wizard) = &mut self.wizard {
+                    wizard.base_url = value.to_owned();
+                    wizard.error = None;
+                }
+            }
+            "wiz-model" => {
+                if let Some(wizard) = &mut self.wizard {
+                    wizard.model_id = value.to_owned();
+                    wizard.error = None;
+                }
+            }
             "context-window" | "output-limit" | "retention" | "context-turns" | "prompt"
             | "source-language" | "target-language" => {
                 self.settings_edit_generation = self.settings_edit_generation.wrapping_add(1);
@@ -1642,6 +1988,279 @@ impl TranslationPage {
                     | "provider-target-language"
             )
         });
+    }
+
+    fn clear_wizard_inputs(&mut self, window: Option<&mut Window>, cx: Option<&mut Context<WhiskyApp>>) {
+        let cred = self.inputs.remove("wiz-credential");
+        if let (Some(input), Some(window), Some(cx)) = (cred, window, cx) {
+            input.update(cx, |state, cx| state.set_value(String::new(), window, cx));
+        }
+        self.inputs.retain(|key, _| {
+            !matches!(
+                *key,
+                "wiz-name" | "wiz-endpoint" | "wiz-model" | "wiz-credential"
+            )
+        });
+    }
+
+    fn default_local_model_id(&self) -> String {
+        self.local_status
+            .as_ref()
+            .and_then(|status| {
+                status
+                    .models
+                    .iter()
+                    .find(|m| m.installed)
+                    .or_else(|| status.models.first())
+                    .map(|m| m.id.clone())
+            })
+            .unwrap_or_else(|| "plamo-3-translate-2b-q4_k_m".into())
+    }
+
+    fn local_model_metadata(&self, model_id: &str) -> Option<ModelDescriptorDto> {
+        self.local_status
+            .as_ref()
+            .and_then(|status| status.models.iter().find(|m| m.id == model_id))
+            .map(|model| ModelDescriptorDto {
+                id: model.id.clone(),
+                display_name: model.display_name.clone(),
+                context_window: (model.context_window > 0).then_some(model.context_window),
+                context_window_provenance: "detected".into(),
+                capabilities: vec!["textCompletion".into(), "streaming".into()],
+            })
+    }
+
+    fn wizard_field(&self, key: &'static str, fallback: &str, cx: &Context<WhiskyApp>) -> String {
+        if self.inputs.contains_key(key) {
+            self.field(key, cx)
+        } else {
+            fallback.to_owned()
+        }
+    }
+
+    pub(crate) fn open_wizard(&mut self, initial_category: Option<ProviderCategory>) {
+        self.clear_wizard_inputs(None, None);
+        let step = if initial_category.is_some() {
+            WizardStep::ChoosePreset
+        } else {
+            WizardStep::ChooseCategory
+        };
+        self.wizard = Some(ProviderWizardState {
+            step,
+            category: initial_category,
+            ..ProviderWizardState::default()
+        });
+    }
+
+    pub(crate) fn close_wizard(
+        &mut self,
+        window: Option<&mut Window>,
+        cx: Option<&mut Context<WhiskyApp>>,
+    ) {
+        self.clear_wizard_inputs(window, cx);
+        self.wizard = None;
+    }
+
+    pub(crate) fn wizard_select_category(&mut self, category: ProviderCategory) {
+        self.clear_wizard_inputs(None, None);
+        if let Some(wizard) = &mut self.wizard {
+            wizard.category = Some(category);
+            wizard.preset_id = None;
+            wizard.error = None;
+            wizard.step = WizardStep::ChoosePreset;
+        }
+    }
+
+    pub(crate) fn wizard_select_preset(&mut self, preset: &ProviderPreset) {
+        let model_id = if preset.kind == "localBuiltIn" {
+            self.default_local_model_id()
+        } else {
+            preset.default_model.to_owned()
+        };
+        self.clear_wizard_inputs(None, None);
+        self.wizard = Some(ProviderWizardState {
+            step: WizardStep::Configure,
+            category: Some(preset.category),
+            preset_id: Some(preset.id),
+            kind: preset.kind.to_owned(),
+            name: preset.name.to_owned(),
+            base_url: preset.endpoint.to_owned(),
+            model_id,
+            error: None,
+        });
+    }
+
+    pub(crate) fn wizard_set_local_model(&mut self, model_id: &str) {
+        if let Some(wizard) = &mut self.wizard {
+            wizard.model_id = model_id.to_owned();
+            wizard.error = None;
+        }
+    }
+
+    pub(crate) fn wizard_back(&mut self) {
+        self.clear_wizard_inputs(None, None);
+        if let Some(wizard) = &mut self.wizard {
+            wizard.error = None;
+            match wizard.step {
+                WizardStep::Configure => {
+                    wizard.step = WizardStep::ChoosePreset;
+                }
+                WizardStep::ChoosePreset => {
+                    wizard.step = WizardStep::ChooseCategory;
+                    wizard.category = None;
+                    wizard.preset_id = None;
+                }
+                WizardStep::ChooseCategory => {}
+            }
+        }
+    }
+
+    pub(crate) fn wizard_open_full_editor(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<WhiskyApp>,
+    ) {
+        let Some(wizard) = self.wizard.clone() else {
+            return;
+        };
+        let kind = if wizard.kind.is_empty() {
+            "openAIChat".to_owned()
+        } else {
+            wizard.kind.clone()
+        };
+        let name = self.wizard_field("wiz-name", &wizard.name, cx);
+        let endpoint = if kind == "localBuiltIn" {
+            default_endpoint("localBuiltIn").to_owned()
+        } else {
+            self.wizard_field("wiz-endpoint", &wizard.base_url, cx)
+        };
+        let model_id = if kind == "deepL" {
+            String::new()
+        } else {
+            self.wizard_field("wiz-model", &wizard.model_id, cx)
+        };
+        self.close_wizard(Some(window), Some(cx));
+        self.new_provider(&kind);
+        self.sidebar_category_filter = None;
+        if !name.trim().is_empty() {
+            self.draft.name = name;
+        }
+        if !endpoint.trim().is_empty() {
+            self.draft.base_url = endpoint;
+        }
+        if !model_id.trim().is_empty() {
+            self.draft.model_id = model_id;
+            if kind == "localBuiltIn" {
+                self.draft.model_metadata = self.local_model_metadata(&self.draft.model_id);
+            }
+        }
+        self.draft_generation = self.draft_generation.wrapping_add(1);
+    }
+
+    pub(crate) fn wizard_save_provider(
+        &mut self,
+        bridge: &BridgeSupervisor,
+        window: &mut Window,
+        cx: &mut Context<WhiskyApp>,
+    ) {
+        let Some(wizard) = self.wizard.clone() else {
+            return;
+        };
+        let kind = wizard.kind.clone();
+        let is_local = kind == "localBuiltIn";
+        let name = self.wizard_field("wiz-name", &wizard.name, cx);
+        let endpoint = if is_local {
+            default_endpoint("localBuiltIn").to_owned()
+        } else {
+            self.wizard_field("wiz-endpoint", &wizard.base_url, cx)
+        };
+        let model_id = if kind == "deepL" {
+            String::new()
+        } else {
+            self.wizard_field("wiz-model", &wizard.model_id, cx)
+        };
+        if name.trim().is_empty() || endpoint.trim().is_empty() {
+            if let Some(w) = &mut self.wizard {
+                w.error = Some("请填写提供商名称和 API 端点。".into());
+            }
+            return;
+        }
+        if is_local && model_id.trim().is_empty() {
+            if let Some(w) = &mut self.wizard {
+                w.error = Some("请先选择一个本地模型。".into());
+            }
+            return;
+        }
+        let credential = if is_local {
+            String::new()
+        } else {
+            self.field("wiz-credential", cx)
+        };
+
+        self.select(None);
+        self.sidebar_category_filter = None;
+        self.draft = ProviderDraft {
+            id: None,
+            name: name.trim().to_owned(),
+            kind: kind.clone(),
+            base_url: endpoint.trim().to_owned(),
+            model_id: model_id.trim().to_owned(),
+            source_language: if is_local { "ja".into() } else { "auto".into() },
+            target_language: if is_local {
+                "zh-Hans".into()
+            } else {
+                "en".into()
+            },
+            token_limit_field: "max_completion_tokens".into(),
+            thinking_level: default_thinking_level(),
+            model_metadata: if is_local {
+                self.local_model_metadata(model_id.trim())
+            } else {
+                None
+            },
+        };
+        if !credential.is_empty() {
+            self.pending_credential.set(credential);
+        }
+        self.close_wizard(Some(window), Some(cx));
+        self.submit_provider_draft(bridge);
+    }
+
+    fn submit_provider_draft(&mut self, bridge: &BridgeSupervisor) {
+        let thinking_level = if supports_thinking_level(&self.draft.kind) {
+            normalize_thinking_level(&self.draft.thinking_level)
+        } else {
+            default_thinking_level()
+        };
+        let draft = ProviderWriteDto {
+            id: self.draft.id.clone().unwrap_or_else(new_profile_id),
+            name: self.draft.name.trim().to_owned(),
+            kind: self.draft.kind.clone(),
+            base_url: self.draft.base_url.trim().to_owned(),
+            model_id: (!self.draft.model_id.trim().is_empty())
+                .then(|| self.draft.model_id.trim().to_owned()),
+            default_source_language: self.draft.source_language.clone(),
+            default_target_language: self.draft.target_language.clone(),
+            model_metadata: self.draft.model_metadata.clone(),
+            open_ai_chat_token_limit_field: self.draft.token_limit_field.clone(),
+            thinking_level,
+        };
+        match serde_json::to_value(draft) {
+            Ok(provider) => {
+                self.request(
+                    bridge,
+                    "translation.providers/save",
+                    json!({"provider": provider}),
+                );
+                if self.error.is_some() {
+                    self.pending_credential.clear();
+                }
+            }
+            Err(error) => {
+                self.pending_credential.clear();
+                self.error = Some(error.to_string());
+            }
+        }
     }
 
     pub(crate) fn save_provider(
@@ -1688,39 +2307,12 @@ impl TranslationPage {
                 input.update(cx, |state, cx| state.set_value(String::new(), window, cx));
             }
         }
-        let thinking_level = if supports_thinking_level(&self.draft.kind) {
-            normalize_thinking_level(&self.draft.thinking_level)
-        } else {
-            default_thinking_level()
-        };
-        let draft = ProviderWriteDto {
-            id: self.draft.id.clone().unwrap_or_else(new_profile_id),
-            name: name.trim().to_owned(),
-            kind: self.draft.kind.clone(),
-            base_url: endpoint.trim().to_owned(),
-            model_id: (!model_id.trim().is_empty()).then(|| model_id.trim().to_owned()),
-            default_source_language: self.field("provider-source-language", cx),
-            default_target_language: self.field("provider-target-language", cx),
-            model_metadata: self.draft.model_metadata.clone(),
-            open_ai_chat_token_limit_field: self.draft.token_limit_field.clone(),
-            thinking_level,
-        };
-        match serde_json::to_value(draft) {
-            Ok(provider) => {
-                self.request(
-                    bridge,
-                    "translation.providers/save",
-                    json!({"provider": provider}),
-                );
-                if self.error.is_some() {
-                    self.pending_credential.clear();
-                }
-            }
-            Err(error) => {
-                self.pending_credential.clear();
-                self.error = Some(error.to_string());
-            }
-        }
+        self.draft.name = name.trim().to_owned();
+        self.draft.base_url = endpoint.trim().to_owned();
+        self.draft.model_id = model_id.trim().to_owned();
+        self.draft.source_language = self.field("provider-source-language", cx);
+        self.draft.target_language = self.field("provider-target-language", cx);
+        self.submit_provider_draft(bridge);
     }
 
     pub(crate) fn delete_provider(&mut self, bridge: &BridgeSupervisor) {
@@ -1745,20 +2337,11 @@ impl TranslationPage {
 
     pub(crate) fn new_provider(&mut self, kind: &str) {
         self.select(None);
+        self.ollama_credential_expanded = false;
         self.pending_credential.clear();
         let is_local = kind == "localBuiltIn";
         let default_local_model = if is_local {
-            self.local_status
-                .as_ref()
-                .and_then(|status| {
-                    status
-                        .models
-                        .iter()
-                        .find(|m| m.installed)
-                        .or_else(|| status.models.first())
-                        .map(|m| m.id.clone())
-                })
-                .unwrap_or_else(|| "plamo-3-translate-2b-q4_k_m".into())
+            self.default_local_model_id()
         } else {
             String::new()
         };
@@ -1791,10 +2374,12 @@ impl TranslationPage {
         self.secret.clear();
         self.pending_credential.clear();
         self.inputs.remove("credential");
+        self.close_wizard(None, None);
     }
 
     pub(crate) fn close(&mut self, window: &mut Window, cx: &mut Context<WhiskyApp>) {
         let input = self.inputs.remove("credential");
+        self.close_wizard(Some(window), Some(cx));
         self.dismiss();
         if let Some(input) = input {
             input.update(cx, |state, cx| state.set_value(String::new(), window, cx));
@@ -3135,6 +3720,329 @@ mod tests {
         let mut page = TranslationPage::default();
         page.local_status = Some(status);
         assert!(page.has_active_local_download());
+    }
+
+    #[test]
+    fn provider_category_classifies_local_and_api_kinds() {
+        assert_eq!(provider_category("localBuiltIn"), ProviderCategory::Local);
+        assert_eq!(provider_category("ollama"), ProviderCategory::Local);
+        for kind in ["openAIChat", "openAICompletions", "anthropic", "gemini", "deepL"] {
+            assert_eq!(provider_category(kind), ProviderCategory::Api);
+        }
+        assert!(!PROVIDER_SPECS
+            .iter()
+            .any(|spec| spec.category == ProviderCategory::OAuth));
+        assert_eq!(provider_short_label("localBuiltIn"), "内置 PLaMo 3");
+        assert_eq!(provider_icon("ollama"), "terminal");
+        assert_eq!(provider_icon("openAIChat"), "sparkles");
+    }
+
+    #[gpui_kit::test]
+    fn wizard_flow_selects_preset_and_saves_with_credential_scrubbed(
+        cx: &mut gpui_kit::TestAppContext,
+    ) {
+        cx.update(|app| gpui_kit::init(app));
+        let (_events_tx, events_rx) = smol::channel::unbounded();
+        let (bridge, drain) = BridgeSupervisor::recording_for_tests();
+        let window = cx.add_window(|window, cx| {
+            WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, false)
+        });
+
+        window
+            .update(cx, |this, window, cx| {
+                this.translation_page.open_wizard(None);
+                assert_eq!(
+                    this.translation_page.wizard.as_ref().map(|w| w.step),
+                    Some(WizardStep::ChooseCategory)
+                );
+
+                this.translation_page
+                    .wizard_select_category(ProviderCategory::Api);
+                assert_eq!(
+                    this.translation_page.wizard.as_ref().map(|w| w.step),
+                    Some(WizardStep::ChoosePreset)
+                );
+
+                let deepseek = PROVIDER_PRESETS
+                    .iter()
+                    .find(|p| p.id == "api-deepseek")
+                    .expect("deepseek preset");
+                this.translation_page.wizard_select_preset(deepseek);
+                let w = this.translation_page.wizard.as_ref().unwrap();
+                assert_eq!(w.step, WizardStep::Configure);
+                assert_eq!(w.name, "DeepSeek");
+                assert_eq!(w.base_url, "https://api.deepseek.com/v1");
+                assert_eq!(w.model_id, "deepseek-chat");
+
+                let cred_input = this.translation_page.input(
+                    "wiz-credential",
+                    "sk-wiz-secret",
+                    "API Key",
+                    window,
+                    cx,
+                );
+                this.translation_page
+                    .wizard_save_provider(&this.bridge, window, cx);
+
+                assert!(this.translation_page.wizard.is_none());
+                assert!(cred_input.read(cx).value().is_empty());
+                assert!(!this.translation_page.inputs.contains_key("wiz-credential"));
+
+                let calls = drain();
+                let save_call = calls
+                    .iter()
+                    .find(|(m, _)| m == "translation.providers/save")
+                    .expect("save should be sent");
+                assert_eq!(save_call.1["provider"]["name"], "DeepSeek");
+                assert_eq!(
+                    save_call.1["provider"]["baseURL"],
+                    "https://api.deepseek.com/v1"
+                );
+                assert_eq!(save_call.1["provider"]["modelID"], "deepseek-chat");
+
+                let save_id = this
+                    .translation_page
+                    .pending
+                    .iter()
+                    .find(|(_, req)| req.method == "translation.providers/save")
+                    .map(|(id, _)| *id)
+                    .unwrap();
+                let mut saved_dto = save_call.1["provider"].clone();
+                saved_dto["capabilities"] = json!({
+                    "modelDiscovery": true,
+                    "contextDiscovery": false,
+                    "streaming": true,
+                    "customPrompt": true,
+                    "context": true
+                });
+                saved_dto["hasCredential"] = json!(false);
+                this.translation_page.reply(
+                    save_id,
+                    "translation.providers/save",
+                    Ok(saved_dto),
+                    &this.bridge,
+                    cx,
+                );
+
+                let cred_calls = drain();
+                let cred_call = cred_calls
+                    .iter()
+                    .find(|(m, _)| m == "translation.credential.set")
+                    .expect("credential set should chain after wizard save");
+                assert_eq!(cred_call.1["key"], "sk-wiz-secret");
+            })
+            .unwrap();
+    }
+
+    #[gpui_kit::test]
+    fn wizard_cancel_and_dismiss_clear_wizard_credential_input(
+        cx: &mut gpui_kit::TestAppContext,
+    ) {
+        cx.update(|app| gpui_kit::init(app));
+        let (_events_tx, events_rx) = smol::channel::unbounded();
+        let bridge = BridgeSupervisor::disconnected_for_tests();
+        let window = cx.add_window(|window, cx| {
+            WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, false)
+        });
+
+        window
+            .update(cx, |this, window, cx| {
+                this.translation_page.open_wizard(Some(ProviderCategory::Api));
+                let openai = PROVIDER_PRESETS
+                    .iter()
+                    .find(|p| p.id == "api-openai")
+                    .unwrap();
+                this.translation_page.wizard_select_preset(openai);
+                let cred_input = this.translation_page.input(
+                    "wiz-credential",
+                    "sk-cancel-secret",
+                    "API Key",
+                    window,
+                    cx,
+                );
+                this.translation_page.close_wizard(Some(window), Some(cx));
+                assert!(this.translation_page.wizard.is_none());
+                assert!(cred_input.read(cx).value().is_empty());
+
+                this.translation_page.open_wizard(Some(ProviderCategory::Local));
+                this.translation_page.close(window, cx);
+                assert!(this.translation_page.wizard.is_none());
+                assert!(!this.translation_page.active);
+            })
+            .unwrap();
+    }
+
+    #[gpui_kit::test]
+    fn redesigned_translation_views_render_across_empty_local_api_settings_and_wizard(
+        cx: &mut gpui_kit::TestAppContext,
+    ) {
+        cx.update(|app| gpui_kit::init(app));
+        let (_events_tx, events_rx) = smol::channel::unbounded();
+        let (bridge, _drain) = BridgeSupervisor::recording_for_tests();
+        let window = cx.add_window(|window, cx| {
+            WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, false)
+        });
+
+        // 1. Empty state
+        window
+            .update(cx, |this, _, cx| {
+                this.settings = true;
+                this.translation_page.active = true;
+                this.translation_page.providers.clear();
+                this.translation_page.select(None);
+                cx.notify();
+            })
+            .unwrap();
+        cx.update_window(window.into(), |_, window, cx| {
+            window.draw(cx).clear(cx);
+        })
+        .unwrap();
+
+        // 2. Local built-in + Ollama + API providers + discovered models
+        window
+            .update(cx, |this, _, cx| {
+                let mut local = test_provider("local-1");
+                local.name = "内置 PLaMo 3".into();
+                local.kind = "localBuiltIn".into();
+                local.base_url = default_endpoint("localBuiltIn").into();
+                local.model_id = Some("plamo-3-translate-2b-q4_k_m".into());
+
+                let mut ollama = test_provider("ollama-1");
+                ollama.name = "本地 Ollama".into();
+
+                let mut api = test_provider("api-1");
+                api.name = "DeepSeek 主力".into();
+                api.kind = "openAIChat".into();
+                api.base_url = "https://api.deepseek.com/v1".into();
+                api.model_id = Some("deepseek-chat".into());
+                api.has_credential = true;
+
+                this.translation_page.providers = vec![local, ollama, api];
+                this.translation_page.local_status = Some(LocalTranslationStatusDto {
+                    use_china_mirror: true,
+                    hf_endpoint: "https://hf-mirror.com".into(),
+                    hf_endpoint_override: None,
+                    runtime: LocalRuntimeDto {
+                        installed: true,
+                        version: Some("b12540".into()),
+                        pinned_version: "b12540".into(),
+                        size_bytes: 16_000_000,
+                        gpu_acceleration: Some("metal".into()),
+                        running: true,
+                        loaded_model_id: Some("plamo-3-translate-2b-q4_k_m".into()),
+                        last_error: None,
+                    },
+                    models: vec![
+                        LocalModelDto {
+                            id: "plamo-3-translate-2b-q4_k_m".into(),
+                            display_name: "PLaMo 3 Translate 2B (Q4_K_M)".into(),
+                            subtitle: "推荐主力".into(),
+                            recommended: true,
+                            size_bytes: 1_807_203_040,
+                            installed: true,
+                            installed_size_bytes: Some(1_807_203_040),
+                            context_window: 32_768,
+                            recommended_ram_gb: 8,
+                            license_name: "PLaMo Community License".into(),
+                            license_url: String::new(),
+                            loaded: true,
+                            download: None,
+                            last_error: None,
+                        },
+                        LocalModelDto {
+                            id: "plamo-3-translate-0.8b-q4_k_m".into(),
+                            display_name: "PLaMo 3 Translate 0.8B (Q4_K_M)".into(),
+                            subtitle: "轻量极速".into(),
+                            recommended: false,
+                            size_bytes: 573_126_848,
+                            installed: false,
+                            installed_size_bytes: None,
+                            context_window: 32_768,
+                            recommended_ram_gb: 4,
+                            license_name: "PLaMo Community License".into(),
+                            license_url: String::new(),
+                            loaded: false,
+                            download: Some(LocalDownloadProgressDto {
+                                stage: "downloadingModel".into(),
+                                downloaded_bytes: 120_000_000,
+                                total_bytes: 573_126_848,
+                                bytes_per_second: 10_000_000,
+                                eta_seconds: Some(45),
+                                job_id: "job-1".into(),
+                            }),
+                            last_error: None,
+                        },
+                    ],
+                });
+                this.translation_page.select(Some("local-1".into()));
+                cx.notify();
+            })
+            .unwrap();
+        cx.update_window(window.into(), |_, window, cx| {
+            window.draw(cx).clear(cx);
+        })
+        .unwrap();
+
+        // 3. API provider + models + wizard steps + Settings tab
+        window
+            .update(cx, |this, _, cx| {
+                this.translation_page.select(Some("api-1".into()));
+                this.translation_page.models = vec![ModelDescriptorDto {
+                    id: "deepseek-chat".into(),
+                    display_name: "DeepSeek Chat".into(),
+                    context_window: Some(65_536),
+                    context_window_provenance: "detected".into(),
+                    capabilities: vec![],
+                }];
+                this.translation_page.open_wizard(None);
+                cx.notify();
+            })
+            .unwrap();
+        cx.update_window(window.into(), |_, window, cx| {
+            window.draw(cx).clear(cx);
+        })
+        .unwrap();
+
+        window
+            .update(cx, |this, _, cx| {
+                this.translation_page
+                    .wizard_select_category(ProviderCategory::Api);
+                cx.notify();
+            })
+            .unwrap();
+        cx.update_window(window.into(), |_, window, cx| {
+            window.draw(cx).clear(cx);
+        })
+        .unwrap();
+
+        window
+            .update(cx, |this, _, cx| {
+                let preset = PROVIDER_PRESETS
+                    .iter()
+                    .find(|p| p.id == "api-deepseek")
+                    .unwrap();
+                this.translation_page.wizard_select_preset(preset);
+                cx.notify();
+            })
+            .unwrap();
+        cx.update_window(window.into(), |_, window, cx| {
+            window.draw(cx).clear(cx);
+        })
+        .unwrap();
+
+        window
+            .update(cx, |this, window, cx| {
+                this.translation_page.close_wizard(Some(window), Some(cx));
+                this.translation_page.tab = TranslationTab::Settings;
+                this.translation_page.set_credential_storage_mode("localFile");
+                this.translation_page.credential_storage = "localPlaintextFile".into();
+                cx.notify();
+            })
+            .unwrap();
+        cx.update_window(window.into(), |_, window, cx| {
+            window.draw(cx).clear(cx);
+        })
+        .unwrap();
     }
 
     fn test_provider(id: &str) -> ProviderDto {

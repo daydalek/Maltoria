@@ -266,6 +266,11 @@ impl Render for WhiskyApp {
                 } else if this.staggered_selection.is_some() {
                 } else if this.staggered_selection.is_some() {
                     this.staggered_selection = None;
+                } else if this.settings
+                    && this.translation_page.active
+                    && this.translation_page.wizard.is_some()
+                {
+                    this.translation_page.close_wizard(Some(window), Some(cx));
                 } else if this.settings {
                     this.translation_page.close(window, cx);
                     this.settings = false;
@@ -354,6 +359,9 @@ impl Render for WhiskyApp {
         }
         if self.onboarding.is_some() {
             root = root.child(self.onboarding_view(ww, wh, cx));
+        }
+        if self.settings && self.translation_page.active && self.translation_page.wizard.is_some() {
+            root = root.child(self.translation_wizard_modal(ww, wh, window, cx));
         }
         // Recovery and quit errors must stay actionable even during setup saves.
         if self.bridge_dialog {

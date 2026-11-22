@@ -419,6 +419,43 @@ pub(crate) fn slider_thumb_border() -> u32 {
     if is_dark() { 0xffffff33 } else { 0x0000002e }
 }
 
+// Provider category semantic colors (Local = Emerald, OAuth = Violet, API = Sky Blue).
+pub(crate) fn cat_local_fg() -> u32 {
+    if is_dark() { 0x4ade80 } else { 0x15803d }
+}
+
+pub(crate) fn cat_local_bg() -> u32 {
+    if is_dark() { 0x22c55e1f } else { 0x16a34a16 }
+}
+
+pub(crate) fn cat_local_border() -> u32 {
+    if is_dark() { 0x22c55e55 } else { 0x16a34a45 }
+}
+
+pub(crate) fn cat_oauth_fg() -> u32 {
+    if is_dark() { 0xc084fc } else { 0x7c3aed }
+}
+
+pub(crate) fn cat_oauth_bg() -> u32 {
+    if is_dark() { 0xa855f724 } else { 0x7c3aed16 }
+}
+
+pub(crate) fn cat_oauth_border() -> u32 {
+    if is_dark() { 0xa855f75c } else { 0x7c3aed45 }
+}
+
+pub(crate) fn cat_api_fg() -> u32 {
+    if is_dark() { 0x60a5fa } else { 0x2563eb }
+}
+
+pub(crate) fn cat_api_bg() -> u32 {
+    if is_dark() { 0x3b82f624 } else { 0x2563eb16 }
+}
+
+pub(crate) fn cat_api_border() -> u32 {
+    if is_dark() { 0x3b82f65c } else { 0x2563eb45 }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -499,6 +536,40 @@ mod tests {
                 (color.r - color.g).abs() < 0.02 && (color.g - color.b).abs() < 0.02,
                 "expected neutral gray rgba token, got 0x{rgba_token:08x} -> {color:?}"
             );
+        }
+
+        set_dark(true);
+    }
+
+    #[test]
+    fn provider_category_tokens_differ_across_themes() {
+        set_dark(true);
+        let dark = [
+            cat_local_fg(),
+            cat_local_bg(),
+            cat_local_border(),
+            cat_oauth_fg(),
+            cat_oauth_bg(),
+            cat_oauth_border(),
+            cat_api_fg(),
+            cat_api_bg(),
+            cat_api_border(),
+        ];
+
+        set_dark(false);
+        let light = [
+            cat_local_fg(),
+            cat_local_bg(),
+            cat_local_border(),
+            cat_oauth_fg(),
+            cat_oauth_bg(),
+            cat_oauth_border(),
+            cat_api_fg(),
+            cat_api_bg(),
+            cat_api_border(),
+        ];
+        for (d, l) in dark.into_iter().zip(light) {
+            assert_ne!(d, l);
         }
 
         set_dark(true);
