@@ -122,6 +122,7 @@ impl WhiskyApp {
     }
 
     fn render_capture_hud(&mut self, scroll: &ScrollHandle, cx: &mut Context<Self>) -> AnyElement {
+        let strings = crate::i18n::s();
         let collapsed = self.capture.hud.collapsed;
         let attached = self.capture.is_actively_attached();
         let selecting = self.capture.is_selecting();
@@ -494,11 +495,10 @@ impl WhiskyApp {
             }
             for process in self.capture.processes.clone() {
                 let selected = self.capture.selected_process.as_ref() == Some(&process);
-                let label = format!(
-                    "{} · PID {} · {}",
+                let label = strings.linux_hud.process_label(
+                    &process.arch,
                     exe_basename(&process.exe_path),
                     process.guest_pid,
-                    process.arch
                 );
                 body = body.child(selectable_pill(
                     SharedString::from(format!("hud-process-{}", process.guest_pid)),
@@ -762,7 +762,7 @@ impl HudController {
                 ..Default::default()
             };
             let make = |window: &mut Window, cx: &mut App| {
-                window.set_window_title("Maltoria capture HUD");
+                window.set_window_title(crate::i18n::s().capture.title);
                 cx.new(|cx| {
                     let subscription = cx.observe(entity, |_, _, cx| cx.notify());
                     HudWindow {
@@ -834,7 +834,8 @@ fn expanded_height(content_height: f32, screen_height: f32) -> f32 {
 }
 
 impl Render for HudWindow {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        window.set_window_title(crate::i18n::s().capture.title);
         self.app
             .update(cx, |app, cx| app.render_capture_hud(&self.scroll, cx))
             .unwrap_or_else(|_| div().into_any_element())

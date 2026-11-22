@@ -13,6 +13,70 @@ use crate::{
 };
 
 const MAX_AUTO_ATTACH_ATTEMPTS: u8 = 8;
+
+pub(crate) fn native_popup_strings() -> serde_json::Value {
+    let strings = crate::i18n::s();
+    let mut values: serde_json::Map<String, Value> = [
+        ("hud_title", strings.capture.title.to_string()),
+        ("overlay_title", strings.capture.overlay_generic_title.to_string()),
+        ("capture_unavailable", strings.linux_hud.capture_unavailable.to_string()),
+        ("no_provider", strings.linux_hud.no_provider_notice.to_string()),
+        ("pick_provider", strings.linux_hud.pick_provider_then_scan.to_string()),
+        ("pick_game", strings.capture.err_select_game_first.to_string()),
+        ("preset_target_missing", strings.linux_hud.preset_target_missing.to_string()),
+        ("attached", strings.linux_hud.attached.to_string()),
+        ("standby", strings.linux_hud.standby.to_string()),
+        ("expand", strings.common.expand.to_string()),
+        ("collapse", strings.common.collapse.to_string()),
+        ("close", strings.common.close.to_string()),
+        ("subtitle_overlay", strings.linux_hud.subtitle_overlay.to_string()),
+        ("sub_on", strings.linux_hud.sub_on.to_string()),
+        ("sub_off", strings.linux_hud.sub_off.to_string()),
+        ("draggable", strings.capture.draggable_unlocked.to_string()),
+        ("locked", strings.linux_hud.locked_label.to_string()),
+        ("refresh", strings.common.refresh.to_string()),
+        ("waiting_game", strings.linux_hud.waiting_game.to_string()),
+        ("error", strings.common.error.to_string()),
+        ("pick_process", strings.linux_hud.pick_process.to_string()),
+        ("connecting", strings.dialogs.bridge_connecting.to_string()),
+        ("attached_target", strings.linux_hud.attached_target("{exe}").to_string()),
+        ("standby_scan", strings.linux_hud.standby.to_string()),
+        ("architecture_label", strings.linux_hud.architecture_label("{arch}").to_string()),
+        ("waiting_launch_detail", strings.linux_hud.waiting_launch_detail.to_string()),
+        ("attaching_detail", strings.linux_hud.attaching_detail.to_string()),
+        ("starting_helper_detail", strings.linux_hud.starting_helper_detail.to_string()),
+        ("starting_label", strings.linux_hud.starting_label.to_string()),
+        ("start_scan", strings.linux_hud.start_scan.to_string()),
+        ("preset_attach_label", strings.linux_hud.preset_attach_label.to_string()),
+        ("preset_attach_target", strings.linux_hud.preset_attach_target("{exe}").to_string()),
+        ("process_empty_detail", strings.linux_hud.process_empty_detail.to_string()),
+        ("process_metadata", strings.linux_hud.process_metadata("{arch}", "{pid}").to_string()),
+        ("attach", strings.capture.attach_selected.to_string()),
+        ("game_process", strings.linux_hud.game_process_label.to_string()),
+        ("detach", strings.capture.detach.to_string()),
+        ("collapse_ball", strings.linux_hud.collapse_ball_label.to_string()),
+        ("waiting_text", strings.linux_hud.waiting_text_output.to_string()),
+        ("thread", strings.linux_hud.thread_label.to_string()),
+        ("empty_preview", strings.capture.empty_preview_placeholder.to_string()),
+        ("role_body", strings.capture.role_body.to_string()),
+        ("role_speaker", strings.capture.role_speaker.to_string()),
+        ("role_choice", strings.capture.role_choice.to_string()),
+        ("role_ignore", strings.capture.role_ignore.to_string()),
+        ("translating", strings.capture.overlay_translating.to_string()),
+        ("translation_failed", strings.capture.overlay_failed.to_string()),
+        ("translation_cancelled", strings.capture.overlay_cancelled.to_string()),
+    ].into_iter().map(|(id, text)| (id.to_owned(), Value::String(text))).collect();
+    for map in [strings.maps.bridge_capture, strings.maps.bridge_detail,
+        strings.maps.bridge_static, strings.maps.bridge_common] {
+        for &(code, text) in map {
+            values.insert(format!("error:{code}"), json!(text));
+        }
+    }
+    for &(code, text) in strings.maps.bridge_capture {
+        values.insert(format!("error:capture_{code}"), json!(text));
+    }
+    Value::Object(values)
+}
 const AUTO_ATTACH_RETRY_INTERVAL: Duration = Duration::from_millis(1200);
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -735,6 +799,7 @@ impl CaptureState {
             json!({
                 "container": container,
                 "entryID": entry_id,
+                "strings": native_popup_strings(),
             }),
         );
     }
@@ -1576,6 +1641,62 @@ struct HistoryPage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_popup_payload_covers_swift_contract_in_every_locale() {
+        let contract = include_str!("../../../WhiskyBridge/Sources/WhiskyNativeBridge/CapturePopupStrings.swift");
+        let ids: Vec<_> = contract.lines().filter_map(|line| {
+            line.trim().strip_prefix('"')?.split_once("\": ").map(|(id, _)| id)
+        }).collect();
+        assert!(ids.len() > 40);
+        for locale in crate::i18n::Locale::ALL {
+            let _locale = crate::i18n::LocaleGuard::new(locale);
+            let payload = native_popup_strings();
+            for id in &ids {
+                assert!(!payload[*id].as_str().unwrap_or_default().is_empty(), "{locale:?}: {id}");
+            }
+            assert_eq!(payload["attached_target"], crate::i18n::s().linux_hud.attached_target("{exe}"));
+            assert!(payload["error:capture_accept_failed"].is_string());
+        }
+    }
+
+    #[gpui_kit::test]
+    fn native_popup_localization_is_sent_after_handshake_and_language_change(
+        cx: &mut gpui_kit::TestAppContext,
+    ) {
+        let _locale = crate::i18n::LocaleGuard::new(crate::i18n::Locale::En);
+        cx.update(|app| gpui_kit::init(app));
+        let (_events_tx, events_rx) = smol::channel::unbounded();
+        let (bridge, drain) = BridgeSupervisor::recording_for_tests();
+        let window = cx.add_window(|window, cx| {
+            WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, false)
+        });
+        window.update(cx, |app, _, cx| {
+            drain();
+            app.set_language(crate::i18n::LanguageMode::En, cx);
+            assert!(drain().is_empty());
+            app.bridge_status = crate::bridge::BridgeStatus::Connected {
+                helper: "test".into(), version: "test".into(), methods: 1,
+            };
+            app.apply_bridge_event(crate::bridge::BridgeEvent::Services(vec![
+                "translation.capture.hud/localize".into(),
+            ]), cx);
+            let calls = drain();
+            assert_eq!(calls.len(), 1);
+            assert_eq!(calls[0].0, "translation.capture.hud/localize");
+            assert_eq!(calls[0].1["strings"], native_popup_strings());
+            app.set_language(crate::i18n::LanguageMode::ZhHans, cx);
+            app.set_language(crate::i18n::LanguageMode::Ja, cx);
+            let calls = drain();
+            assert_eq!(calls.len(), 2);
+            assert_eq!(calls[1].0, "translation.capture.hud/localize");
+            assert_eq!(calls[1].1["strings"], native_popup_strings());
+            app.apply_bridge_event(crate::bridge::BridgeEvent::Services(vec![]), cx);
+            app.set_language(crate::i18n::LanguageMode::En, cx);
+            assert!(drain().is_empty());
+        }).unwrap();
+    }
+
     #[test]
     fn process_identity_uses_swift_wire_casing() {
         let process = ProcessRecord {

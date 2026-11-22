@@ -106,6 +106,7 @@ public final class MacOSApplicationServices: NativeApplicationServices {
             "system.reveal", "system.open", "system.resources", "system.chooseFolder", "system.choosePath",
             "system.chooseFolders",
             "translation.overlay.read", "translation.overlay.configure",
+            "translation.capture.hud/localize",
             "setup.status", "setup.install", "setup.checkUpdate", "setup.installRosetta",
             "setup.gptk.status", "setup.gptk.import", "setup.gptk.remove",
             "programs.settings.read", "programs.settings.set",
@@ -240,6 +241,13 @@ public final class MacOSApplicationServices: NativeApplicationServices {
         else { throw BridgeFailure("method_unavailable", "Native method is unavailable") }
         switch method.prefix(while: { $0 != "." }) {
         case "translation":
+            if method == "translation.capture.hud/localize" || method == "translation.capture.hud/show",
+               let strings = params["strings"]?.object {
+                captureHUD.localize(strings)
+            }
+            if method == "translation.capture.hud/localize" {
+                return .object([:])
+            }
             if method == "translation.capture.hud/show" {
                 return try await captureHUD.show(params: params, workspace: workspace)
             }

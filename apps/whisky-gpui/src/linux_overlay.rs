@@ -156,7 +156,7 @@ impl OverlayController {
                 WindowKind::PopUp
             };
             let make = |window: &mut Window, cx: &mut App| {
-                window.set_window_title("Maltoria subtitles");
+                window.set_window_title(crate::i18n::s().capture.overlay_generic_title);
                 cx.new(|_| SubtitleWindow::new(settings.clone(), subtitle.clone(), bounds, window))
             };
             let opened = cx.open_window(options(kind), make);
@@ -168,7 +168,7 @@ impl OverlayController {
             match opened {
                 Ok(handle) => self.window = Some(handle),
                 Err(error) => {
-                    app.capture.error = Some(format!("Could not open subtitle overlay: {error}"));
+                    app.capture.error = Some(crate::i18n::s().capture.overlay_open_error(error));
                     self.failed = true;
                 }
             }
@@ -225,17 +225,23 @@ fn initial_bounds(settings: &OverlaySettings, screen: Bounds<Pixels>) -> Bounds<
 
 fn status_text(subtitle: &Subtitle) -> String {
     match subtitle.status.as_str() {
-        "pending" => "Translating…".into(),
+        "pending" => crate::i18n::s().capture.overlay_translating.into(),
         "failed" => subtitle
             .error
-            .clone()
-            .unwrap_or_else(|| "Translation failed".into()),
-        "cancelled" => "Translation cancelled".into(),
+            .as_deref()
+            .map(|error| {
+                crate::i18n::bridge_errors::code_text(error)
+                    .unwrap_or(error)
+                    .to_owned()
+            })
+            .unwrap_or_else(|| crate::i18n::s().capture.overlay_failed.into()),
+        "cancelled" => crate::i18n::s().capture.overlay_cancelled.into(),
         _ => String::new(),
     }
 }
 
 struct SubtitleWindow {
+    rendered_locale: crate::i18n::Locale,
     settings: OverlaySettings,
     subtitle: Subtitle,
     x11: Option<X11Overlay>,
@@ -250,6 +256,7 @@ impl SubtitleWindow {
     ) -> Self {
         let x11 = X11Overlay::new(window, bounds);
         Self {
+            rendered_locale: crate::i18n::locale(),
             settings,
             subtitle,
             x11,
@@ -263,7 +270,12 @@ impl SubtitleWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<OverlaySettings> {
-        let changed = self.settings != settings || self.subtitle != subtitle;
+        let locale = crate::i18n::locale();
+        let changed = self.settings != settings
+            || self.subtitle != subtitle
+            || self.rendered_locale != locale;
+        self.rendered_locale = locale;
+        window.set_window_title(crate::i18n::s().capture.overlay_generic_title);
         if self.x11.is_none()
             && (self.settings.width != settings.width || self.settings.height != settings.height)
         {
@@ -582,6 +594,7 @@ mod tests {
 
     #[test]
     fn macos_status_rules_and_empty_text() {
+        let _locale = crate::i18n::LocaleGuard::new(crate::i18n::Locale::En);
         let mut subtitle = Subtitle::default();
         assert_eq!(status_text(&subtitle), "");
         subtitle.status = "pending".into();
@@ -592,6 +605,29 @@ mod tests {
         assert_eq!(status_text(&subtitle), "Provider unavailable");
         subtitle.status = "cancelled".into();
         assert_eq!(status_text(&subtitle), "Translation cancelled");
+    }
+
+    #[test]
+    fn status_text_follows_current_locale() {
+        for locale in crate::i18n::Locale::ALL {
+            let _locale = crate::i18n::LocaleGuard::new(locale);
+            let strings = crate::i18n::s();
+            let mut subtitle = Subtitle::default();
+            assert_eq!(status_text(&subtitle), "");
+            subtitle.status = "pending".into();
+            assert_eq!(status_text(&subtitle), strings.capture.overlay_translating);
+            subtitle.status = "failed".into();
+            assert_eq!(status_text(&subtitle), strings.capture.overlay_failed);
+            subtitle.error = Some("Translation cancelled".into());
+            assert_eq!(
+                status_text(&subtitle),
+                crate::i18n::bridge_errors::code_text("Translation cancelled").unwrap()
+            );
+            subtitle.error = Some("provider detail".into());
+            assert_eq!(status_text(&subtitle), "provider detail");
+            subtitle.status = "cancelled".into();
+            assert_eq!(status_text(&subtitle), strings.capture.overlay_cancelled);
+        }
     }
 
     #[test]
