@@ -76,6 +76,28 @@ chmod +x .git/hooks/pre-commit
 
 User-facing strings are maintained within the application frontend (`apps/whisky-gpui`). The legacy SwiftUI string catalog (`Whisky/Localizable.xcstrings`) has been deprecated and removed.
 
+GPUI strings live in `apps/whisky-gpui/locales/{en,zh-Hans,ja,ko}.toml` — one TOML file per locale, one top-level table per UI section. `build.rs` compiles them into the `s()` string tables at build time. **`en.toml` is the reference locale**: every other file must define the same sections, keys, array lengths, placeholder sets and plural categories; a mismatch is a build error.
+
+Value kinds:
+
+```toml
+[common]
+cancel = "Cancel"                      # plain string -> s().common.cancel
+weekdays = ["Mon", "Tue", "..."]       # string array -> [&'static str; N]
+
+[library]
+empty_search_detail = "No results for {query}"   # {ident} -> s().library.empty_search_detail(query)
+games_count = { one = "{count} game", other = "{count} games" }   # plural table -> method taking `count`
+```
+
+Method parameters are the placeholder names in alphabetical order (reordering words in a translation never changes the call signature). Plural tables require `other` (with `{count}`) in every locale; `one` is en-only; `zero` is optional everywhere and is used for `n == 0`. `{{` and `}}` emit literal braces.
+
+`[maps.<name>]` tables hold runtime-keyed lookups (bridge error codes, bottle-config titles) and generate `s().maps.<name>` sorted key→text slices read via `crate::i18n::lookup`. Map values must not contain placeholders.
+
+Adding a string: add the key under the same section in **all four** files — `en` first decides the kind — then use `s().section.key` or `s().section.method(args)`. Adding a locale: create `locales/<code>.toml`, add the `Locale`/`LanguageMode` variants in `src/i18n/mod.rs`, and add a menu action where languages are picked. Adding a Swift `BridgeFailure` code needs a matching `maps.bridge_*` key in `en.toml` (or a `bridge_untranslated` allowlist entry).
+
+`python3 scripts/i18n.py check` is the CI gate: it re-validates the locale files, fails on unused keys, banned inline-locale patterns outside `src/i18n/`, hard-coded user-facing literals, and unlocalized bridge codes, and warns on en-identical translations. `stats` prints coverage counts; `find <text>` locates a UI string by content. Legitimate exceptions are keyed by file plus literal/code in `apps/whisky-gpui/locales/i18n-allowlist.toml`, each with a `reason` (proper nouns and the copyright line get permanent reasons; migration leftovers are marked "pending H2 migration").
+
 ## Changelog
 
 We maintain a [CHANGELOG.md](CHANGELOG.md) following the [Keep a Changelog](https://keepachangelog.com/) format. When making user-facing changes, please update the changelog under the `[Unreleased]` section.

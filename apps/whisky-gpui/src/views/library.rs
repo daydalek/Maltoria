@@ -490,36 +490,33 @@ impl WhiskyApp {
             (
                 "search-x",
                 strings.library.search_empty_title,
-                crate::i18n::fmt::empty_search_detail(&query),
+                crate::i18n::s().library.empty_search_detail(&query),
             )
         } else if self.tag_filter.is_active() || self.studio_filter.is_active() {
             if self.studio_filter.is_active() && self.tag_filter.is_active() {
                 (
                     "building-2",
                     strings.library.filter_combo_empty_title,
-                    crate::i18n::fmt::empty_studio_and_tag_detail(
-                        &self.studio_filter.display_label(),
-                        &self.tag_filter.display_label(),
-                    ),
+                    crate::i18n::s().library.empty_studio_and_tag_detail(&self.studio_filter.display_label(), &self.tag_filter.display_label()),
                 )
             } else if self.studio_filter.is_active() {
                 (
                     "building-2",
                     strings.library.filter_studio_empty_title,
-                    crate::i18n::fmt::empty_studio_detail(&self.studio_filter.display_label()),
+                    crate::i18n::s().library.empty_studio_detail(&self.studio_filter.display_label()),
                 )
             } else {
                 (
                     "tag",
                     strings.library.filter_tag_empty_title,
-                    crate::i18n::fmt::empty_tag_detail(&self.tag_filter.display_label()),
+                    crate::i18n::s().library.empty_tag_detail(&self.tag_filter.display_label()),
                 )
             }
         } else if hidden > 0 && !self.show_hidden() {
             (
                 "search-x",
                 strings.library.all_hidden_title,
-                crate::i18n::fmt::empty_hidden_detail(hidden),
+                crate::i18n::s().library.empty_hidden_detail(hidden),
             )
         } else {
             (
@@ -603,7 +600,7 @@ impl WhiskyApp {
             if hidden > 0 && !self.show_hidden() {
                 actions = actions.child(
                     Button::new("empty-show-hidden")
-                        .label(crate::i18n::fmt::show_hidden_short(hidden))
+                        .label(crate::i18n::s().library.show_hidden_short(hidden))
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.command(crate::views::Command::Toggle("show-hidden"), cx);
                         })),
@@ -861,7 +858,7 @@ impl WhiskyApp {
         // One container affordance: left-click reopens the active bottle,
         // right-click lists every container so one pick selects it.
         let container_tip = match self.selected_bottle.and_then(|index| self.bottles.get(index)) {
-            Some(bottle) => crate::i18n::fmt::rail_bottle_tooltip(&bottle.name),
+            Some(bottle) => crate::i18n::s().library.rail_bottle_tooltip(&bottle.name),
             None => lib.rail_bottles_tip.to_owned(),
         };
         entries = entries.child(
@@ -891,9 +888,9 @@ impl WhiskyApp {
         let rail_tags = crate::library_view::collect_tag_counts(games, self.show_hidden());
         if !rail_tags.is_empty() || self.tag_filter.is_active() {
             let tag_tip = if self.tag_filter.is_active() {
-                crate::i18n::fmt::rail_tag_active_tooltip(&self.tag_filter.display_label())
+                crate::i18n::s().library.rail_tag_active_tooltip(&self.tag_filter.display_label())
             } else {
-                crate::i18n::fmt::rail_tag_count_tooltip(rail_tags.len())
+                crate::i18n::s().library.rail_tag_count_tooltip(rail_tags.len())
             };
             entries = entries.child(
                 sidebar_icon("tags", "tag", self.tag_filter.is_active())
@@ -929,7 +926,7 @@ impl WhiskyApp {
                     .child(
                         round_button("appearance-toggle", self.appearance.icon_name())
                             .size(px(28.))
-                            .tooltip(text_tip(crate::i18n::fmt::appearance_tooltip(self.appearance.label())))
+                            .tooltip(text_tip(crate::i18n::s().theme.appearance_tooltip(self.appearance.label())))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.cycle_appearance(cx);
                             }))
@@ -1129,9 +1126,7 @@ impl WhiskyApp {
                                             self.appearance.icon_name(),
                                         )
                                         .size(px(28.))
-                                        .tooltip(text_tip(crate::i18n::fmt::appearance_tooltip(
-                                            self.appearance.label(),
-                                        )))
+                                        .tooltip(text_tip(crate::i18n::s().theme.appearance_tooltip(self.appearance.label())))
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.cycle_appearance(cx);
                                         }))
@@ -1282,10 +1277,7 @@ impl WhiskyApp {
                     round_button("toolbar-back", "chevron-left")
                         .size(px(28.))
                         .rounded(px(7.))
-                        .tooltip(text_tip(crate::i18n::fmt::back_to(
-                            &back_dest,
-                            crate::platform::BACK_SHORTCUT_LABEL,
-                        )))
+                        .tooltip(text_tip(crate::i18n::s().library.back_to(&back_dest, crate::platform::BACK_SHORTCUT_LABEL)))
                         .on_click(cx.listener(|this, _, _, cx| this.navigate_back(cx))),
                 )
             })
@@ -1943,7 +1935,7 @@ impl WhiskyApp {
                             .child(cluster.label.clone()),
                     )
                     .child(
-                        muted(crate::i18n::fmt::studio_count(cluster.indices.len()))
+                        muted(crate::i18n::s().library.studio_count(cluster.indices.len()))
                             .text_size(px(11.))
                             .flex_shrink_0(),
                     ),
@@ -3535,7 +3527,7 @@ impl WhiskyApp {
             if untagged > 0 || current == crate::library_view::TagFilter::Untagged {
                 let v = view.clone();
                 menu = menu.item(
-                    PopupMenuItem::new(crate::i18n::fmt::untagged_count(untagged))
+                    PopupMenuItem::new(crate::i18n::s().library.untagged_count(untagged))
                         .checked(current == crate::library_view::TagFilter::Untagged)
                         .on_click(move |_, _, cx| {
                             let _ = v.update(cx, |this, cx| {
@@ -3788,7 +3780,7 @@ impl WhiskyApp {
         if active_tab == crate::ui_state::FilterBarTab::Tags && self.studio_filter.is_active() {
             bar = bar.child(selectable_pill(
                 "library-cross-studio-clear",
-                crate::i18n::fmt::chip_studio(&self.studio_filter.display_label()),
+                crate::i18n::s().library.chip_studio(&self.studio_filter.display_label()),
                 true,
                 false,
                 cx.listener(|this, _, _, cx| {
@@ -3800,7 +3792,7 @@ impl WhiskyApp {
         {
             bar = bar.child(selectable_pill(
                 "library-cross-tag-clear",
-                crate::i18n::fmt::chip_tag(&self.tag_filter.display_label()),
+                crate::i18n::s().library.chip_tag(&self.tag_filter.display_label()),
                 true,
                 false,
                 cx.listener(|this, _, _, cx| {

@@ -89,7 +89,7 @@ impl WhiskyApp {
             .unwrap_or_else(|| entry.clone());
         let context = (container, entry.clone(), title);
         let other_session = self.capture.active_game.as_ref().filter(|g| g.0 != context.0 || g.1 != context.1);
-        let warning = other_session.map(|g| crate::i18n::fmt::other_game_capturing_warning(&g.2));
+        let warning = other_session.map(|g| crate::i18n::s().linux_hud.other_game_capturing_warning(&g.2));
         self.capture.set_context(Some(context.clone()));
         if self.capture.active_game.as_ref().is_none_or(|g| g.0 != context.0 || g.1 != context.1) {
             let preset = self.capture.preset.clone().unwrap_or_default();
@@ -182,7 +182,7 @@ impl WhiskyApp {
                     .child(if collapsed {
                         badge.to_owned()
                     } else {
-                        crate::i18n::fmt::hud_capture_badge(badge)
+                        crate::i18n::s().linux_hud.hud_capture_badge(badge)
                     })
                     .on_mouse_down(MouseButton::Left, |_, window, _| {
                         if std::env::var_os("WAYLAND_DISPLAY").is_some() {

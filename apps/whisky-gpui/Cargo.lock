@@ -7947,6 +7947,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "smol",
+ "toml 1.1.8+spec-1.1.0",
  "uuid",
  "whisky-bridge",
  "x11rb",

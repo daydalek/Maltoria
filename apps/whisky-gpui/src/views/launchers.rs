@@ -98,7 +98,7 @@ impl WhiskyApp {
                             .text_size(px(11.)),
                     )
                     .child(
-                        muted(crate::i18n::fmt::container_prefix(&bottle))
+                        muted(crate::i18n::s().library.container_prefix(&bottle))
                             .truncate()
                             .text_size(px(11.)),
                     ),

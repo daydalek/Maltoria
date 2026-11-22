@@ -317,18 +317,18 @@ pub(crate) fn encode_edit(field: &ConfigField, raw: &str) -> Result<Value, Strin
         FieldKind::Number { min, max } => {
             let trimmed = raw.trim();
             if trimmed.is_empty() {
-                return Err(crate::i18n::fmt::config_number_required_empty(title));
+                return Err(crate::i18n::s().program_settings.config_number_required_empty(title));
             }
             let number: i64 = trimmed
                 .parse()
-                .map_err(|_| crate::i18n::fmt::config_number_invalid(title))?;
+                .map_err(|_| crate::i18n::s().program_settings.config_number_invalid(title))?;
             if number < *min || number > *max {
-                return Err(crate::i18n::fmt::config_number_range(title, *min, *max));
+                return Err(crate::i18n::s().program_settings.config_number_range(*max, *min, title));
             }
             Ok(json!(number))
         }
         FieldKind::Toggle | FieldKind::Choice { .. } => {
-            Err(crate::i18n::fmt::config_not_text(title))
+            Err(crate::i18n::s().program_settings.config_not_text(title))
         }
     }
 }

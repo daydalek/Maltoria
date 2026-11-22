@@ -224,6 +224,97 @@ pub(crate) fn s() -> &'static Strings {
     strings::table_for(locale())
 }
 
+/// Plural-category templates stored by generated string tables.
+pub(crate) struct Plural {
+    pub(crate) zero: Option<&'static str>,
+    pub(crate) one: Option<&'static str>,
+    pub(crate) other: &'static str,
+}
+
+/// Integer argument usable for plural-category selection.
+pub(crate) trait PluralCount: Copy + std::fmt::Display {
+    fn as_u64(self) -> u64;
+}
+
+macro_rules! impl_plural_count {
+    ($($t:ty),* $(,)?) => {
+        $(impl PluralCount for $t {
+            #[inline]
+            fn as_u64(self) -> u64 {
+                self.max(0) as u64
+            }
+        })*
+    };
+}
+impl_plural_count!(u8, u16, u32, u64, usize, i8, i16, i32, i64, isize);
+
+/// Substitute `{name}` placeholders in a template; `{{`/`}}` escape literal braces.
+/// Placeholders are validated at build time, so unknown names only trip a debug_assert.
+pub(crate) fn render(
+    template: &'static str,
+    args: &[(&'static str, &dyn std::fmt::Display)],
+) -> String {
+    use std::fmt::Write;
+    let mut out = String::with_capacity(template.len() + 16);
+    let mut i = 0;
+    while i < template.len() {
+        let b = template.as_bytes()[i];
+        if b == b'{' {
+            if template.as_bytes().get(i + 1) == Some(&b'{') {
+                out.push('{');
+                i += 2;
+                continue;
+            }
+            match template[i + 1..].find('}') {
+                Some(rel) => {
+                    let name = &template[i + 1..i + 1 + rel];
+                    match args.iter().find(|(n, _)| *n == name) {
+                        Some((_, v)) => {
+                            let _ = write!(out, "{v}");
+                        }
+                        None => {
+                            debug_assert!(false, "i18n::render: unknown placeholder {{{name}}}");
+                            out.push_str(&template[i..i + rel + 2]);
+                        }
+                    }
+                    i += rel + 2;
+                }
+                None => {
+                    out.push_str(&template[i..]);
+                    break;
+                }
+            }
+        } else if b == b'}' {
+            if template.as_bytes().get(i + 1) == Some(&b'}') {
+                out.push('}');
+                i += 2;
+                continue;
+            }
+            debug_assert!(false, "i18n::render: stray `}}`");
+            out.push('}');
+            i += 1;
+        } else {
+            let next = template[i..]
+                .find(['{', '}'])
+                .map(|rel| i + rel)
+                .unwrap_or(template.len());
+            out.push_str(&template[i..next]);
+            i = next;
+        }
+    }
+    out
+}
+
+/// Binary-search a generated `maps.*` table (sorted by key at build time).
+pub(crate) fn lookup(
+    map: &'static [(&'static str, &'static str)],
+    key: &str,
+) -> Option<&'static str> {
+    map.binary_search_by(|(k, _)| k.cmp(&key))
+        .ok()
+        .map(|i| map[i].1)
+}
+
 /// Parse a single BCP-47 / POSIX locale tag into one of the four supported locales.
 pub(crate) fn parse_locale_tag(raw: &str) -> Option<Locale> {
     let base = raw

@@ -263,16 +263,16 @@ pub(crate) fn install_label(job: &InstallJob) -> String {
     match (status, job.progress.stage.as_deref()) {
         (JobStatus::Queued, _) => w.queued.to_owned(),
         (JobStatus::Running, Some("preparing")) if !verb.is_empty() => {
-            crate::i18n::fmt::winetricks_preparing(verb)
+            crate::i18n::s().winetricks.winetricks_preparing(verb)
         }
         (JobStatus::Running, Some("output")) if !verb.is_empty() => {
-            crate::i18n::fmt::winetricks_installing(verb)
+            crate::i18n::s().winetricks.winetricks_installing(verb)
         }
         (JobStatus::Running, Some("installed")) if !verb.is_empty() => {
-            crate::i18n::fmt::winetricks_installed(verb)
+            crate::i18n::s().winetricks.winetricks_installed(verb)
         }
         (JobStatus::Running, Some("failed")) if !verb.is_empty() => {
-            crate::i18n::fmt::winetricks_failed(verb)
+            crate::i18n::s().winetricks.winetricks_failed(verb)
         }
         // The helper re-checks a nonzero exit against `winetricks
         // list-installed` before giving up on a verb.

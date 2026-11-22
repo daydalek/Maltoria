@@ -274,7 +274,7 @@ impl WhiskyApp {
             .capture
             .active_game
             .as_ref()
-            .map(|g| crate::i18n::fmt::capture_active_session(&g.2));
+            .map(|g| crate::i18n::s().capture.capture_active_session(&g.2));
         let probe_pending = self.translation_page.provider_probe_pending();
         let start_disabled = self.capture.provider_id.is_none()
             || context.is_none()
@@ -475,7 +475,7 @@ impl WhiskyApp {
                             .items_center()
                             .when(auto_bound_count > 0, |r| {
                                 r.child(pill_badge(
-                                    crate::i18n::fmt::capture_auto_bound(auto_bound_count as usize),
+                                    crate::i18n::s().capture.capture_auto_bound(auto_bound_count as usize),
                                     installed_bg(),
                                     installed_fg(),
                                 ))
@@ -601,12 +601,12 @@ impl WhiskyApp {
                         .gap(px(6.))
                         .flex_wrap()
                         .child(pill_badge(
-                            crate::i18n::fmt::capture_status_line(capture_status_label(&capture_status)),
+                            crate::i18n::s().capture.capture_status_line(capture_status_label(&capture_status)),
                             badge_bg(),
                             badge_text(),
                         ))
                         .child(pill_badge(
-                            crate::i18n::fmt::translation_status_line(subtitle_status_label(&subtitle_status)),
+                            crate::i18n::s().capture.translation_status_line(subtitle_status_label(&subtitle_status)),
                             status_badge_bg(&subtitle_status),
                             status_badge_fg(&subtitle_status),
                         ))
@@ -621,7 +621,7 @@ impl WhiskyApp {
                         ))
                         .when(!speaker.is_empty(), |d| {
                             d.child(pill_badge(
-                                crate::i18n::fmt::speaker_prefix(&speaker),
+                                crate::i18n::s().capture.speaker_prefix(&speaker),
                                 accent_subtle_bg(),
                                 accent_fg(),
                             ))
@@ -743,10 +743,7 @@ impl WhiskyApp {
             .collect();
 
         let threads_card = section_card(
-            &crate::i18n::fmt::threads_section_title(
-                self.capture.threads.len(),
-                self.capture.thread_total,
-            ),
+            &crate::i18n::s().capture.threads_section_title(self.capture.threads.len(), self.capture.thread_total),
             Some(crate::i18n::s().capture.threads_desc),
             col()
                 .gap(px(10.))
@@ -800,7 +797,7 @@ impl WhiskyApp {
                         ))
                         .when(hidden_empty_count > 0, |d| {
                             d.child(
-                                muted(crate::i18n::fmt::hidden_empty_threads(hidden_empty_count))
+                                muted(crate::i18n::s().capture.hidden_empty_threads(hidden_empty_count))
                                     .text_size(px(11.)),
                             )
                         }),
@@ -811,9 +808,9 @@ impl WhiskyApp {
                     } else if hidden_empty_count > 0
                         && self.capture.thread_filter_query.trim().is_empty()
                     {
-                        muted(crate::i18n::fmt::hidden_empty_threads_hint(hidden_empty_count))
+                        muted(crate::i18n::s().capture.hidden_empty_threads_hint(hidden_empty_count))
                     } else if hidden_empty_count > 0 {
-                        muted(crate::i18n::fmt::hidden_empty_threads_search_hint(hidden_empty_count))
+                        muted(crate::i18n::s().capture.hidden_empty_threads_search_hint(hidden_empty_count))
                     } else {
                         muted(crate::i18n::s().capture.threads_no_match)
                     }
@@ -1005,7 +1002,7 @@ impl WhiskyApp {
             .then(|| self.translation_cache_browser(true, browser_game_id, window, cx));
 
         let history_card = section_card(
-            &crate::i18n::fmt::history_section_title(self.capture.history.len(), history_total),
+            &crate::i18n::s().capture.history_section_title(self.capture.history.len(), history_total),
             None,
             col()
                 .gap(px(10.))
@@ -1351,12 +1348,7 @@ fn capture_preset_bar(
         .unwrap_or(crate::i18n::s().capture.no_recorded_target)
         .to_owned();
     let binding_summary = if total_bindings > 0 {
-        crate::i18n::fmt::thread_bindings_summary(
-            total_bindings,
-            body_count,
-            speaker_count,
-            choice_count,
-        )
+        crate::i18n::s().capture.thread_bindings_summary(body_count, choice_count, speaker_count, total_bindings)
     } else {
         crate::i18n::s().capture.thread_bindings_zero.to_owned()
     };
@@ -1476,7 +1468,7 @@ fn capture_preset_bar(
                             .child(pill_badge(binding_summary, badge_bg(), badge_text()))
                             .when(custom_hooks > 0, |r| {
                                 r.child(pill_badge(
-                                    crate::i18n::fmt::custom_hooks_count(custom_hooks),
+                                    crate::i18n::s().capture.custom_hooks_count(custom_hooks),
                                     badge_bg(),
                                     badge_text(),
                                 ))

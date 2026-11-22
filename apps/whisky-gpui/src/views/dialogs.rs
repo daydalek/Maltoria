@@ -802,7 +802,7 @@ impl WhiskyApp {
         };
         let selected_gated = policy_for(current_value).is_some_and(|policy| policy.disabled);
         let label = if selected_gated {
-            format!("{}  ⌄", crate::i18n::fmt::value_inactive(&current))
+            format!("{}  ⌄", crate::i18n::s().program_settings.value_inactive(&current))
         } else {
             format!("{current}  ⌄")
         };
@@ -820,7 +820,7 @@ impl WhiskyApp {
                         policy.disabled && !(policy.can_override && policy.state == "unverified")
                     });
                     let title = if confirmable {
-                        crate::i18n::fmt::value_requires_confirm(display)
+                        crate::i18n::s().program_settings.value_requires_confirm(display)
                     } else {
                         display.to_owned()
                     };
@@ -2074,7 +2074,7 @@ impl WhiskyApp {
                             })),
                     ),
             )
-            .child(muted(crate::i18n::fmt::container_prefix(&container)).text_size(px(10.)))
+            .child(muted(crate::i18n::s().library.container_prefix(&container)).text_size(px(10.)))
             .into_any_element()
     }
 
@@ -2184,7 +2184,7 @@ impl WhiskyApp {
                             })),
                     ),
             )
-            .child(muted(crate::i18n::fmt::container_prefix(&container)).text_size(px(10.)))
+            .child(muted(crate::i18n::s().library.container_prefix(&container)).text_size(px(10.)))
             .into_any_element()
     }
 
@@ -2688,10 +2688,7 @@ impl WhiskyApp {
                     })),
             );
             if let Some(installed) = installed {
-                filter_line = filter_line.child(muted(crate::i18n::fmt::winetricks_count_summary(
-                    installed.len(),
-                    catalog.verb_count(),
-                )));
+                filter_line = filter_line.child(muted(crate::i18n::s().winetricks.winetricks_count_summary(installed.len(), catalog.verb_count())));
             } else if self.winetricks.installed_pending.contains(&container) {
                 filter_line = filter_line
                     .child(Spinner::new().with_size(px(12.)))
@@ -4560,7 +4557,7 @@ impl WhiskyApp {
         } else {
             prompt.content_type.clone()
         };
-        let detail = crate::i18n::fmt::clipboard_prompt_body(&content, &clipboard_size(prompt.size_bytes));
+        let detail = crate::i18n::s().dialogs.clipboard_prompt_body(&content, &clipboard_size(prompt.size_bytes));
         let pw = 460_f32.min(width - 48.);
         let ph = 290_f32.min(height - 48.);
         div()
@@ -4694,7 +4691,7 @@ impl WhiskyApp {
         let Some(prompt) = &self.legacy_fullscreen_prompt else {
             return div().into_any_element();
         };
-        let detail = crate::i18n::fmt::legacy_fullscreen_body(&prompt.program_name);
+        let detail = crate::i18n::s().dialogs.legacy_fullscreen_body(&prompt.program_name);
         let pw = 480_f32.min(width - 48.);
         let ph = 300_f32.min(height - 48.);
         let enable = prompt.enable;
@@ -4893,9 +4890,9 @@ impl WhiskyApp {
                 col()
                     .gap(px(12.))
                     .child(muted(if kind == BottleDialogKind::Rename {
-                        crate::i18n::fmt::bottle_rename_prompt(&name)
+                        crate::i18n::s().dialogs.bottle_rename_prompt(&name)
                     } else {
-                        crate::i18n::fmt::bottle_duplicate_prompt(&name)
+                        crate::i18n::s().dialogs.bottle_duplicate_prompt(&name)
                     }))
                     .child(Input::new(&input))
                     .into_any_element()
@@ -4905,7 +4902,7 @@ impl WhiskyApp {
                 .child(
                     div()
                         .font_weight(FontWeight::MEDIUM)
-                        .child(crate::i18n::fmt::bottle_remove_confirm(&name)),
+                        .child(crate::i18n::s().dialogs.bottle_remove_confirm(&name)),
                 )
                 .child(muted(d.bottle_remove_note))
                 .child(muted(container).text_size(px(11.)))
@@ -5168,7 +5165,7 @@ impl WhiskyApp {
                     .child(icon("check", 16.).text_color(rgb(crate::theme::SUCCESS)))
                     .child(version.clone().map_or_else(
                         || d.setup_wine_installed.to_owned(),
-                        |version| crate::i18n::fmt::setup_ready_version(&version),
+                        |version| crate::i18n::s().dialogs.setup_ready_version(&version),
                     ))
                     .into_any_element(),
             );
@@ -5557,7 +5554,7 @@ impl WhiskyApp {
                 if *retryable {
                     reason.clone()
                 } else {
-                    crate::i18n::fmt::bridge_failed_detail(reason)
+                    crate::i18n::s().dialogs.bridge_failed_detail(reason)
                 },
             ),
             BridgeStatus::Connected {
@@ -5566,7 +5563,7 @@ impl WhiskyApp {
                 methods,
             } => (
                 d.bridge_connected,
-                crate::i18n::fmt::bridge_connected_detail(helper, version, *methods),
+                crate::i18n::s().dialogs.bridge_connected_detail(helper, *methods, version),
             ),
             BridgeStatus::Stopped => (d.bridge_stopped, d.bridge_stopped_detail.into()),
             BridgeStatus::Locating | BridgeStatus::Starting => (
@@ -5821,7 +5818,7 @@ impl WhiskyApp {
                         )
                         .when(count > 0, |d| {
                             d.child(info_pill(
-                                crate::i18n::fmt::character_count(count),
+                                crate::i18n::s().dialogs.character_count(count),
                                 crate::theme::badge_bg(),
                                 crate::theme::badge_text(),
                             ))
@@ -5834,7 +5831,7 @@ impl WhiskyApp {
                         .label(if expanded {
                             crate::i18n::s().common.collapse.to_owned()
                         } else {
-                            crate::i18n::fmt::character_view_all(count)
+                            crate::i18n::s().dialogs.character_view_all(count)
                         })
                         .on_click(cx.listener(|this, _, _, cx| {
                             if let Some(page) = this.game_info.as_mut() {
@@ -6045,7 +6042,7 @@ fn clipboard_size(bytes: i64) -> String {
         return crate::i18n::tr("大小未知", "サイズ不明", "Unknown size", "크기 알 수 없음").to_owned();
     }
     if bytes < 1024 {
-        return crate::i18n::fmt::bytes_human(bytes as u64);
+        return crate::i18n::s().common.bytes_human(bytes as u64);
     }
     format!("{:.1} KB", bytes as f64 / 1024.)
 }
@@ -6121,7 +6118,7 @@ impl WhiskyApp {
                     .child(
                         div()
                             .font_weight(FontWeight::MEDIUM)
-                            .child(crate::i18n::fmt::engine_feature_confirm_question(feature)),
+                            .child(crate::i18n::s().dialogs.engine_feature_confirm_question(feature)),
                     )
                     .child(muted(reason.clone()))
                     .child(
@@ -6137,7 +6134,7 @@ impl WhiskyApp {
                     .child(
                         div()
                             .font_weight(FontWeight::MEDIUM)
-                            .child(crate::i18n::fmt::engine_switch_question(engine_name)),
+                            .child(crate::i18n::s().dialogs.engine_switch_question(engine_name)),
                     )
                     .child(
                         muted(d.engine_switch_note)
@@ -7121,7 +7118,7 @@ impl WhiskyApp {
                                 .text_color(rgb(crate::theme::text()))
                                 .child(tag),
                         )
-                        .child(muted(crate::i18n::fmt::tag_count_works(count)).text_size(px(11.5)))
+                        .child(muted(crate::i18n::s().dialogs.tag_count_works(count)).text_size(px(11.5)))
                         .child(
                             Button::new(("manage-tag-filter", i))
                                 .label(crate::i18n::s().dialogs.filter_btn)

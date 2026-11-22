@@ -221,7 +221,7 @@ impl WhiskyApp {
                 );
         }
         if let Some(error) = &state.error {
-            content = content.child(muted(crate::i18n::fmt::dialog_save_failed(error)));
+            content = content.child(muted(crate::i18n::s().onboarding.dialog_save_failed(error)));
         }
         let mut footer = row().gap(px(8.)).justify_end();
         if state.welcome {

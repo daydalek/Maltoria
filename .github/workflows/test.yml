@@ -40,6 +40,11 @@ jobs:
       - name: Bridge coverage exporter regression tests
         run: python3 -m unittest discover -s scripts -p 'test_bridge_coverage.py' -v
 
+      - name: i18n resource tests
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_i18n.py' -v
+          python3 scripts/i18n.py check
+
       - name: GPUI Foundation Gate (Swift + real helper + coverage)
         run: python3 scripts/check-gpui-foundation.py --coverage --output build/reliability/foundation
         env:

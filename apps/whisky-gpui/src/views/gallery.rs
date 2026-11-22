@@ -106,7 +106,7 @@ impl WhiskyApp {
             parts.push(self.bottle_name().to_owned());
         }
         if self.studio_filter.is_active() {
-            parts.push(crate::i18n::fmt::title_studio(&self.studio_filter.display_label()));
+            parts.push(crate::i18n::s().library.title_studio(&self.studio_filter.display_label()));
         }
         if self.tag_filter.is_active() {
             parts.push(self.tag_filter.display_label());
@@ -151,7 +151,7 @@ impl WhiskyApp {
                                 .font_weight(FontWeight::BOLD)
                                 .child(cluster.label.clone()),
                         )
-                        .child(muted(crate::i18n::fmt::studio_count(cluster.indices.len())).text_size(px(11.)))
+                        .child(muted(crate::i18n::s().library.studio_count(cluster.indices.len())).text_size(px(11.)))
                         .child(div().flex_1())
                         .child(crate::controls::selectable_pill(
                             ("gallery-studio-filter", ci),

@@ -15,9 +15,8 @@ lived here).
 
 Ship a GPUI app that is functionally at parity with `/Whisky` and visually
 aligned with `demos/gpui-demo`, running on the portable `whisky-bridge` base.
-macOS keeps the SwiftUI app as a first-class frontend; GPUI is the Linux path
-and a parallel macOS client. SwiftUI is not removed at M6 — packaging adds the
-GPUI product alongside it.
+GPUI is the packaged frontend on macOS and Linux; the legacy SwiftUI app source
+was removed along with its string catalog.
 
 ## Architecture
 

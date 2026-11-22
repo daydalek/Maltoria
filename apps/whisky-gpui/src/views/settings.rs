@@ -81,7 +81,7 @@ impl WhiskyApp {
         let running = self.cover_batch;
         let (action, detail) = match running {
             Some(batch) => (
-                crate::i18n::fmt::cover_batch_cancel(batch.done, batch.total),
+                crate::i18n::s().settings.cover_batch_cancel(batch.done, batch.total),
                 s.cover_batch_running_desc.to_owned(),
             ),
             None => (
@@ -738,7 +738,7 @@ impl WhiskyApp {
                                 if status.installed {
                                     status.version.clone().map_or_else(
                                         || strings.common.installed.to_owned(),
-                                        |version| crate::i18n::fmt::runtime_installed_version(&version),
+                                        |version| crate::i18n::s().settings.runtime_installed_version(&version),
                                     )
                                 } else {
                                     strings.common.not_installed.to_owned()
@@ -886,7 +886,7 @@ impl WhiskyApp {
                     // Detection never launches the engine, so a version is
                     // known only when the tree ships metadata.
                     match &engine.version {
-                        Some(version) => crate::i18n::fmt::engine_registered(version),
+                        Some(version) => crate::i18n::s().settings.engine_registered(version),
                         None => s.engine_registered_unknown_ver.to_owned(),
                     }
                 } else {
@@ -943,7 +943,7 @@ impl WhiskyApp {
                 }
             }
             if let Some(error) = &self.wine_engines_error {
-                rows.push(muted(crate::i18n::fmt::engine_registry_read_failed(error)).into_any_element());
+                rows.push(muted(crate::i18n::s().settings.engine_registry_read_failed(error)).into_any_element());
             }
             rows.push(
                 row()

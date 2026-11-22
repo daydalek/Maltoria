@@ -2672,7 +2672,7 @@ impl TranslationPage {
                     .map(|s| s.translation_debounce_ms)
                     .unwrap_or_else(default_translation_debounce_ms);
                 if stored > 5_000 {
-                    self.error = Some(crate::i18n::fmt::range_error(crate::i18n::s().translation.debounce_delay, 0, 5_000));
+                    self.error = Some(crate::i18n::s().translation.range_error(crate::i18n::s().translation.debounce_delay, 5_000, 0));
                     return;
                 }
                 stored
@@ -4378,20 +4378,20 @@ pub(crate) fn format_eta_human(eta_seconds: Option<u64>) -> String {
     match eta_seconds {
         None => crate::i18n::s().translation.eta_calculating.into(),
         Some(0) => crate::i18n::s().translation.eta_almost_done.into(),
-        Some(secs) if secs < 60 => crate::i18n::fmt::eta_seconds(secs),
+        Some(secs) if secs < 60 => crate::i18n::s().translation.eta_seconds(secs),
         Some(secs) if secs < 3600 => {
             let mins = secs / 60;
             let rem = secs % 60;
             if rem == 0 {
-                crate::i18n::fmt::eta_minutes(mins)
+                crate::i18n::s().translation.eta_minutes(mins)
             } else {
-                crate::i18n::fmt::eta_minutes_seconds(mins, rem)
+                crate::i18n::s().translation.eta_minutes_seconds(mins, rem)
             }
         }
         Some(secs) => {
             let hours = secs / 3600;
             let mins = (secs % 3600) / 60;
-            crate::i18n::fmt::eta_hours_minutes(hours, mins)
+            crate::i18n::s().translation.eta_hours_minutes(hours, mins)
         }
     }
 }
@@ -4404,7 +4404,7 @@ fn parse_setting_range(raw: &str, label: &str, minimum: u64, maximum: u64) -> Re
     raw.parse::<u64>()
         .ok()
         .filter(|value| (minimum..=maximum).contains(value))
-        .ok_or_else(|| crate::i18n::fmt::range_error(label, minimum as i64, maximum as i64))
+        .ok_or_else(|| crate::i18n::s().translation.range_error(label, maximum as i64, minimum as i64))
 }
 
 fn parse_context_window_override(raw: &str) -> Result<Option<u64>, String> {

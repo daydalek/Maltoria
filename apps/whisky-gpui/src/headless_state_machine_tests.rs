@@ -3430,7 +3430,7 @@ fn language_selection_switches_locale_live_across_cjk_and_english(
                 library_titles.insert(title);
                 assert_eq!(
                     this.notice.as_deref(),
-                    Some(crate::i18n::fmt::language_changed(expected_mode.label()).as_str())
+                    Some(crate::i18n::s().settings.language_changed(expected_mode.label()).as_str())
                 );
             }
             assert_eq!(library_titles.len(), 4);

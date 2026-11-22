@@ -109,7 +109,7 @@ impl WhiskyApp {
                             rgb(theme::ACCENT).into()
                         } else { rgba(0x00000000) })
                         .disabled(date > today)
-                        .tooltip(crate::i18n::fmt::statistics_day_tooltip(date, count, &duration(seconds)))
+                        .tooltip(crate::i18n::s().statistics.statistics_day_tooltip(count, date, &duration(seconds)))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.preview.statistics_day = Some(date);
                             cx.notify();
@@ -122,7 +122,7 @@ impl WhiskyApp {
         let summaries = [
             (strings.statistics.total_playtime, duration(journal.lifetime as f64), strings.statistics.total_playtime_sub),
             (strings.statistics.last_7_days, duration(weekly), strings.statistics.last_7_days_sub),
-            (strings.statistics.active_days, crate::i18n::fmt::statistics_active_days(active), strings.statistics.active_days_sub),
+            (strings.statistics.active_days, crate::i18n::s().statistics.statistics_active_days(active), strings.statistics.active_days_sub),
             (strings.statistics.today, duration(journal.seconds(today)), strings.statistics.today_sub),
         ];
         let summary = div().grid().grid_cols(if width < 960. { 2 } else { 4 }).gap(px(12.)).children(
@@ -137,7 +137,7 @@ impl WhiskyApp {
         let mut details = panel().child(
             row().justify_between().gap(px(12.))
                 .child(col().gap(px(5.)).child(heading(format!("{selected}")))
-                    .child(muted(crate::i18n::fmt::statistics_day_summary(daily_games.len(), &duration(journal.seconds(selected))))))
+                    .child(muted(crate::i18n::s().statistics.statistics_day_summary(daily_games.len(), &duration(journal.seconds(selected))))))
                 .child(Button::new("statistics-today").label(strings.statistics.back_to_today).ghost()
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.preview.statistics_day = None;
@@ -170,7 +170,7 @@ impl WhiskyApp {
                     .child(Progress::new(("statistics-progress", index))
                         .value((seconds / total * 100.) as f32).small()
                         .color(rgb(theme::ACCENT))
-                        .accessibility_label(crate::i18n::fmt::statistics_progress_aria(&game.title)))
+                        .accessibility_label(crate::i18n::s().statistics.statistics_progress_aria(&game.title)))
                     .child(muted(self.bottles.iter().find(|b| b.path == game.container)
                         .map_or(strings.statistics.bottle_unavailable, |b| b.name.as_str()).to_owned()).text_size(px(11.))))
                 .child(Button::new(("statistics-resume", index))

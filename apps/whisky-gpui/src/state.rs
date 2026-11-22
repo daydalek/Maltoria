@@ -1755,7 +1755,7 @@ impl WhiskyApp {
                         .map(|e| e.title.as_str())
                         .unwrap_or(strings.state.fallback_game);
                     self.show_notice(
-                        crate::i18n::fmt::notice_launching_with_backend(title, &backend_label),
+                        crate::i18n::s().state.notice_launching_with_backend(&backend_label, title),
                         cx,
                     );
                 }
@@ -1768,7 +1768,7 @@ impl WhiskyApp {
                 if !self.demo {
                     let backend_label = backend_label(backend, backend_from);
                     self.show_notice(
-                        crate::i18n::fmt::notice_launching_with_backend(&name, &backend_label),
+                        crate::i18n::s().state.notice_launching_with_backend(&backend_label, &name),
                         cx,
                     );
                 }
@@ -1908,7 +1908,7 @@ impl WhiskyApp {
                             state.saving = false;
                             state.error = Some(error);
                         } else {
-                            self.show_notice(&crate::i18n::fmt::notice_metadata_unsaved(&error), cx);
+                            self.show_notice(&crate::i18n::s().state.notice_metadata_unsaved(&error), cx);
                             self.bridge.load_preferences();
                         }
                     }
@@ -2012,7 +2012,7 @@ impl WhiskyApp {
                     self.rebuild_entries();
                     if updated > 0 {
                         self.show_notice(
-                            crate::i18n::fmt::notice_tag_renamed(&old_tag, &new_tag),
+                            crate::i18n::s().state.notice_tag_renamed(&new_tag, &old_tag),
                             cx,
                         );
                     }
@@ -2023,7 +2023,7 @@ impl WhiskyApp {
                     self.apply_local_tag_delete(&tag);
                     self.rebuild_entries();
                     if updated > 0 {
-                        self.show_notice(crate::i18n::fmt::notice_tag_deleted(&tag), cx);
+                        self.show_notice(crate::i18n::s().state.notice_tag_deleted(&tag), cx);
                     }
                 }
             }
@@ -2549,7 +2549,7 @@ impl WhiskyApp {
                                 name,
                                 containers,
                             } => {
-                                self.show_notice(crate::i18n::fmt::notice_bottle_created(&name), cx);
+                                self.show_notice(crate::i18n::s().state.notice_bottle_created(&name), cx);
 
                                 // Update the bottle catalogue
                                 let previous = self
@@ -2664,7 +2664,7 @@ impl WhiskyApp {
                                     .map(crate::winetricks::FailureDto::label)
                                     .unwrap_or_default();
                                 self.show_notice(
-                                    crate::i18n::fmt::notice_winetricks_failed(failed.len(), &reason),
+                                    crate::i18n::s().state.notice_winetricks_failed(failed.len(), &reason),
                                     cx,
                                 );
                             }
@@ -2697,7 +2697,7 @@ impl WhiskyApp {
                     self.program_settings.apply_settings(settings);
                     self.preview.program_inputs.clear();
                     if let Some((next_index, next_exe)) = pending_switch {
-                        self.show_notice(crate::i18n::fmt::notice_program_saved(&saved_name), cx);
+                        self.show_notice(crate::i18n::s().state.notice_program_saved(&saved_name), cx);
                         self.run_settings_target_exe = Some(next_exe);
                         self.open_program_settings(next_index, cx);
                     } else {
@@ -2708,7 +2708,7 @@ impl WhiskyApp {
                             self.preview_sheet_return_captured_gen = 0;
                             self.show_notice(crate::i18n::s().state.program_settings_saved, cx);
                         } else if was_saving {
-                            self.show_notice(crate::i18n::fmt::notice_program_saved(&saved_name), cx);
+                            self.show_notice(crate::i18n::s().state.notice_program_saved(&saved_name), cx);
                         }
                     }
                 }
@@ -2769,7 +2769,7 @@ impl WhiskyApp {
                 }
             }
             BridgeEvent::ProgramRunFailed { name, reason } => {
-                self.show_notice(crate::i18n::fmt::notice_launch_failed(&name, &reason), cx);
+                self.show_notice(crate::i18n::s().state.notice_launch_failed(&name, &reason), cx);
             }
             BridgeEvent::EntryMoved {
                 source_container,
@@ -2881,7 +2881,7 @@ impl WhiskyApp {
                                     .file_name()
                                     .map(|name| name.to_string_lossy().into_owned())
                                     .unwrap_or_else(|| path.clone());
-                                self.show_notice(crate::i18n::fmt::notice_launching(&name), cx);
+                                self.show_notice(crate::i18n::s().state.notice_launching(&name), cx);
                                 self.bridge.run_program(&container, &path, &name);
                             }
                         }
@@ -2954,7 +2954,7 @@ impl WhiskyApp {
                         "terminal" => b.terminal,
                         _ => b.wine_tool,
                     };
-                    self.show_notice(crate::i18n::fmt::notice_opened_tool(label), cx);
+                    self.show_notice(crate::i18n::s().state.notice_opened_tool(label), cx);
                 }
             }
             BridgeEvent::Diagnostics {
@@ -2988,7 +2988,7 @@ impl WhiskyApp {
                         }
                         DiagnosticUpdate::Exported { path } => {
                             self.diagnostics_pending = false;
-                            self.show_notice(crate::i18n::fmt::notice_diagnostics_exported(&path), cx);
+                            self.show_notice(crate::i18n::s().state.notice_diagnostics_exported(&path), cx);
                         }
                         DiagnosticUpdate::Checks { results } => {
                             self.checks_pending = false;
@@ -3000,7 +3000,7 @@ impl WhiskyApp {
                             self.diagnostic_checks = Some(results);
                             if failures > 0 {
                                 self.show_notice(
-                                    crate::i18n::fmt::notice_checks_with_failures(failures),
+                                    crate::i18n::s().state.notice_checks_with_failures(failures),
                                     cx,
                                 );
                             } else {
@@ -3305,7 +3305,7 @@ impl WhiskyApp {
                             self.show_notice(crate::i18n::s().state.rosetta_installed, cx);
                         }
                         SetupUpdate::WineUpdate { local, remote } => {
-                            self.show_notice(crate::i18n::fmt::notice_wine_update_available(&remote, &local), cx);
+                            self.show_notice(crate::i18n::s().state.notice_wine_update_available(&local, &remote), cx);
                         }
                         SetupUpdate::Failed { reason } => {
                             self.setup_installing = false;
@@ -3328,7 +3328,7 @@ impl WhiskyApp {
             BridgeEvent::GptkImportFailed { reason } => {
                 self.gptk_importing = false;
                 self.gptk_error = Some(reason.clone());
-                self.show_notice(crate::i18n::fmt::notice_import_failed(&reason), cx);
+                self.show_notice(crate::i18n::s().state.notice_import_failed(&reason), cx);
             }
             BridgeEvent::GptkRemoveSucceeded(status) => {
                 self.gptk_status = Some(status);
@@ -3338,7 +3338,7 @@ impl WhiskyApp {
             }
             BridgeEvent::GptkRemoveFailed { reason } => {
                 self.gptk_importing = false;
-                self.show_notice(crate::i18n::fmt::notice_remove_failed(&reason), cx);
+                self.show_notice(crate::i18n::s().state.notice_remove_failed(&reason), cx);
             }
         }
         self.loading = self.compute_loading();
@@ -5128,7 +5128,7 @@ impl WhiskyApp {
     pub(crate) fn cycle_appearance(&mut self, cx: &mut Context<Self>) {
         let next = self.appearance.next();
         self.set_appearance(next, cx);
-        self.show_notice(crate::i18n::fmt::appearance_toggled(next.label()), cx);
+        self.show_notice(crate::i18n::s().theme.appearance_toggled(next.label()), cx);
     }
 
     pub(crate) fn set_language(
@@ -5142,7 +5142,7 @@ impl WhiskyApp {
         let _ = crate::i18n::set_language(mode);
         #[cfg(not(test))]
         crate::install_menus(cx);
-        self.show_notice(crate::i18n::fmt::language_changed(mode.label()), cx);
+        self.show_notice(crate::i18n::s().settings.language_changed(mode.label()), cx);
         cx.notify();
     }
 
@@ -5468,7 +5468,7 @@ impl WhiskyApp {
                 // what makes the shelf switch over without a restart.
                 this.cover_derivatives.borrow_mut().clear();
                 let failed = total.saturating_sub(succeeded);
-                this.show_notice(crate::i18n::fmt::cover_batch_done(succeeded, failed), cx);
+                this.show_notice(crate::i18n::s().settings.cover_batch_done(failed, succeeded), cx);
             })
             .ok();
         });
@@ -6826,7 +6826,7 @@ impl WhiskyApp {
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_else(|| path.to_string_lossy().into_owned());
         if !runnable.contains(&extension.as_str()) || !path.is_file() {
-            self.show_notice(crate::i18n::fmt::notice_cannot_run_file(&name), cx);
+            self.show_notice(crate::i18n::s().state.notice_cannot_run_file(&name), cx);
             return;
         }
         if self.demo {
@@ -6880,7 +6880,7 @@ impl WhiskyApp {
             return;
         }
         let container = bottle.path.clone();
-        self.show_notice(crate::i18n::fmt::notice_launching(&name), cx);
+        self.show_notice(crate::i18n::s().state.notice_launching(&name), cx);
         self.bridge.run_program(&container, path, name);
     }
 
@@ -7077,7 +7077,7 @@ impl WhiskyApp {
                         Ok(()) => this.show_notice(crate::i18n::s().state.disk_cache_cleared, cx),
                         Err(error) => {
                             this.show_notice(
-                                crate::i18n::fmt::notice_clear_cache_failed(&error.to_string()),
+                                crate::i18n::s().state.notice_clear_cache_failed(&error.to_string()),
                                 cx,
                             )
                         }
@@ -7203,7 +7203,7 @@ impl WhiskyApp {
                 return Err(crate::i18n::s().state.env_name_invalid_chars.to_owned());
             }
             if environment.insert(key.clone(), value).is_some() {
-                return Err(crate::i18n::fmt::duplicate_env_key(&key));
+                return Err(crate::i18n::s().state.duplicate_env_key(&key));
             }
         }
         Ok((container, executable, settings, arguments, environment))
@@ -8185,11 +8185,11 @@ impl WhiskyApp {
                     .unwrap_or_else(|| path.to_owned())
             });
         if let Some(entry_id) = entry_id {
-            self.show_notice(crate::i18n::fmt::notice_launching(&program_name), cx);
+            self.show_notice(crate::i18n::s().state.notice_launching(&program_name), cx);
             self.runtime.set_state(&entry_id, RuntimeState::Preparing);
             self.bridge.launch(&container, &entry_id, Some(path));
         } else if let Some(program) = program.filter(|p| p.available && !p.blocked) {
-            self.show_notice(crate::i18n::fmt::notice_launching(&program.name), cx);
+            self.show_notice(crate::i18n::s().state.notice_launching(&program.name), cx);
             self.bridge.run_program(&container, &program.path, &program.name);
         } else {
             self.show_notice(crate::i18n::s().state.program_unavailable_or_blocked, cx);
@@ -8345,7 +8345,7 @@ impl WhiskyApp {
                         .map(|n| n.to_string_lossy().into_owned())
                         .unwrap_or_else(|| path.to_owned())
                 });
-            self.show_notice(crate::i18n::fmt::notice_launching(&title), cx);
+            self.show_notice(crate::i18n::s().state.notice_launching(&title), cx);
             self.active_executables
                 .insert(picker.entry_id.clone(), path.to_owned());
             self.runtime
@@ -8480,7 +8480,7 @@ impl WhiskyApp {
                     .game(index)
                     .map(|g| g.title.clone())
                     .unwrap_or_default();
-                self.show_notice(crate::i18n::fmt::notice_launching(&title), cx);
+                self.show_notice(crate::i18n::s().state.notice_launching(&title), cx);
                 self.runtime.set_state(&entry_id, RuntimeState::Preparing);
                 self.bridge.launch(&container, &entry_id, None);
                 if !cfg!(target_os = "linux") && self.capture.panel_open
@@ -8793,14 +8793,10 @@ impl WhiskyApp {
                 {
                     let mut parts = Vec::new();
                     if self.studio_filter.is_active() {
-                        parts.push(crate::i18n::fmt::title_studio(
-                            &self.studio_filter.display_label(),
-                        ));
+                        parts.push(crate::i18n::s().library.title_studio(&self.studio_filter.display_label()));
                     }
                     if self.tag_filter.is_active() {
-                        parts.push(crate::i18n::fmt::title_tag(
-                            &self.tag_filter.display_label(),
-                        ));
+                        parts.push(crate::i18n::s().library.title_tag(&self.tag_filter.display_label()));
                     }
                     format!("{} · {}", strings.library.title, parts.join(" · ")).into()
                 } else {
@@ -10050,7 +10046,7 @@ impl WhiskyApp {
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_else(|| executable.to_owned());
-        self.show_notice(crate::i18n::fmt::notice_launching_entry(&title, &exe_name), cx);
+        self.show_notice(crate::i18n::s().state.notice_launching_entry(&exe_name, &title), cx);
         self.active_executables
             .insert(entry_id.to_owned(), executable.to_owned());
         self.runtime.set_state(entry_id, RuntimeState::Preparing);
@@ -10083,7 +10079,7 @@ fn entry_key(container: &str, entry_id: &str) -> String {
 /// applied — and `backend_from` names the one that could not run.
 fn backend_label(backend: Option<String>, backend_from: Option<String>) -> String {
     match (backend, backend_from) {
-        (Some(effective), Some(from)) => crate::i18n::fmt::engine_fallback(&effective, &from),
+        (Some(effective), Some(from)) => crate::i18n::s().state.engine_fallback(&effective, &from),
         (Some(effective), None) => effective,
         (None, _) => crate::i18n::s().runtime.by_launch_config.to_owned(),
     }

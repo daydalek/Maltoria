@@ -1,0 +1,1055 @@
+# Allowlist for scripts/i18n.py checks. Entries are keyed by file plus
+# literal or by bridge error code (never by line number).
+
+[banned_patterns]
+"bridge/dto.rs::crate::i18n::tr(" = { reason = "pending H2 migration", count = 2 }
+"bridge/supervisor.rs::crate::i18n::tr(" = { reason = "pending H2 migration", count = 29 }
+"bridge/supervisor.rs::match crate::i18n::locale()" = { reason = "pending H2 migration", count = 1 }
+"capture.rs::match crate::i18n::locale()" = { reason = "pending H2 migration", count = 1 }
+"config.rs::crate::i18n::tr(" = { reason = "pending H2 migration", count = 3 }
+"linux_hud.rs::crate::i18n::tr(" = { reason = "pending H2 migration", count = 1 }
+"linux_hud.rs::match crate::i18n::locale()" = { reason = "pending H2 migration", count = 1 }
+"platform.rs::match crate::i18n::locale()" = { reason = "pending H2 migration", count = 1 }
+"scan.rs::crate::i18n::tr(" = { reason = "pending H2 migration", count = 13 }
+"translation.rs::crate::i18n::tr(" = { reason = "pending H2 migration", count = 27 }
+"translation.rs::match crate::i18n::locale()" = { reason = "pending H2 migration", count = 9 }
+"upscale/linux.rs::crate::i18n::tr(" = { reason = "pending H2 migration", count = 6 }
+"views/bottle.rs::crate::i18n::tr(" = { reason = "pending H2 migration", count = 39 }
+"views/dialogs.rs::crate::i18n::tr(" = { reason = "pending H2 migration", count = 187 }
+"views/dialogs.rs::match crate::i18n::locale()" = { reason = "pending H2 migration", count = 24 }
+"views/translation.rs::match crate::i18n::locale()" = { reason = "pending H2 migration", count = 29 }
+
+[hardcoded]
+"bridge/dto.rs::ルートディレクトリ" = { reason = "pending H2 migration" }
+"bridge/dto.rs::ローカル編集" = { reason = "pending H2 migration" }
+"bridge/dto.rs::本地编辑" = { reason = "pending H2 migration" }
+"bridge/dto.rs::根目录" = { reason = "pending H2 migration" }
+"bridge/dto.rs::루트 폴더" = { reason = "pending H2 migration" }
+"bridge/dto.rs::수동 편집" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::Wine の更新確認に失敗しました" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::Wine ランタイムのインストールに失敗しました" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::Wine ランタイムをインストール中です" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::Wine 更新检查失败" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::Wine 运行时安装失败" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::Wine 运行时安装正在进行" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::Wine 런타임 설치가 진행 중입니다" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::Wine 런타임 설치에 실패했습니다" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::Wine 업데이트 확인에 실패했습니다" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::インストールがキャンセルされました" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::インストールタスクが進行中です" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::インポートを保存しましたが、一覧の更新に失敗しました：{}" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::ゲーム情報の更新に失敗したかキャンセルされました" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::コンテナプレフィックスが不完全または破損しています。コンテナページで「コンテナを修復」を実行してから再試行してください" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::コンテナ操作に失敗しました" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::ターミナル検出サービスが接続されると選択できます" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::デスクトップ統合サービスが接続されると設定できます" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::ブリッジ接続が切断されました。ゲーム情報を開き直して保存結果を確認してから再試行してください。" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::メタデータの同期が進行中です。しばらくしてから再試行してください" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::メタデータの同期に失敗しました" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::メタデータ検索に失敗しました" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::元数据同步失败" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::元数据同步正在进行，请稍后再试" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::元数据搜索失败" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::別のコンテナ操作が進行中です。しばらくしてから再試行してください" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::別の診断タスクが進行中です。しばらくしてから再試行してください" = { reason = "pending H2 migration", count = 4 }
+"bridge/supervisor.rs::另一个容器操作正在进行，请稍后再试" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::另一个诊断任务正在进行，请稍后再试" = { reason = "pending H2 migration", count = 4 }
+"bridge/supervisor.rs::同期がキャンセルされました" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::同步已取消" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::安装任务正在进行" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::安装已取消" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::容器前缀不完整或已损坏，请先在容器页执行「修复容器」，然后重试" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::容器操作失败" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::导入已保存，刷新列表失败：{}" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::当前主机尚未提供 Windows 程序运行服务" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::搜索已取消" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::操作がキャンセルされました" = { reason = "pending H2 migration", count = 2 }
+"bridge/supervisor.rs::操作已取消" = { reason = "pending H2 migration", count = 2 }
+"bridge/supervisor.rs::桌面集成服务接入后可配置" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::桥接连接中断；请重新打开资料检查保存结果后再重试。" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::検索がキャンセルされました" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::游戏资料更新失败或已取消" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::現在のホストでは Windows プログラム実行サービスを利用できません" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::终端发现服务接入后可选择" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::診断タスクに失敗しました" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::诊断任务失败" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::가져오기를 저장했으나 목록을 새로 고치지 못했습니다: {}" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::검색이 취소되었습니다" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::게임 정보 업데이트에 실패했거나 취소되었습니다" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::다른 진단 작업이 진행 중입니다. 잠시 후 다시 시도하세요" = { reason = "pending H2 migration", count = 4 }
+"bridge/supervisor.rs::다른 컨테이너 작업이 진행 중입니다. 잠시 후 다시 시도하세요" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::데스크톱 통합 서비스가 연결되면 설정할 수 있습니다" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::동기화가 취소되었습니다" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::메타데이터 검색에 실패했습니다" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::메타데이터 동기화가 진행 중입니다. 잠시 후 다시 시도하세요" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::메타데이터 동기화에 실패했습니다" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::브리지 연결이 끊어졌습니다. 저장 결과를 확인한 뒤 다시 시도하세요." = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::설치 작업이 이미 진행 중입니다" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::설치가 취소되었습니다" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::작업이 취소되었습니다" = { reason = "pending H2 migration", count = 2 }
+"bridge/supervisor.rs::진단 작업에 실패했습니다" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::컨테이너 작업에 실패했습니다" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::컨테이너 접두사가 불완전하거나 손상되었습니다. 컨테이너 페이지에서 컨테이너 복구를 실행한 후 다시 시도하세요" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::터미널 검색 서비스가 연결되면 선택할 수 있습니다" = { reason = "pending H2 migration" }
+"bridge/supervisor.rs::현재 호스트에서 Windows 프로그램 실행 서비스를 사용할 수 없습니다" = { reason = "pending H2 migration" }
+"capture.rs::无效的捕获预设数据：{error}" = { reason = "pending H2 migration" }
+"capture.rs::無効なキャプチャプリセットデータ：{error}" = { reason = "pending H2 migration" }
+"capture.rs::잘못된 캡처 프리셋 데이터: {error}" = { reason = "pending H2 migration" }
+"config.rs::其他" = { reason = "pending H2 migration" }
+"config.rs::启动器兼容性" = { reason = "pending H2 migration" }
+"config.rs::图形" = { reason = "pending H2 migration" }
+"config.rs::性能" = { reason = "pending H2 migration" }
+"config.rs::显示" = { reason = "pending H2 migration" }
+"config.rs::程序配置" = { reason = "pending H2 migration" }
+"config.rs::超分" = { reason = "pending H2 migration" }
+"config.rs::输入与控制器" = { reason = "pending H2 migration" }
+"config.rs::退出与清理" = { reason = "pending H2 migration" }
+"config.rs::音频" = { reason = "pending H2 migration" }
+"library_view.rs::未知厂商" = { reason = "pending H2 migration" }
+"linux_hud.rs::フローティングキャプチャウィンドウを開けません：{error}" = { reason = "pending H2 migration" }
+"linux_hud.rs::无法打开悬浮捕获窗：{error}" = { reason = "pending H2 migration" }
+"linux_hud.rs::플로팅 캡처 창을 열 수 없습니다: {error}" = { reason = "pending H2 migration" }
+"main.rs::Maltoria" = { reason = "Product name (proper noun)." }
+"main.rs::人物" = { reason = "pending H2 migration" }
+"main.rs::作品的中文名称" = { reason = "pending H2 migration", count = 2 }
+"main.rs::日本語" = { reason = "Native language name (always shown natively)." }
+"main.rs::来自所选平台的简介。" = { reason = "pending H2 migration" }
+"main.rs::简体中文" = { reason = "Native language name (always shown natively)." }
+"main.rs::한국어" = { reason = "Native language name (always shown natively)." }
+"metadata_editor.rs::月幕" = { reason = "Metadata source proper noun." }
+"onboarding.rs::人物" = { reason = "pending H2 migration" }
+"onboarding.rs::名称与基本信息" = { reason = "pending H2 migration" }
+"onboarding.rs::封面" = { reason = "pending H2 migration" }
+"onboarding.rs::月幕" = { reason = "Metadata source proper noun." }
+"onboarding.rs::简介" = { reason = "pending H2 migration" }
+"preferences.rs::列表" = { reason = "pending H2 migration" }
+"preferences.rs::大幅精选画面与分类游戏架" = { reason = "pending H2 migration" }
+"preferences.rs::封面墙与游戏详情并排呈现" = { reason = "pending H2 migration" }
+"preferences.rs::按行查看游戏与游玩记录" = { reason = "pending H2 migration" }
+"preferences.rs::沉浸" = { reason = "pending H2 migration" }
+"preferences.rs::画廊" = { reason = "pending H2 migration" }
+"preferences.rs::紧凑排列，快速浏览全部封面" = { reason = "pending H2 migration" }
+"preferences.rs::网格" = { reason = "pending H2 migration" }
+"program_settings.rs::日本語" = { reason = "Native language name (always shown natively)." }
+"program_settings.rs::简体中文" = { reason = "Native language name (always shown natively)." }
+"program_settings.rs::繁體中文" = { reason = "pending H2 migration" }
+"program_settings.rs::한국어" = { reason = "Native language name (always shown natively)." }
+"scan.rs::キャンセル中…" = { reason = "pending H2 migration", count = 2 }
+"scan.rs::キャンセル済み" = { reason = "pending H2 migration", count = 2 }
+"scan.rs::スキャン中…" = { reason = "pending H2 migration", count = 2 }
+"scan.rs::スキャン失敗" = { reason = "pending H2 migration", count = 2 }
+"scan.rs::スキャン完了" = { reason = "pending H2 migration", count = 2 }
+"scan.rs::已取消" = { reason = "pending H2 migration", count = 2 }
+"scan.rs::待機中…" = { reason = "pending H2 migration", count = 2 }
+"scan.rs::扫描失败" = { reason = "pending H2 migration", count = 2 }
+"scan.rs::扫描完成" = { reason = "pending H2 migration", count = 2 }
+"scan.rs::排队中…" = { reason = "pending H2 migration", count = 2 }
+"scan.rs::正在取消…" = { reason = "pending H2 migration", count = 2 }
+"scan.rs::正在扫描…" = { reason = "pending H2 migration", count = 2 }
+"scan.rs::正在载入条目…" = { reason = "pending H2 migration" }
+"scan.rs::項目を読み込み中…" = { reason = "pending H2 migration" }
+"scan.rs::대기 중…" = { reason = "pending H2 migration", count = 2 }
+"scan.rs::스캔 실패" = { reason = "pending H2 migration", count = 2 }
+"scan.rs::스캔 완료" = { reason = "pending H2 migration", count = 2 }
+"scan.rs::스캔 중…" = { reason = "pending H2 migration", count = 2 }
+"scan.rs::취소 중…" = { reason = "pending H2 migration", count = 2 }
+"scan.rs::취소됨" = { reason = "pending H2 migration", count = 2 }
+"scan.rs::항목 불러오는 중…" = { reason = "pending H2 migration" }
+"state.rs::月幕" = { reason = "Metadata source proper noun." }
+"translation.rs::Anthropic Messages 接口，适用于 Claude 系列模型。" = { reason = "pending H2 migration" }
+"translation.rs::Anthropic 官方 Claude 接口，擅长长对话语境与角色口吻保持。" = { reason = "pending H2 migration" }
+"translation.rs::DeepL 专用机器翻译引擎，无需指定模型 ID。" = { reason = "pending H2 migration" }
+"translation.rs::DeepL 专用机器翻译（Free 版可将端点改为 https://api-free.deepl.com）。" = { reason = "pending H2 migration" }
+"translation.rs::DeepSeek 官方 OpenAI 兼容接口，日中对白翻译速度快、成本低。" = { reason = "pending H2 migration" }
+"translation.rs::Google Gemini API（v1beta），支持 Gemini 系列快速翻译与思考深度控制。" = { reason = "pending H2 migration" }
+"translation.rs::Google Gemini 官方 API，Flash 系列响应延迟极低。" = { reason = "pending H2 migration" }
+"translation.rs::Ollama（本地）" = { reason = "pending H2 migration" }
+"translation.rs::OpenAI 官方 API，支持保存后在线发现模型并按模型调整思考程度。" = { reason = "pending H2 migration" }
+"translation.rs::おすすめ・オフライン" = { reason = "pending H2 migration" }
+"translation.rs::ブリッジ接続が切断されました：{reason}" = { reason = "pending H2 migration" }
+"translation.rs::プロキシ / 自前" = { reason = "pending H2 migration" }
+"translation.rs::マルチモデル" = { reason = "pending H2 migration" }
+"translation.rs::专业机翻" = { reason = "pending H2 migration", count = 2 }
+"translation.rs::中转 / 自建" = { reason = "pending H2 migration", count = 2 }
+"translation.rs::使用单个 API Key 聚合多家主流模型，保存后点击「发现模型」即可挑选。" = { reason = "pending H2 migration" }
+"translation.rs::公式 API" = { reason = "pending H2 migration" }
+"translation.rs::关闭" = { reason = "pending H2 migration" }
+"translation.rs::兼容旧版 /completions 文本补全协议。" = { reason = "pending H2 migration" }
+"translation.rs::兼容旧版 /completions 纯文本补全接口的自定义端点。" = { reason = "pending H2 migration" }
+"translation.rs::内置 PLaMo 3" = { reason = "pending H2 migration", count = 2 }
+"translation.rs::内置 PLaMo 3 本地翻译" = { reason = "pending H2 migration" }
+"translation.rs::内置本地模型 (PLaMo 3)" = { reason = "pending H2 migration" }
+"translation.rs::内蔵 PLaMo 3 ローカル翻訳" = { reason = "pending H2 migration" }
+"translation.rs::多模型聚合" = { reason = "pending H2 migration", count = 2 }
+"translation.rs::官方 API" = { reason = "pending H2 migration", count = 2 }
+"translation.rs::接続テスト成功：{s}" = { reason = "pending H2 migration" }
+"translation.rs::推荐 · 离线" = { reason = "pending H2 migration", count = 2 }
+"translation.rs::无效的删除缓存响应：{error}" = { reason = "pending H2 migration" }
+"translation.rs::无效的提供商响应：{error}" = { reason = "pending H2 migration" }
+"translation.rs::无效的提供商数据：{error}" = { reason = "pending H2 migration" }
+"translation.rs::无效的本地模型状态：{error}" = { reason = "pending H2 migration" }
+"translation.rs::无效的清空缓存响应：{error}" = { reason = "pending H2 migration" }
+"translation.rs::无效的缓存列表数据：{error}" = { reason = "pending H2 migration" }
+"translation.rs::无效的翻译设置：{error}" = { reason = "pending H2 migration" }
+"translation.rs::旧版补全" = { reason = "pending H2 migration", count = 2 }
+"translation.rs::旧版補完" = { reason = "pending H2 migration" }
+"translation.rs::标准 /chat/completions 接口，兼容 OpenAI、DeepSeek、OpenRouter 及多数自建或中转端点。" = { reason = "pending H2 migration" }
+"translation.rs::桥接连接中断：{reason}" = { reason = "pending H2 migration" }
+"translation.rs::模型默认" = { reason = "pending H2 migration" }
+"translation.rs::無効なキャッシュ一覧データ：{error}" = { reason = "pending H2 migration" }
+"translation.rs::無効なキャッシュ削除応答：{error}" = { reason = "pending H2 migration" }
+"translation.rs::無効なキャッシュ消去応答：{error}" = { reason = "pending H2 migration" }
+"translation.rs::無効なプロバイダーデータ：{error}" = { reason = "pending H2 migration" }
+"translation.rs::無効なプロバイダー応答：{error}" = { reason = "pending H2 migration" }
+"translation.rs::無効なローカルモデル状態：{error}" = { reason = "pending H2 migration" }
+"translation.rs::無効な翻訳設定：{error}" = { reason = "pending H2 migration" }
+"translation.rs::由 Maltoria 自动管理本地 llama.cpp 推理进程（Metal / Vulkan），离线零费用，首次下载自动校验 SHA-256。" = { reason = "pending H2 migration" }
+"translation.rs::自定义 OpenAI 兼容" = { reason = "pending H2 migration" }
+"translation.rs::连接本机已运行的 Ollama（默认 11434 端口），支持一键发现已拉取模型。" = { reason = "pending H2 migration" }
+"translation.rs::连接本机或局域网运行的 Ollama 服务，支持本地开源模型且通常无需 API 密钥。" = { reason = "pending H2 migration" }
+"translation.rs::连接测试成功：{s}" = { reason = "pending H2 migration" }
+"translation.rs::适配 OneAPI、NewAPI、cli-proxy、vLLM 或 LM Studio 等兼容服务。" = { reason = "pending H2 migration" }
+"translation.rs::零配置离线日语翻译引擎，自动托管 llama.cpp（Metal / Vulkan）并支持断点续传。" = { reason = "pending H2 migration" }
+"translation.rs::高コスパ" = { reason = "pending H2 migration" }
+"translation.rs::高性价比" = { reason = "pending H2 migration", count = 2 }
+"translation.rs::高精度翻訳" = { reason = "pending H2 migration" }
+"translation.rs::가성비" = { reason = "pending H2 migration" }
+"translation.rs::공식 API" = { reason = "pending H2 migration" }
+"translation.rs::내장 PLaMo 3 로컬 번역" = { reason = "pending H2 migration" }
+"translation.rs::레거시 완성" = { reason = "pending H2 migration" }
+"translation.rs::멀티 모델" = { reason = "pending H2 migration" }
+"translation.rs::브리지 연결이 끊어졌습니다: {reason}" = { reason = "pending H2 migration" }
+"translation.rs::연결 테스트 성공: {s}" = { reason = "pending H2 migration" }
+"translation.rs::잘못된 로컬 모델 상태: {error}" = { reason = "pending H2 migration" }
+"translation.rs::잘못된 번역 설정: {error}" = { reason = "pending H2 migration" }
+"translation.rs::잘못된 제공자 데이터: {error}" = { reason = "pending H2 migration" }
+"translation.rs::잘못된 제공자 응답: {error}" = { reason = "pending H2 migration" }
+"translation.rs::잘못된 캐시 목록 데이터: {error}" = { reason = "pending H2 migration" }
+"translation.rs::잘못된 캐시 비우기 응답: {error}" = { reason = "pending H2 migration" }
+"translation.rs::잘못된 캐시 삭제 응답: {error}" = { reason = "pending H2 migration" }
+"translation.rs::전문 번역" = { reason = "pending H2 migration" }
+"translation.rs::추천 · 오프라인" = { reason = "pending H2 migration" }
+"translation.rs::프록시 / 자체 호스팅" = { reason = "pending H2 migration" }
+"upscale/linux.rs::CPU 互換モード" = { reason = "pending H2 migration" }
+"upscale/linux.rs::CPU 兼容模式" = { reason = "pending H2 migration" }
+"upscale/linux.rs::CPU 호환 모드" = { reason = "pending H2 migration" }
+"upscale/linux.rs::カバーを処理中" = { reason = "pending H2 migration" }
+"upscale/linux.rs::コンポーネントが見つからないか破損しています" = { reason = "pending H2 migration" }
+"upscale/linux.rs::コンポーネントはアプリに同梱され、初回使用時に検証されます" = { reason = "pending H2 migration" }
+"upscale/linux.rs::コンポーネント準備完了" = { reason = "pending H2 migration" }
+"upscale/linux.rs::正在处理封面" = { reason = "pending H2 migration" }
+"upscale/linux.rs::组件已就绪" = { reason = "pending H2 migration" }
+"upscale/linux.rs::组件缺失或损坏" = { reason = "pending H2 migration" }
+"upscale/linux.rs::组件随应用提供，首次使用时校验" = { reason = "pending H2 migration" }
+"upscale/linux.rs::超分失败，保留原图" = { reason = "pending H2 migration" }
+"upscale/linux.rs::超解像に失敗したため元画像を保持します" = { reason = "pending H2 migration" }
+"upscale/linux.rs::구성 요소 준비됨" = { reason = "pending H2 migration" }
+"upscale/linux.rs::구성 요소가 없거나 손상됨" = { reason = "pending H2 migration" }
+"upscale/linux.rs::구성 요소는 앱에 포함되어 있으며 첫 사용 시 검증됩니다" = { reason = "pending H2 migration" }
+"upscale/linux.rs::업스케일 실패, 원본 유지" = { reason = "pending H2 migration" }
+"upscale/linux.rs::커버 처리 중" = { reason = "pending H2 migration" }
+"views/bottle.rs::DLL オーバーライドを編集…" = { reason = "pending H2 migration" }
+"views/bottle.rs::DLL 재정의 편집…" = { reason = "pending H2 migration" }
+"views/bottle.rs::Retina モード" = { reason = "pending H2 migration" }
+"views/bottle.rs::Retina 模式" = { reason = "pending H2 migration" }
+"views/bottle.rs::Retina 모드" = { reason = "pending H2 migration" }
+"views/bottle.rs::Visual C++ ランタイムを導入…" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::Visual C++ 런타임 설치…" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::オーディオテスト" = { reason = "pending H2 migration" }
+"views/bottle.rs::オーディオ診断…" = { reason = "pending H2 migration" }
+"views/bottle.rs::ガイド付き診断を開始…" = { reason = "pending H2 migration" }
+"views/bottle.rs::ゲーム実行中にシステムによるアプリの一時停止を防ぎます。" = { reason = "pending H2 migration" }
+"views/bottle.rs::コンテナを修復…" = { reason = "pending H2 migration" }
+"views/bottle.rs::コンテナサイズ" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::コンパイル済みシェーダーをキャッシュして再コンパイルを減らします。" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::コンポーネントを管理…" = { reason = "pending H2 migration" }
+"views/bottle.rs::シェーダーキャッシュを削除…" = { reason = "pending H2 migration" }
+"views/bottle.rs::システム既定 · 48,000 Hz · ステレオ" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::ストレージと整理" = { reason = "pending H2 migration" }
+"views/bottle.rs::ネイティブ優先、ビルトイン代替" = { reason = "pending H2 migration" }
+"views/bottle.rs::ビルド番号" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::一般的なゲームランチャー向けの互換設定を使用します。" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::下次启动时生效。" = { reason = "pending H2 migration" }
+"views/bottle.rs::为常见游戏启动器使用兼容设置。" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::依存コンポーネント" = { reason = "pending H2 migration" }
+"views/bottle.rs::依赖组件" = { reason = "pending H2 migration" }
+"views/bottle.rs::修复容器…" = { reason = "pending H2 migration" }
+"views/bottle.rs::内部版本号" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::原生优先，内建后备" = { reason = "pending H2 migration" }
+"views/bottle.rs::存储与清理" = { reason = "pending H2 migration" }
+"views/bottle.rs::安装 Visual C++ 运行库…" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::容器大小" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::导出诊断报告…" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::屏幕分辨率（DPI）" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::开始引导式故障排查…" = { reason = "pending H2 migration" }
+"views/bottle.rs::手动" = { reason = "pending H2 migration" }
+"views/bottle.rs::手動" = { reason = "pending H2 migration" }
+"views/bottle.rs::既定の出力デバイス" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::次回起動時から適用されます。" = { reason = "pending H2 migration" }
+"views/bottle.rs::测试音频" = { reason = "pending H2 migration" }
+"views/bottle.rs::清理着色器缓存…" = { reason = "pending H2 migration" }
+"views/bottle.rs::游戏运行期间防止应用被系统暂停。" = { reason = "pending H2 migration" }
+"views/bottle.rs::画面解像度 (DPI)" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::简单" = { reason = "pending H2 migration", count = 4 }
+"views/bottle.rs::管理组件…" = { reason = "pending H2 migration" }
+"views/bottle.rs::簡易" = { reason = "pending H2 migration", count = 4 }
+"views/bottle.rs::系统默认输出 · 48,000 Hz · 立体声" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::缓存编译后的着色器，减少重复编译。" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::编辑 DLL 覆盖…" = { reason = "pending H2 migration" }
+"views/bottle.rs::設定モード" = { reason = "pending H2 migration", count = 4 }
+"views/bottle.rs::診断" = { reason = "pending H2 migration" }
+"views/bottle.rs::診断レポートをエクスポート…" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::詳細" = { reason = "pending H2 migration", count = 4 }
+"views/bottle.rs::詳細グラフィックス設定…" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::设置模式" = { reason = "pending H2 migration", count = 4 }
+"views/bottle.rs::诊断" = { reason = "pending H2 migration" }
+"views/bottle.rs::音频故障排查…" = { reason = "pending H2 migration" }
+"views/bottle.rs::高级" = { reason = "pending H2 migration", count = 4 }
+"views/bottle.rs::高级图形设置…" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::默认输出设备" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::간단히" = { reason = "pending H2 migration", count = 4 }
+"views/bottle.rs::게임 실행 중 시스템이 앱을 일시 중단하지 않도록 방지합니다." = { reason = "pending H2 migration" }
+"views/bottle.rs::고급" = { reason = "pending H2 migration", count = 4 }
+"views/bottle.rs::고급 그래픽 설정…" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::구성 요소 관리…" = { reason = "pending H2 migration" }
+"views/bottle.rs::기본 출력 장치" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::네이티브 우선, 내장 대체" = { reason = "pending H2 migration" }
+"views/bottle.rs::다음 실행부터 적용됩니다." = { reason = "pending H2 migration" }
+"views/bottle.rs::빌드 버전" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::설정 모드" = { reason = "pending H2 migration", count = 4 }
+"views/bottle.rs::셰이더 캐시 지우기…" = { reason = "pending H2 migration" }
+"views/bottle.rs::수동" = { reason = "pending H2 migration" }
+"views/bottle.rs::시스템 기본값 · 48,000 Hz · 스테레오" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::안내형 문제 해결 시작…" = { reason = "pending H2 migration" }
+"views/bottle.rs::오디오 문제 해결…" = { reason = "pending H2 migration" }
+"views/bottle.rs::오디오 테스트" = { reason = "pending H2 migration" }
+"views/bottle.rs::일반 게임 런처에 호환 설정을 사용합니다." = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::저장 공간 및 정리" = { reason = "pending H2 migration" }
+"views/bottle.rs::종속 구성 요소" = { reason = "pending H2 migration" }
+"views/bottle.rs::진단" = { reason = "pending H2 migration" }
+"views/bottle.rs::진단 보고서 내보내기…" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::컨테이너 복구…" = { reason = "pending H2 migration" }
+"views/bottle.rs::컨테이너 크기" = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::컴파일된 셰이더를 캐시하여 재컴파일을 줄입니다." = { reason = "pending H2 migration", count = 2 }
+"views/bottle.rs::화면 해상도 (DPI)" = { reason = "pending H2 migration", count = 2 }
+"views/dialogs.rs:: · macOS 参考記録" = { reason = "pending H2 migration" }
+"views/dialogs.rs:: · macOS 参考记录" = { reason = "pending H2 migration" }
+"views/dialogs.rs:: · macOS 참고 기록" = { reason = "pending H2 migration" }
+"views/dialogs.rs::/路径/游戏.exe" = { reason = "pending H2 migration" }
+"views/dialogs.rs::/경로/game.exe" = { reason = "pending H2 migration" }
+"views/dialogs.rs::1. 出力デバイス" = { reason = "pending H2 migration" }
+"views/dialogs.rs::1. 输出设备" = { reason = "pending H2 migration" }
+"views/dialogs.rs::1. 출력 장치" = { reason = "pending H2 migration" }
+"views/dialogs.rs::2. テスト方式" = { reason = "pending H2 migration" }
+"views/dialogs.rs::2. 测试方式" = { reason = "pending H2 migration" }
+"views/dialogs.rs::2. 테스트 방식" = { reason = "pending H2 migration" }
+"views/dialogs.rs::CJK フォント" = { reason = "pending H2 migration" }
+"views/dialogs.rs::CJK 글꼴" = { reason = "pending H2 migration" }
+"views/dialogs.rs::Copyright © 2023–2026 Whisky & Maltoria Contributors" = { reason = "Copyright attribution line." }
+"views/dialogs.rs::DLL オーバーライド" = { reason = "pending H2 migration" }
+"views/dialogs.rs::DLL 覆盖" = { reason = "pending H2 migration" }
+"views/dialogs.rs::DLL 재정의" = { reason = "pending H2 migration" }
+"views/dialogs.rs::GameDB 推奨設定" = { reason = "pending H2 migration" }
+"views/dialogs.rs::GameDB 推荐配置" = { reason = "pending H2 migration" }
+"views/dialogs.rs::GameDB 条目" = { reason = "pending H2 migration" }
+"views/dialogs.rs::GameDB 設定" = { reason = "pending H2 migration" }
+"views/dialogs.rs::GameDB 設定リファレンス" = { reason = "pending H2 migration" }
+"views/dialogs.rs::GameDB 配置" = { reason = "pending H2 migration" }
+"views/dialogs.rs::GameDB 配置参考" = { reason = "pending H2 migration" }
+"views/dialogs.rs::GameDB 項目" = { reason = "pending H2 migration" }
+"views/dialogs.rs::GameDB 권장 설정" = { reason = "pending H2 migration" }
+"views/dialogs.rs::GameDB 설정" = { reason = "pending H2 migration" }
+"views/dialogs.rs::GameDB 설정 참고" = { reason = "pending H2 migration" }
+"views/dialogs.rs::GameDB 항목" = { reason = "pending H2 migration" }
+"views/dialogs.rs::ID / URL で連携" = { reason = "pending H2 migration" }
+"views/dialogs.rs::ID / URL로 연결" = { reason = "pending H2 migration" }
+"views/dialogs.rs::PotatoVN & 元数据公开接口" = { reason = "pending H2 migration", count = 2 }
+"views/dialogs.rs::Rosetta 2 をインストール中…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::Rosetta 2 설치 중…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::Windows 兼容运行时，以及 msync、DXVK-macOS、DXMT、MoltenVK、D3DMetal 等图形与同步兼容组件。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::Windows 运行库组件安装脚本与 CAB 压缩包解包支持。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::Wine WinMM 440 Hz テストトーン" = { reason = "pending H2 migration" }
+"views/dialogs.rs::Wine WinMM 440 Hz 测试音" = { reason = "pending H2 migration" }
+"views/dialogs.rs::Wine WinMM 440 Hz 테스트 톤" = { reason = "pending H2 migration" }
+"views/dialogs.rs::Wine オーディオテストを開始中…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::Wine オーディオドライバ設定を確認してください" = { reason = "pending H2 migration" }
+"views/dialogs.rs::Wine ランタイムをダウンロード中…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::Wine 런타임 다운로드 중…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::Wine 오디오 드라이버 설정 확인" = { reason = "pending H2 migration" }
+"views/dialogs.rs::Wine 오디오 테스트 시작 중…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::gpui-kit / Zed GPUI & Rust 生态依赖" = { reason = "pending H2 migration", count = 2 }
+"views/dialogs.rs::{base} · 対象プロセス未記憶" = { reason = "pending H2 migration" }
+"views/dialogs.rs::{base} · 尚未记忆目标进程" = { reason = "pending H2 migration" }
+"views/dialogs.rs::{base} · 記憶プロセス：{exe}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::{base} · 记忆目标进程：{exe}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::{base} · 기억된 대상 프로세스 없음" = { reason = "pending H2 migration" }
+"views/dialogs.rs::{base} · 기억된 프로세스: {exe}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::{n} 個のエントリーを選択中。起動時に選択パネルを表示します（↑↓ 移動、Space 選択、Cmd/Ctrl+Enter 確定）。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::{n} 個の起動エントリーを設定済み（起動時に毎回選択）" = { reason = "pending H2 migration" }
+"views/dialogs.rs::{n}개 실행 진입점 설정됨 (실행 시 선택 표시)" = { reason = "pending H2 migration" }
+"views/dialogs.rs::{n}개 진입점 선택됨. 실행 시 빠른 선택 패널이 열립니다(↑↓ 이동, Space 선택, Cmd/Ctrl+Enter 확인)." = { reason = "pending H2 migration" }
+"views/dialogs.rs::{pct:.0}% 匹配" = { reason = "pending H2 migration" }
+"views/dialogs.rs::{pct:.0}% 일치" = { reason = "pending H2 migration" }
+"views/dialogs.rs::✓ 下書きに反映済み" = { reason = "pending H2 migration" }
+"views/dialogs.rs::✓ 已在草稿" = { reason = "pending H2 migration" }
+"views/dialogs.rs::✓ 초안에 적용됨" = { reason = "pending H2 migration" }
+"views/dialogs.rs::このカテゴリにはインストール済みコンポーネントがありません。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::このコンテナで利用可能なコンポーネントカタログがありません。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::このフォルダ内に .exe がありません" = { reason = "pending H2 migration", count = 2 }
+"views/dialogs.rs::このフォルダ内の実行ファイルを再帰スキャン中…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::この作品のキャラクター情報は返されませんでした。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::どのような問題が発生していますか？" = { reason = "pending H2 migration" }
+"views/dialogs.rs::インストールの進行状況" = { reason = "pending H2 migration" }
+"views/dialogs.rs::インストールをキャンセル" = { reason = "pending H2 migration" }
+"views/dialogs.rs::インストール中…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::インストール済みのみ" = { reason = "pending H2 migration" }
+"views/dialogs.rs::インストール済みコンポーネントはまだ読み込まれていません。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::インストール済みコンポーネントを読み込み中…" = { reason = "pending H2 migration", count = 2 }
+"views/dialogs.rs::エントリーを保存 ({n})" = { reason = "pending H2 migration" }
+"views/dialogs.rs::オフにするとスキャンフォルダ内のゲームのみ表示します。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::オフの場合はコンテナ設定を継承します。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::オンにすると複数の .exe を起動エントリーとして登録できます。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::オンラインプラットフォーム未連携" = { reason = "pending H2 migration" }
+"views/dialogs.rs::オンライン検索と連携" = { reason = "pending H2 migration" }
+"views/dialogs.rs::オーディオのトラブルシューティング…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::オーディオデバイス" = { reason = "pending H2 migration" }
+"views/dialogs.rs::オーディオ出力の確認" = { reason = "pending H2 migration" }
+"views/dialogs.rs::オーバーライドを追加" = { reason = "pending H2 migration" }
+"views/dialogs.rs::カスタムカバー" = { reason = "pending H2 migration" }
+"views/dialogs.rs::カテゴリ別オーバーライド（既定は上のソースを継承）" = { reason = "pending H2 migration" }
+"views/dialogs.rs::ガイド付きトラブルシューティング" = { reason = "pending H2 migration" }
+"views/dialogs.rs::キャッシュしてディスクに保存" = { reason = "pending H2 migration" }
+"views/dialogs.rs::キャラクター · {}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::キャラクタースナップショットがありません。作品を連携・保存後、左下の「保存済みの連携を更新」で取得できます。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::クラッシュログ" = { reason = "pending H2 migration" }
+"views/dialogs.rs::クリックして選択" = { reason = "pending H2 migration" }
+"views/dialogs.rs::グラフィックスデバッグ" = { reason = "pending H2 migration" }
+"views/dialogs.rs::グラフィックスバックエンド" = { reason = "pending H2 migration", count = 3 }
+"views/dialogs.rs::ゲームが起動しない" = { reason = "pending H2 migration" }
+"views/dialogs.rs::ゲームフォルダ" = { reason = "pending H2 migration" }
+"views/dialogs.rs::コンソールと実行履歴" = { reason = "pending H2 migration" }
+"views/dialogs.rs::コンテナまたはインポートエラー" = { reason = "pending H2 migration" }
+"views/dialogs.rs::コンテナフォルダ" = { reason = "pending H2 migration" }
+"views/dialogs.rs::コンテナメタデータ" = { reason = "pending H2 migration" }
+"views/dialogs.rs::コンポーネントを検索" = { reason = "pending H2 migration", count = 2 }
+"views/dialogs.rs::コンポーネントカタログはまだ読み込まれていません。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::コンポーネントカタログを読み込み中…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::サイズ不明" = { reason = "pending H2 migration" }
+"views/dialogs.rs::サードパーティ表記" = { reason = "pending H2 migration" }
+"views/dialogs.rs::システム情報と最近のログを読み込み中…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::システム既定出力" = { reason = "pending H2 migration" }
+"views/dialogs.rs::シーン間キャッシュをオフ" = { reason = "pending H2 migration" }
+"views/dialogs.rs::スキャンをキャンセル" = { reason = "pending H2 migration" }
+"views/dialogs.rs::スキャンフォルダ" = { reason = "pending H2 migration", count = 4 }
+"views/dialogs.rs::スキャンフォルダがまだありません" = { reason = "pending H2 migration" }
+"views/dialogs.rs::スキャンフォルダがまだ読み込まれていません。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::スキャンフォルダを読み込み中…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::スキャン失敗" = { reason = "pending H2 migration" }
+"views/dialogs.rs::スナップショットなし · 保存後に更新" = { reason = "pending H2 migration" }
+"views/dialogs.rs::ソース方針とキャラクタープレビュー" = { reason = "pending H2 migration" }
+"views/dialogs.rs::タイトルを手動編集" = { reason = "pending H2 migration" }
+"views/dialogs.rs::タイトル名で検索するか作品 ID / URL を貼り付けて連携します。変更は下書きのみ更新され、「情報を保存」で確定します。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::ダウンロードの整合性を検証中…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::テストトーンが聞こえれば Wine オーディオは正常です。聞こえない場合は出力デバイスとオーディオドライバを確認してください。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::テストトーン再生中…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::テスト結果" = { reason = "pending H2 migration" }
+"views/dialogs.rs::テスト音声を再生" = { reason = "pending H2 migration" }
+"views/dialogs.rs::ディスプレイに合わせる" = { reason = "pending H2 migration" }
+"views/dialogs.rs::デフォルトカバーに戻す" = { reason = "pending H2 migration" }
+"views/dialogs.rs::トラブルシューティング…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::ネイティブ優先、内蔵フォールバック" = { reason = "pending H2 migration", count = 2 }
+"views/dialogs.rs::パスを追加" = { reason = "pending H2 migration" }
+"views/dialogs.rs::ファイル権限" = { reason = "pending H2 migration" }
+"views/dialogs.rs::ファイル権限または空き容量" = { reason = "pending H2 migration" }
+"views/dialogs.rs::フォルダを追加" = { reason = "pending H2 migration", count = 2 }
+"views/dialogs.rs::フォルダを選択…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::フォルダ自体を 1 つのゲームとして登録し、サブフォルダはスキャンしません" = { reason = "pending H2 migration" }
+"views/dialogs.rs::プリフライトデータを収集してチェックを実行中…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::プレイ可能" = { reason = "pending H2 migration" }
+"views/dialogs.rs::プログラム固有の上書き" = { reason = "pending H2 migration" }
+"views/dialogs.rs::ホストとコンテナ情報を収集" = { reason = "pending H2 migration" }
+"views/dialogs.rs::ホスト環境情報" = { reason = "pending H2 migration" }
+"views/dialogs.rs::メイン" = { reason = "pending H2 migration" }
+"views/dialogs.rs::メタデータを自動取得" = { reason = "pending H2 migration" }
+"views/dialogs.rs::メタデータソースが有効になっていません。設定で有効にしてから検索または更新してください。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::ライセンス (GPLv3)" = { reason = "pending H2 migration" }
+"views/dialogs.rs::ランタイムを展開してインストール中…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::ローカル GameDB と照合中…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::ローカル GameDB に一致する項目がありません。オンラインメタデータや手動設定をご利用ください。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::ローカルのメタデータ設定を読み込み中…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::ローカル画像を選択…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::一致するコンポーネントがありません。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::一致度 {pct:.0}%" = { reason = "pending H2 migration" }
+"views/dialogs.rs::下書きへ連携" = { reason = "pending H2 migration" }
+"views/dialogs.rs::不可玩" = { reason = "pending H2 migration" }
+"views/dialogs.rs::不合格" = { reason = "pending H2 migration" }
+"views/dialogs.rs::中日韩字体" = { reason = "pending H2 migration" }
+"views/dialogs.rs::主机环境信息" = { reason = "pending H2 migration" }
+"views/dialogs.rs::主程序" = { reason = "pending H2 migration" }
+"views/dialogs.rs::仅显示已安装" = { reason = "pending H2 migration" }
+"views/dialogs.rs::今すぐスキャン" = { reason = "pending H2 migration" }
+"views/dialogs.rs::今回のセッションのみキャッシュ" = { reason = "pending H2 migration" }
+"views/dialogs.rs::作成済み：{path}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::保存に失敗しました" = { reason = "pending H2 migration" }
+"views/dialogs.rs::保存入口 ({n})" = { reason = "pending H2 migration" }
+"views/dialogs.rs::保存失败" = { reason = "pending H2 migration" }
+"views/dialogs.rs::关联到草稿" = { reason = "pending H2 migration" }
+"views/dialogs.rs::关闭后游戏库只显示扫描文件夹中的游戏。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::关闭时继承容器设置。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::关闭跨场景缓存" = { reason = "pending H2 migration" }
+"views/dialogs.rs::内建优先，原生后备" = { reason = "pending H2 migration" }
+"views/dialogs.rs::内蔵優先、ネイティブフォールバック" = { reason = "pending H2 migration" }
+"views/dialogs.rs::再スキャン" = { reason = "pending H2 migration" }
+"views/dialogs.rs::再帰スキャン" = { reason = "pending H2 migration" }
+"views/dialogs.rs::再次扫描" = { reason = "pending H2 migration" }
+"views/dialogs.rs::再読み込み" = { reason = "pending H2 migration" }
+"views/dialogs.rs::分析运行日志" = { reason = "pending H2 migration" }
+"views/dialogs.rs::分类例外（默认跟随上方来源）" = { reason = "pending H2 migration" }
+"views/dialogs.rs::利用可能なコンポーネント" = { reason = "pending H2 migration", count = 5 }
+"views/dialogs.rs::前回の実行" = { reason = "pending H2 migration" }
+"views/dialogs.rs::加载顺序" = { reason = "pending H2 migration" }
+"views/dialogs.rs::动态 Anime4K／静态 AnimeVideo-v3" = { reason = "pending H2 migration" }
+"views/dialogs.rs::动态 Anime4K／静态 Real-CUGAN" = { reason = "pending H2 migration" }
+"views/dialogs.rs::动态 MetalFX／静态 AnimeVideo-v3" = { reason = "pending H2 migration" }
+"views/dialogs.rs::动态 MetalFX／静态 Real-CUGAN" = { reason = "pending H2 migration" }
+"views/dialogs.rs::動作が重い" = { reason = "pending H2 migration" }
+"views/dialogs.rs::動作不可" = { reason = "pending H2 migration" }
+"views/dialogs.rs::動的 Anime4K／静的 AnimeVideo-v3" = { reason = "pending H2 migration" }
+"views/dialogs.rs::動的 Anime4K／静的 Real-CUGAN" = { reason = "pending H2 migration" }
+"views/dialogs.rs::動的 MetalFX／静的 AnimeVideo-v3" = { reason = "pending H2 migration" }
+"views/dialogs.rs::動的 MetalFX／静的 Real-CUGAN" = { reason = "pending H2 migration" }
+"views/dialogs.rs::勾选可执行程序（可多选）" = { reason = "pending H2 migration" }
+"views/dialogs.rs::包含固定程序与 Steam 游戏" = { reason = "pending H2 migration" }
+"views/dialogs.rs::匹配显示器" = { reason = "pending H2 migration" }
+"views/dialogs.rs::単一ゲームフォルダを追加…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::即時反映されます（下書き対象外）。ローカル画像がオンラインカバーより優先されます。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::原生优先，内建后备" = { reason = "pending H2 migration", count = 2 }
+"views/dialogs.rs::取消安装" = { reason = "pending H2 migration" }
+"views/dialogs.rs::取消扫描" = { reason = "pending H2 migration" }
+"views/dialogs.rs::可多选，从容器 C: 盘开始；子文件夹会成为游戏条目" = { reason = "pending H2 migration" }
+"views/dialogs.rs::可玩" = { reason = "pending H2 migration" }
+"views/dialogs.rs::可用空间" = { reason = "pending H2 migration" }
+"views/dialogs.rs::可用组件" = { reason = "pending H2 migration", count = 5 }
+"views/dialogs.rs::可运行" = { reason = "pending H2 migration" }
+"views/dialogs.rs::名称未設定" = { reason = "pending H2 migration" }
+"views/dialogs.rs::启动程序" = { reason = "pending H2 migration" }
+"views/dialogs.rs::固定プログラムと Steam ゲームを含める" = { reason = "pending H2 migration" }
+"views/dialogs.rs::图形后端" = { reason = "pending H2 migration", count = 2 }
+"views/dialogs.rs::图形调试" = { reason = "pending H2 migration" }
+"views/dialogs.rs::在线匹配与关联" = { reason = "pending H2 migration" }
+"views/dialogs.rs::多 exe 入口模式" = { reason = "pending H2 migration" }
+"views/dialogs.rs::大小未知" = { reason = "pending H2 migration" }
+"views/dialogs.rs::存在未保存修改；请先点击「保存资料」，再执行按平台 ID 刷新。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::安装进度" = { reason = "pending H2 migration" }
+"views/dialogs.rs::実行ファイル (.exe) を選択" = { reason = "pending H2 migration" }
+"views/dialogs.rs::実行ファイルを設定" = { reason = "pending H2 migration" }
+"views/dialogs.rs::実行ファイルを選択（複数可）" = { reason = "pending H2 migration" }
+"views/dialogs.rs::実行ファイル未設定" = { reason = "pending H2 migration" }
+"views/dialogs.rs::実行ログを分析" = { reason = "pending H2 migration" }
+"views/dialogs.rs::容器元数据" = { reason = "pending H2 migration" }
+"views/dialogs.rs::容器文件或导入异常" = { reason = "pending H2 migration" }
+"views/dialogs.rs::容器目录" = { reason = "pending H2 migration" }
+"views/dialogs.rs::导入已有容器…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::导出诊断报告…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::封面超分辨率模型（Real-CUGAN models-se）与实时 Metal 着色器管线。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::尚无快照 · 保存后刷新" = { reason = "pending H2 migration" }
+"views/dialogs.rs::尚无角色快照；关联作品并保存后，可点击左下角「刷新已保存的关联」获取角色。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::尚未关联在线平台" = { reason = "pending H2 migration" }
+"views/dialogs.rs::尚未添加扫描文件夹" = { reason = "pending H2 migration" }
+"views/dialogs.rs::尚未读取已安装组件。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::尚未读取扫描文件夹。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::尚未读取组件目录。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::崩溃日志" = { reason = "pending H2 migration" }
+"views/dialogs.rs::已创建：{path}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::已勾选" = { reason = "pending H2 migration" }
+"views/dialogs.rs::已勾选 {n} 个入口，每次启动将弹出快捷选择面板（↑↓ 移动，Space 勾选，Cmd/Ctrl+Enter 确认）。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::已配置" = { reason = "pending H2 migration" }
+"views/dialogs.rs::已配置 {n} 个启动入口，每次启动将提示选择" = { reason = "pending H2 migration" }
+"views/dialogs.rs::已验证" = { reason = "pending H2 migration" }
+"views/dialogs.rs::应用推荐配置" = { reason = "pending H2 migration" }
+"views/dialogs.rs::开启后可同时勾选多个 .exe 作为作品的启动入口。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::引导式故障排查" = { reason = "pending H2 migration" }
+"views/dialogs.rs::当前仅编辑 {} 的独立运行设置（含旧版全屏兼容、图形、语言与参数）。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::当前启动程序：{label}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::当前基本信息来源「{src}」尚未关联作品，请在下方搜索或按 ID 关联。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::当前已关联（草稿）" = { reason = "pending H2 migration" }
+"views/dialogs.rs::当前角色来源「{src}」不支持角色资料；可从上方选择支持的分类来源。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::待验证" = { reason = "pending H2 migration" }
+"views/dialogs.rs::恢复默认封面" = { reason = "pending H2 migration" }
+"views/dialogs.rs::手动内容优先于平台资料；关闭开关可恢复来源内容，取消或关闭窗口将丢弃未保存修改。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::手动编辑与封面" = { reason = "pending H2 migration" }
+"views/dialogs.rs::手动编辑标题" = { reason = "pending H2 migration" }
+"views/dialogs.rs::手动编辑简介" = { reason = "pending H2 migration" }
+"views/dialogs.rs::手動入力の内容がソース情報より優先されます。オフにすると取得元の内容に戻ります。キャンセルまたは閉じると未保存の変更は破棄されます。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::手動編集とカバー" = { reason = "pending H2 migration" }
+"views/dialogs.rs::扫描失败" = { reason = "pending H2 migration" }
+"views/dialogs.rs::扫描文件夹" = { reason = "pending H2 migration", count = 4 }
+"views/dialogs.rs::按 ID / 网址关联" = { reason = "pending H2 migration" }
+"views/dialogs.rs::排除" = { reason = "pending H2 migration" }
+"views/dialogs.rs::控制台与运行历史" = { reason = "pending H2 migration" }
+"views/dialogs.rs::推奨設定を適用" = { reason = "pending H2 migration" }
+"views/dialogs.rs::搜索与筛选" = { reason = "pending H2 migration" }
+"views/dialogs.rs::搜索平台" = { reason = "pending H2 migration" }
+"views/dialogs.rs::搜索组件" = { reason = "pending H2 migration", count = 2 }
+"views/dialogs.rs::播放测试音频" = { reason = "pending H2 migration" }
+"views/dialogs.rs::收集主机与容器信息" = { reason = "pending H2 migration" }
+"views/dialogs.rs::故障排查…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::文件夹本身就是一个游戏，不扫描其子目录" = { reason = "pending H2 migration" }
+"views/dialogs.rs::文件权限" = { reason = "pending H2 migration" }
+"views/dialogs.rs::文件权限或存储空间" = { reason = "pending H2 migration" }
+"views/dialogs.rs::文字乱码" = { reason = "pending H2 migration" }
+"views/dialogs.rs::文字化け" = { reason = "pending H2 migration" }
+"views/dialogs.rs::既存ボトルをインポート…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::既定のソースが全項目に適用されます。特定項目だけ別ソースを使う場合にカテゴリ例外を設定してください。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::既定の取得元：{}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::日本語" = { reason = "Native language name (always shown natively).", count = 2 }
+"views/dialogs.rs::日本語（日本）" = { reason = "pending H2 migration" }
+"views/dialogs.rs::日语（日本）" = { reason = "pending H2 migration" }
+"views/dialogs.rs::旧キャッシュ：{}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::旧缓存：{}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::最近一次运行" = { reason = "pending H2 migration" }
+"views/dialogs.rs::有未保存修改" = { reason = "pending H2 migration" }
+"views/dialogs.rs::未保存の変更があります" = { reason = "pending H2 migration" }
+"views/dialogs.rs::未保存の変更があります。先に「情報を保存」してからプラットフォーム ID で更新してください。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::未启用任何元数据平台，请在全局设置中开启来源后再搜索或刷新。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::未命名" = { reason = "pending H2 migration" }
+"views/dialogs.rs::未検証" = { reason = "pending H2 migration" }
+"views/dialogs.rs::未设置可执行文件" = { reason = "pending H2 migration" }
+"views/dialogs.rs::未通过" = { reason = "pending H2 migration" }
+"views/dialogs.rs::本地 GameDB 中没有匹配条目。仍可使用在线元数据或手动调整运行设置。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::本次游戏缓存" = { reason = "pending H2 migration" }
+"views/dialogs.rs::来源策略与角色预览" = { reason = "pending H2 migration" }
+"views/dialogs.rs::查询失败：{provider_error}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::核心 Windows 文本钩取与进程注入引擎（LunaHook32/64.dll、LunaHost32/64.dll、LunaTmpFontLoader.dll），配套 MinHook（BSD-2-Clause，Tsuda Kageyu / HDE by Vyacheslav Patkov）、uchardet（GPL-2.0-or-later）与 nlohmann/json（MIT）。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::检查 Wine 音频驱动设置" = { reason = "pending H2 migration" }
+"views/dialogs.rs::检查音频输出" = { reason = "pending H2 migration" }
+"views/dialogs.rs::検索とフィルター" = { reason = "pending H2 migration" }
+"views/dialogs.rs::検索ソース" = { reason = "pending H2 migration" }
+"views/dialogs.rs::検証済み" = { reason = "pending H2 migration" }
+"views/dialogs.rs::概要" = { reason = "pending H2 migration" }
+"views/dialogs.rs::概要を手動編集" = { reason = "pending H2 migration" }
+"views/dialogs.rs::概览" = { reason = "pending H2 migration" }
+"views/dialogs.rs::正在下载 Wine 运行时…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::正在准备…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::正在匹配本地 GameDB…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::正在启动 Wine 音频测试…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::正在安装 Rosetta 2…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::正在安装…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::正在播放测试音…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::正在收集诊断信息…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::正在收集预检数据并运行检查项…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::正在查询所选平台…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::正在校验下载完整性…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::正在解压并安装运行时…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::正在读取已安装组件…" = { reason = "pending H2 migration", count = 2 }
+"views/dialogs.rs::正在读取扫描文件夹…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::正在读取本地资料配置…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::正在读取系统信息与最近日志…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::正在读取组件目录…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::正在运行自动检查…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::正在递归扫描该文件夹下的可执行程序…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::没有匹配的组件。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::没有声音" = { reason = "pending H2 migration" }
+"views/dialogs.rs::没有找到可启动的程序" = { reason = "pending H2 migration", count = 2 }
+"views/dialogs.rs::测试结果" = { reason = "pending H2 migration" }
+"views/dialogs.rs::添加单个游戏文件夹…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::添加文件夹" = { reason = "pending H2 migration", count = 2 }
+"views/dialogs.rs::添加覆盖" = { reason = "pending H2 migration" }
+"views/dialogs.rs::添加路径" = { reason = "pending H2 migration" }
+"views/dialogs.rs::游戏无法启动" = { reason = "pending H2 migration" }
+"views/dialogs.rs::游戏目录" = { reason = "pending H2 migration" }
+"views/dialogs.rs::游戏运行缓慢" = { reason = "pending H2 migration" }
+"views/dialogs.rs::準備中…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::点击勾选" = { reason = "pending H2 migration" }
+"views/dialogs.rs::照会に失敗：{provider_error}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::現在 {} の個別実行設定（旧式フルスクリーン互換・グラフィックス・言語・引数）のみを編集中です。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::現在のキャラクターソース「{src}」はキャラクター取得に対応していません。上から対応ソースを選択してください。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::現在の基本情報ソース「{src}」はまだ作品と紐付けられていません。下で検索または ID 連携してください。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::現在の起動プログラム：{label}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::画面が暗い／表示異常" = { reason = "pending H2 migration" }
+"views/dialogs.rs::硬件加速原生桌面界面框架及 Rust 生态基础依赖。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::移动…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::移動…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::程序专属覆盖" = { reason = "pending H2 migration" }
+"views/dialogs.rs::空き容量" = { reason = "pending H2 migration" }
+"views/dialogs.rs::立即扫描" = { reason = "pending H2 migration" }
+"views/dialogs.rs::立即生效（不属于资料草稿），本地图片优先级高于在线封面。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::第三方声明" = { reason = "pending H2 migration" }
+"views/dialogs.rs::简体中文" = { reason = "Native language name (always shown natively).", count = 2 }
+"views/dialogs.rs::简体中文（中国）" = { reason = "pending H2 migration" }
+"views/dialogs.rs::簡体字中国語（中国）" = { reason = "pending H2 migration" }
+"views/dialogs.rs::系统默认输出" = { reason = "pending H2 migration" }
+"views/dialogs.rs::終了 {code}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::継承：{g} · HUD {h}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::継承：{u} · {c}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::継承：{vd} · {res}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::継承：{}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::継承：コンテナレベル {count} 件の DLL 上書き" = { reason = "pending H2 migration" }
+"views/dialogs.rs::継承：コントローラー互換 {a} · ネイティブ表示 {b}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::継承：シェーダーキャッシュ {st}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::繁體中文" = { reason = "pending H2 migration", count = 2 }
+"views/dialogs.rs::继承：{g} · HUD {h}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::继承：{u} · {c}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::继承：{vd} · {res}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::继承：{}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::继承：容器级 {count} 条 DLL 覆盖" = { reason = "pending H2 migration" }
+"views/dialogs.rs::继承：控制器兼容 {a} · 原生标签 {b}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::继承：着色器缓存 {st}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::继续启动 ({n})" = { reason = "pending H2 migration" }
+"views/dialogs.rs::缓存并保存到磁盘" = { reason = "pending H2 migration" }
+"views/dialogs.rs::自动读取元数据" = { reason = "pending H2 migration" }
+"views/dialogs.rs::自動チェックを実行" = { reason = "pending H2 migration" }
+"views/dialogs.rs::自動チェックを実行中…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::自定义封面" = { reason = "pending H2 migration" }
+"views/dialogs.rs::若能听到测试音，说明 Wine 音频链路正常；若没有声音，请检查系统输出设备与音频驱动。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::英語（米国）" = { reason = "pending H2 migration" }
+"views/dialogs.rs::英语（美国）" = { reason = "pending H2 migration" }
+"views/dialogs.rs::複数 .exe エントリーモード" = { reason = "pending H2 migration" }
+"views/dialogs.rs::複数選択可（ドライブ C から開始）。サブフォルダがゲーム項目になります" = { reason = "pending H2 migration" }
+"views/dialogs.rs::视觉小说库与元数据设计参考，及 Bangumi、VNDB、Steam、YMGal、NextMoe 公开数据来源。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::角色资料 · {}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::解除关联" = { reason = "pending H2 migration" }
+"views/dialogs.rs::設定リファレンス" = { reason = "pending H2 migration" }
+"views/dialogs.rs::設定済み" = { reason = "pending H2 migration" }
+"views/dialogs.rs::診断" = { reason = "pending H2 migration" }
+"views/dialogs.rs::診断レポートを書き出す…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::診断ログレベル" = { reason = "pending H2 migration" }
+"views/dialogs.rs::診断情報を収集中…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::読み込み順序" = { reason = "pending H2 migration" }
+"views/dialogs.rs::许可证 (GPLv3)" = { reason = "pending H2 migration" }
+"views/dialogs.rs::设置可执行文件" = { reason = "pending H2 migration" }
+"views/dialogs.rs::诊断" = { reason = "pending H2 migration" }
+"views/dialogs.rs::诊断日志级别" = { reason = "pending H2 migration" }
+"views/dialogs.rs::该作品未返回角色资料。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::该分类下还没有已安装的组件。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::该容器没有可用的组件目录。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::该文件夹下没有 .exe" = { reason = "pending H2 migration", count = 2 }
+"views/dialogs.rs::起動を続行 ({n})" = { reason = "pending H2 migration" }
+"views/dialogs.rs::起動プログラム" = { reason = "pending H2 migration" }
+"views/dialogs.rs::起動可能" = { reason = "pending H2 migration" }
+"views/dialogs.rs::起動可能なプログラムが見つかりません" = { reason = "pending H2 migration", count = 2 }
+"views/dialogs.rs::输入目标平台上的名称搜索，或粘贴作品 ID / 网址直接关联；所有修改仅更新草稿，点击「保存资料」生效。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::运行自动检查" = { reason = "pending H2 migration" }
+"views/dialogs.rs::退出 {code}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::选择" = { reason = "pending H2 migration" }
+"views/dialogs.rs::选择可执行程序 (.exe)" = { reason = "pending H2 migration" }
+"views/dialogs.rs::选择文件夹…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::选择本地图片…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::递归扫描" = { reason = "pending H2 migration" }
+"views/dialogs.rs::連携を解除" = { reason = "pending H2 migration" }
+"views/dialogs.rs::連携済み（下書き）" = { reason = "pending H2 migration" }
+"views/dialogs.rs::遇到了什么问题？" = { reason = "pending H2 migration" }
+"views/dialogs.rs::選択" = { reason = "pending H2 migration" }
+"views/dialogs.rs::選択したソースを検索中…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::選択済み" = { reason = "pending H2 migration" }
+"views/dialogs.rs::配置参考" = { reason = "pending H2 migration" }
+"views/dialogs.rs::酒瓶容器管理架构、偏好设置模型与原生桥接基础。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::重新读取" = { reason = "pending H2 migration" }
+"views/dialogs.rs::除外" = { reason = "pending H2 migration" }
+"views/dialogs.rs::音が出ない" = { reason = "pending H2 migration" }
+"views/dialogs.rs::音频故障排查…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::音频设备" = { reason = "pending H2 migration" }
+"views/dialogs.rs::黑屏或画面异常" = { reason = "pending H2 migration" }
+"views/dialogs.rs::默认来源用于所有字段；仅需对个别字段使用不同平台时再设置分类例外。" = { reason = "pending H2 migration" }
+"views/dialogs.rs::默认来源：{}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::개요" = { reason = "pending H2 migration" }
+"views/dialogs.rs::검색 및 필터" = { reason = "pending H2 migration" }
+"views/dialogs.rs::검색 출처" = { reason = "pending H2 migration" }
+"views/dialogs.rs::검은 화면 또는 그래픽 오류" = { reason = "pending H2 migration" }
+"views/dialogs.rs::검증됨" = { reason = "pending H2 migration" }
+"views/dialogs.rs::게임 폴더" = { reason = "pending H2 migration" }
+"views/dialogs.rs::게임이 실행되지 않음" = { reason = "pending H2 migration" }
+"views/dialogs.rs::경로 추가" = { reason = "pending H2 migration" }
+"views/dialogs.rs::계속 실행 ({n})" = { reason = "pending H2 migration" }
+"views/dialogs.rs::고정된 프로그램 및 Steam 게임 포함" = { reason = "pending H2 migration" }
+"views/dialogs.rs::구성 요소 검색" = { reason = "pending H2 migration", count = 2 }
+"views/dialogs.rs::구성 요소 카탈로그 읽는 중…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::구성 요소 카탈로그를 아직 읽지 않았습니다." = { reason = "pending H2 migration" }
+"views/dialogs.rs::권장 설정 적용" = { reason = "pending H2 migration" }
+"views/dialogs.rs::그래픽 디버깅" = { reason = "pending H2 migration" }
+"views/dialogs.rs::그래픽 백엔드" = { reason = "pending H2 migration", count = 3 }
+"views/dialogs.rs::기본" = { reason = "pending H2 migration" }
+"views/dialogs.rs::기본 출처: {}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::기본 출처가 모든 필드에 적용되며, 특정 필드에만 다른 출처를 쓸 때 분류 예외를 설정하세요." = { reason = "pending H2 migration" }
+"views/dialogs.rs::기본 커버로 복원" = { reason = "pending H2 migration" }
+"views/dialogs.rs::기존 컨테이너 가져오기…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::끄면 스캔 폴더의 게임만 라이브러리에 표시됩니다." = { reason = "pending H2 migration" }
+"views/dialogs.rs::끄면 컨테이너 설정을 상속합니다." = { reason = "pending H2 migration" }
+"views/dialogs.rs::내장 우선, 네이티브 후순위" = { reason = "pending H2 migration" }
+"views/dialogs.rs::네이티브 우선, 내장 후순위" = { reason = "pending H2 migration", count = 2 }
+"views/dialogs.rs::다시 스캔" = { reason = "pending H2 migration" }
+"views/dialogs.rs::다시 읽기" = { reason = "pending H2 migration" }
+"views/dialogs.rs::다운로드 무결성 검증 중…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::다중 .exe 진입점 모드" = { reason = "pending H2 migration" }
+"views/dialogs.rs::단계별 문제 해결" = { reason = "pending H2 migration" }
+"views/dialogs.rs::단일 게임 폴더 추가…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::대상 플랫폼에서 제목으로 검색하거나 작품 ID/URL을 붙여 넣어 연결하세요. 저장을 눌러야 반영됩니다." = { reason = "pending H2 migration" }
+"views/dialogs.rs::동적 Anime4K / 정적 AnimeVideo-v3" = { reason = "pending H2 migration" }
+"views/dialogs.rs::동적 Anime4K / 정적 Real-CUGAN" = { reason = "pending H2 migration" }
+"views/dialogs.rs::동적 MetalFX / 정적 AnimeVideo-v3" = { reason = "pending H2 migration" }
+"views/dialogs.rs::동적 MetalFX / 정적 Real-CUGAN" = { reason = "pending H2 migration" }
+"views/dialogs.rs::등장인물 · {}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::디스플레이에 맞춤" = { reason = "pending H2 migration" }
+"views/dialogs.rs::라이선스 (GPLv3)" = { reason = "pending H2 migration" }
+"views/dialogs.rs::런타임 압축 해제 및 설치 중…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::로드 순서" = { reason = "pending H2 migration" }
+"views/dialogs.rs::로컬 GameDB 매칭 중…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::로컬 GameDB에 일치하는 항목이 없습니다. 온라인 메타데이터나 수동 설정을 이용하세요." = { reason = "pending H2 migration" }
+"views/dialogs.rs::로컬 메타데이터 설정 읽는 중…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::로컬 이미지 선택…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::메타데이터 자동 가져오기" = { reason = "pending H2 migration" }
+"views/dialogs.rs::문자 깨짐" = { reason = "pending H2 migration" }
+"views/dialogs.rs::문제 해결…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::미검증" = { reason = "pending H2 migration" }
+"views/dialogs.rs::분류별 예외(기본값은 위 출처 따름)" = { reason = "pending H2 migration" }
+"views/dialogs.rs::사용 가능 공간" = { reason = "pending H2 migration" }
+"views/dialogs.rs::사용 가능한 구성 요소" = { reason = "pending H2 migration", count = 5 }
+"views/dialogs.rs::사용자 지정 커버" = { reason = "pending H2 migration" }
+"views/dialogs.rs::사전 데이터 수집 및 검사 실행 중…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::상속됨: {g} · HUD {h}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::상속됨: {u} · {c}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::상속됨: {vd} · {res}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::상속됨: {}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::상속됨: 셰이더 캐시 {st}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::상속됨: 컨테이너 DLL 재정의 {count}개" = { reason = "pending H2 migration" }
+"views/dialogs.rs::상속됨: 컨트롤러 호환 {a} · 네이티브 레이블 {b}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::생성됨: {path}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::서드파티 고지" = { reason = "pending H2 migration" }
+"views/dialogs.rs::선택" = { reason = "pending H2 migration" }
+"views/dialogs.rs::선택됨" = { reason = "pending H2 migration" }
+"views/dialogs.rs::선택한 플랫폼 조회 중…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::설정 참고" = { reason = "pending H2 migration" }
+"views/dialogs.rs::설정됨" = { reason = "pending H2 migration" }
+"views/dialogs.rs::설치 중…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::설치 진행률" = { reason = "pending H2 migration" }
+"views/dialogs.rs::설치 취소" = { reason = "pending H2 migration" }
+"views/dialogs.rs::설치된 구성 요소 읽는 중…" = { reason = "pending H2 migration", count = 2 }
+"views/dialogs.rs::설치된 구성 요소를 아직 읽지 않았습니다." = { reason = "pending H2 migration" }
+"views/dialogs.rs::설치됨만 표시" = { reason = "pending H2 migration" }
+"views/dialogs.rs::성능 저하" = { reason = "pending H2 migration" }
+"views/dialogs.rs::소리 없음" = { reason = "pending H2 migration" }
+"views/dialogs.rs::수동 입력 내용이 출처 데이터보다 우선합니다. 끄면 원본 내용이 복원되며 취소하거나 닫으면 저장되지 않은 변경 사항이 사라집니다." = { reason = "pending H2 migration" }
+"views/dialogs.rs::수동 편집 및 커버" = { reason = "pending H2 migration" }
+"views/dialogs.rs::스냅샷 없음 · 저장 후 새로 고침" = { reason = "pending H2 migration" }
+"views/dialogs.rs::스캔 실패" = { reason = "pending H2 migration" }
+"views/dialogs.rs::스캔 취소" = { reason = "pending H2 migration" }
+"views/dialogs.rs::스캔 폴더" = { reason = "pending H2 migration", count = 4 }
+"views/dialogs.rs::스캔 폴더 읽는 중…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::스캔 폴더를 아직 읽지 않았습니다." = { reason = "pending H2 migration" }
+"views/dialogs.rs::시스템 기본 출력" = { reason = "pending H2 migration" }
+"views/dialogs.rs::시스템 정보 및 최근 로그 읽는 중…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::실패" = { reason = "pending H2 migration" }
+"views/dialogs.rs::실행 가능" = { reason = "pending H2 migration" }
+"views/dialogs.rs::실행 가능한 프로그램을 찾을 수 없습니다" = { reason = "pending H2 migration", count = 2 }
+"views/dialogs.rs::실행 로그 분석" = { reason = "pending H2 migration" }
+"views/dialogs.rs::실행 불가" = { reason = "pending H2 migration" }
+"views/dialogs.rs::실행 파일 (.exe) 선택" = { reason = "pending H2 migration" }
+"views/dialogs.rs::실행 파일 선택(복수 선택)" = { reason = "pending H2 migration" }
+"views/dialogs.rs::실행 파일 설정" = { reason = "pending H2 migration" }
+"views/dialogs.rs::실행 파일이 설정되지 않음" = { reason = "pending H2 migration" }
+"views/dialogs.rs::실행 프로그램" = { reason = "pending H2 migration" }
+"views/dialogs.rs::어떤 문제가 발생했나요?" = { reason = "pending H2 migration" }
+"views/dialogs.rs::연결 해제" = { reason = "pending H2 migration" }
+"views/dialogs.rs::연결된 온라인 플랫폼 없음" = { reason = "pending H2 migration" }
+"views/dialogs.rs::영어 (미국)" = { reason = "pending H2 migration" }
+"views/dialogs.rs::오디오 문제 해결…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::오디오 장치" = { reason = "pending H2 migration" }
+"views/dialogs.rs::오디오 출력 확인" = { reason = "pending H2 migration" }
+"views/dialogs.rs::온라인 검색 및 연결" = { reason = "pending H2 migration" }
+"views/dialogs.rs::이 작품의 캐릭터 정보가 없습니다." = { reason = "pending H2 migration" }
+"views/dialogs.rs::이 카테고리에 설치된 구성 요소가 없습니다." = { reason = "pending H2 migration" }
+"views/dialogs.rs::이 컨테이너에 사용 가능한 구성 요소 카탈로그가 없습니다." = { reason = "pending H2 migration" }
+"views/dialogs.rs::이 폴더에 .exe 파일이 없습니다" = { reason = "pending H2 migration", count = 2 }
+"views/dialogs.rs::이 폴더의 실행 파일 스캔 중…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::이동…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::이름 없음" = { reason = "pending H2 migration" }
+"views/dialogs.rs::이번 세션만 메모리 캐시" = { reason = "pending H2 migration" }
+"views/dialogs.rs::이전 캐시: {}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::일본어 (일본)" = { reason = "pending H2 migration" }
+"views/dialogs.rs::일치하는 구성 요소가 없습니다." = { reason = "pending H2 migration" }
+"views/dialogs.rs::자동 검사 실행" = { reason = "pending H2 migration" }
+"views/dialogs.rs::자동 검사 실행 중…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::장면 간 캐시 끄기" = { reason = "pending H2 migration" }
+"views/dialogs.rs::재귀 스캔" = { reason = "pending H2 migration" }
+"views/dialogs.rs::재정의 추가" = { reason = "pending H2 migration" }
+"views/dialogs.rs::저장 실패" = { reason = "pending H2 migration" }
+"views/dialogs.rs::저장되지 않은 변경 사항" = { reason = "pending H2 migration" }
+"views/dialogs.rs::저장되지 않은 변경 사항이 있습니다. 먼저 정보 저장을 클릭한 후 새로 고침하세요." = { reason = "pending H2 migration" }
+"views/dialogs.rs::제목 수동 편집" = { reason = "pending H2 migration" }
+"views/dialogs.rs::제외" = { reason = "pending H2 migration" }
+"views/dialogs.rs::조회 실패: {provider_error}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::종료 {code}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::준비 중…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::줄거리 수동 편집" = { reason = "pending H2 migration" }
+"views/dialogs.rs::중국어 간체 (중국)" = { reason = "pending H2 migration" }
+"views/dialogs.rs::즉시 적용되며(초안 미포함) 로컬 이미지가 온라인 커버보다 우선합니다." = { reason = "pending H2 migration" }
+"views/dialogs.rs::지금 스캔" = { reason = "pending H2 migration" }
+"views/dialogs.rs::진단" = { reason = "pending H2 migration" }
+"views/dialogs.rs::진단 로그 수준" = { reason = "pending H2 migration" }
+"views/dialogs.rs::진단 보고서 내보내기…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::진단 정보 수집 중…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::진입점 저장 ({n})" = { reason = "pending H2 migration" }
+"views/dialogs.rs::초안에 연결" = { reason = "pending H2 migration" }
+"views/dialogs.rs::최근 실행" = { reason = "pending H2 migration" }
+"views/dialogs.rs::추가된 스캔 폴더가 없습니다" = { reason = "pending H2 migration" }
+"views/dialogs.rs::출처 정책 및 캐릭터 미리보기" = { reason = "pending H2 migration" }
+"views/dialogs.rs::충돌 로그" = { reason = "pending H2 migration" }
+"views/dialogs.rs::캐릭터 스냅샷이 없습니다. 작품을 연결하고 저장한 뒤 왼쪽 아래 저장된 연결 새로고침을 누르세요." = { reason = "pending H2 migration" }
+"views/dialogs.rs::캐시 및 디스크에 저장" = { reason = "pending H2 migration" }
+"views/dialogs.rs::컨테이너 C: 드라이브부터 복수 선택 가능; 하위 폴더가 게임 항목이 됩니다" = { reason = "pending H2 migration" }
+"views/dialogs.rs::컨테이너 또는 가져오기 오류" = { reason = "pending H2 migration" }
+"views/dialogs.rs::컨테이너 메타데이터" = { reason = "pending H2 migration" }
+"views/dialogs.rs::컨테이너 폴더" = { reason = "pending H2 migration" }
+"views/dialogs.rs::켜면 여러 .exe를 실행 진입점으로 선택할 수 있습니다." = { reason = "pending H2 migration" }
+"views/dialogs.rs::콘솔 및 실행 기록" = { reason = "pending H2 migration" }
+"views/dialogs.rs::크기 알 수 없음" = { reason = "pending H2 migration" }
+"views/dialogs.rs::클릭하여 선택" = { reason = "pending H2 migration" }
+"views/dialogs.rs::테스트 결과" = { reason = "pending H2 migration" }
+"views/dialogs.rs::테스트 오디오 재생" = { reason = "pending H2 migration" }
+"views/dialogs.rs::테스트 톤 재생 중…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::테스트 톤이 들리면 Wine 오디오가 정상입니다. 들리지 않으면 출력 장치와 오디오 드라이버를 확인하세요." = { reason = "pending H2 migration" }
+"views/dialogs.rs::파일 권한" = { reason = "pending H2 migration" }
+"views/dialogs.rs::파일 권한 또는 저장 공간" = { reason = "pending H2 migration" }
+"views/dialogs.rs::폴더 선택…" = { reason = "pending H2 migration" }
+"views/dialogs.rs::폴더 추가" = { reason = "pending H2 migration", count = 2 }
+"views/dialogs.rs::프로그램별 재정의" = { reason = "pending H2 migration" }
+"views/dialogs.rs::플레이 가능" = { reason = "pending H2 migration" }
+"views/dialogs.rs::하위 폴더를 스캔하지 않고 이 폴더 자체를 하나의 게임으로 등록" = { reason = "pending H2 migration" }
+"views/dialogs.rs::한국어" = { reason = "Native language name (always shown natively)." }
+"views/dialogs.rs::현재 {}의 개별 실행 설정(레거시 전체 화면 호환, 그래픽, 로캘 및 인수)만 편집 중입니다." = { reason = "pending H2 migration" }
+"views/dialogs.rs::현재 기본 정보 출처 '{src}'가 아직 작품과 연결되지 않았습니다. 아래에서 검색하거나 ID로 연결하세요." = { reason = "pending H2 migration" }
+"views/dialogs.rs::현재 등장인물 출처 '{src}'는 캐릭터 정보를 지원하지 않습니다. 위에서 지원하는 출처를 선택하세요." = { reason = "pending H2 migration" }
+"views/dialogs.rs::현재 실행 프로그램: {label}" = { reason = "pending H2 migration" }
+"views/dialogs.rs::현재 연결됨(초안)" = { reason = "pending H2 migration" }
+"views/dialogs.rs::호스트 및 컨테이너 정보 수집" = { reason = "pending H2 migration" }
+"views/dialogs.rs::호스트 환경 정보" = { reason = "pending H2 migration" }
+"views/dialogs.rs::활성화된 메타데이터 플랫폼이 없습니다. 설정에서 소스를 켠 후 검색하거나 새로 고침하세요." = { reason = "pending H2 migration" }
+"views/library.rs::CV" = { reason = "Curriculum vitae abbreviation (proper noun)." }
+"views/translation.rs::llama.cpp {ver}({gpu_tag})가 설치되어 있으며 번역 시작 시 필요할 때 실행됩니다." = { reason = "pending H2 migration" }
+"views/translation.rs::llama.cpp {ver}（{gpu_tag}）はインストール済みです。翻訳開始時にオンデマンドで起動します。" = { reason = "pending H2 migration" }
+"views/translation.rs::llama.cpp {ver}（{gpu_tag}）已安装，开始翻译时按需启动。" = { reason = "pending H2 migration" }
+"views/translation.rs::llama.cpp は実行中です（{gpu_tag}）。5 分間アイドル後にメモリを自動解放します。" = { reason = "pending H2 migration" }
+"views/translation.rs::llama.cpp 正在运行（{gpu_tag}），空闲 5 分钟后自动释放内存。" = { reason = "pending H2 migration" }
+"views/translation.rs::llama.cpp가 실행 중입니다({gpu_tag}). 5분 유휴 후 메모리를 자동 해제합니다." = { reason = "pending H2 migration" }
+"views/translation.rs::{size_label} · コンテキスト {ctx_label}" = { reason = "pending H2 migration" }
+"views/translation.rs::{size_label} · コンテキスト {ctx_label} · 推奨メモリ {} GB" = { reason = "pending H2 migration" }
+"views/translation.rs::{size_label} · 上下文 {ctx_label}" = { reason = "pending H2 migration" }
+"views/translation.rs::{size_label} · 上下文 {ctx_label} · 建议 {} GB 内存" = { reason = "pending H2 migration" }
+"views/translation.rs::{size_label} · 컨텍스트 {ctx_label}" = { reason = "pending H2 migration" }
+"views/translation.rs::{size_label} · 컨텍스트 {ctx_label} · 권장 메모리 {} GB" = { reason = "pending H2 migration" }
+"views/translation.rs::{sz} · {ctx_label} コンテキスト" = { reason = "pending H2 migration" }
+"views/translation.rs::{sz} · {ctx_label} 上下文" = { reason = "pending H2 migration" }
+"views/translation.rs::{sz} · {ctx_label} 컨텍스트" = { reason = "pending H2 migration" }
+"views/translation.rs::{} ({}개) — {}클릭하여 왼쪽 목록 필터링, 다시 클릭하여 해제" = { reason = "pending H2 migration" }
+"views/translation.rs::{} コンテキスト" = { reason = "pending H2 migration" }
+"views/translation.rs::{} 上下文" = { reason = "pending H2 migration" }
+"views/translation.rs::{} 제공자가 없습니다" = { reason = "pending H2 migration" }
+"views/translation.rs::{} 컨텍스트" = { reason = "pending H2 migration" }
+"views/translation.rs::{}: 현재 빌드에서 비활성화됨" = { reason = "pending H2 migration" }
+"views/translation.rs::{}プロバイダーはありません" = { reason = "pending H2 migration" }
+"views/translation.rs::{}（{} 个）— {}点击筛选左侧列表，再次点击取消筛选" = { reason = "pending H2 migration" }
+"views/translation.rs::{}（{} 件）— {}クリックで左のリストを絞り込み、再クリックで解除" = { reason = "pending H2 migration" }
+"views/translation.rs::{}：当前构建未启用" = { reason = "pending H2 migration" }
+"views/translation.rs::{}：現在のビルドでは無効です" = { reason = "pending H2 migration" }
+"views/translation.rs::● 実行中 · {loaded_name}" = { reason = "pending H2 migration" }
+"views/translation.rs::● 运行中 · {loaded_name}" = { reason = "pending H2 migration" }
+"views/translation.rs::● 실행 중 · {loaded_name}" = { reason = "pending H2 migration" }
+"views/translation.rs::✓ エンジン準備完了 · {gpu_tag}" = { reason = "pending H2 migration" }
+"views/translation.rs::✓ 引擎就绪 · {gpu_tag}" = { reason = "pending H2 migration" }
+"views/translation.rs::✓ 엔진 준비됨 · {gpu_tag}" = { reason = "pending H2 migration" }
+"views/translation.rs::このゲーム {game_count} 件" = { reason = "pending H2 migration" }
+"views/translation.rs::このプロトコルの既定エンドポイント：{default_ep}" = { reason = "pending H2 migration" }
+"views/translation.rs::エンジン未導入 · {}" = { reason = "pending H2 migration" }
+"views/translation.rs::キャッシュ {total_count} 件" = { reason = "pending H2 migration" }
+"views/translation.rs::ゲーム {}" = { reason = "pending H2 migration" }
+"views/translation.rs::ダウンロード元は環境変数で上書きされています：{override_url}" = { reason = "pending H2 migration" }
+"views/translation.rs::ダウンロード失敗：{err}" = { reason = "pending H2 migration" }
+"views/translation.rs::ヒット {} 回" = { reason = "pending H2 migration" }
+"views/translation.rs::下载失败：{err}" = { reason = "pending H2 migration" }
+"views/translation.rs::下载源已被环境变量覆盖为：{override_url}" = { reason = "pending H2 migration" }
+"views/translation.rs::使用量 {}" = { reason = "pending H2 migration" }
+"views/translation.rs::初回モデルダウンロード時に llama.cpp（{gpu_tag}、約 {sz}）が自動インストールされます。" = { reason = "pending H2 migration" }
+"views/translation.rs::占用 {}" = { reason = "pending H2 migration" }
+"views/translation.rs::命中 {} 次" = { reason = "pending H2 migration" }
+"views/translation.rs::已缓存 {total_count} 条" = { reason = "pending H2 migration" }
+"views/translation.rs::当前协议默认端点：{default_ep}" = { reason = "pending H2 migration" }
+"views/translation.rs::当前存储方式：{storage_label}。以 0600 权限明文落盘免弹窗；切换存储模式后需在此重新保存密钥。" = { reason = "pending H2 migration" }
+"views/translation.rs::当前存储方式：{storage_label}。密钥仅写入安全凭据存储，接口不会回显明文。" = { reason = "pending H2 migration" }
+"views/translation.rs::当前模型上下文窗口：{n} tokens（来源：{prov}）。" = { reason = "pending H2 migration" }
+"views/translation.rs::当前游戏 {game_count} 条" = { reason = "pending H2 migration" }
+"views/translation.rs::新建 {}" = { reason = "pending H2 migration" }
+"views/translation.rs::新建{}" = { reason = "pending H2 migration" }
+"views/translation.rs::新規 {}" = { reason = "pending H2 migration", count = 2 }
+"views/translation.rs::既定のローカルポート：{default_ep}" = { reason = "pending H2 migration" }
+"views/translation.rs::既定アドレス：{}" = { reason = "pending H2 migration" }
+"views/translation.rs::日本語 (ja)" = { reason = "pending H2 migration" }
+"views/translation.rs::暂无{}提供商" = { reason = "pending H2 migration" }
+"views/translation.rs::未安装引擎 · {}" = { reason = "pending H2 migration" }
+"views/translation.rs::游戏 {}" = { reason = "pending H2 migration" }
+"views/translation.rs::現在のモデルのコンテキストウィンドウ：{n} tokens（取得元：{prov}）。" = { reason = "pending H2 migration" }
+"views/translation.rs::現在の保存方式：{storage_label}。0600 権限の平文ファイルに保存し確認ダイアログを避けます。保存方式を変更した場合はここでキーを再保存してください。" = { reason = "pending H2 migration" }
+"views/translation.rs::現在の保存方式：{storage_label}。キーは安全な資格情報ストアに保存され、平文は表示されません。" = { reason = "pending H2 migration" }
+"views/translation.rs::筛选：{}" = { reason = "pending H2 migration" }
+"views/translation.rs::简体中文 (zh-Hans)" = { reason = "pending H2 migration" }
+"views/translation.rs::絞り込み：{}" = { reason = "pending H2 migration" }
+"views/translation.rs::繁體中文 (zh-Hant)" = { reason = "pending H2 migration" }
+"views/translation.rs::首次下载模型时将自动安装 llama.cpp（{gpu_tag}，约 {sz}）。" = { reason = "pending H2 migration" }
+"views/translation.rs::默认地址：{}" = { reason = "pending H2 migration" }
+"views/translation.rs::默认本机端口：{default_ep}" = { reason = "pending H2 migration" }
+"views/translation.rs::게임 {}" = { reason = "pending H2 migration" }
+"views/translation.rs::기본 로컬 엔드포인트: {default_ep}" = { reason = "pending H2 migration" }
+"views/translation.rs::기본 주소: {}" = { reason = "pending H2 migration" }
+"views/translation.rs::다운로드 실패: {err}" = { reason = "pending H2 migration" }
+"views/translation.rs::사용량 {}" = { reason = "pending H2 migration" }
+"views/translation.rs::새 {}" = { reason = "pending H2 migration", count = 2 }
+"views/translation.rs::엔진 미설치 · {}" = { reason = "pending H2 migration" }
+"views/translation.rs::적중 {}회" = { reason = "pending H2 migration" }
+"views/translation.rs::첫 모델 다운로드 시 llama.cpp({gpu_tag}, 약 {sz})가 자동으로 설치됩니다." = { reason = "pending H2 migration" }
+"views/translation.rs::캐시 {total_count}개" = { reason = "pending H2 migration" }
+"views/translation.rs::필터: {}" = { reason = "pending H2 migration" }
+"views/translation.rs::한국어 (ko)" = { reason = "pending H2 migration" }
+"views/translation.rs::현재 게임 {game_count}개" = { reason = "pending H2 migration" }
+"views/translation.rs::현재 모델 컨텍스트 창: {n} tokens (출처: {prov})." = { reason = "pending H2 migration" }
+"views/translation.rs::현재 저장 방식: {storage_label}. 0600 권한 평문 파일로 저장되며, 저장 모드를 바꾼 후 여기서 키를 다시 저장해야 합니다." = { reason = "pending H2 migration" }
+"views/translation.rs::현재 저장 방식: {storage_label}. 키는 보안 자격 증명 저장소에 저장되며 평문으로 반환되지 않습니다." = { reason = "pending H2 migration" }
+"views/translation.rs::현재 프로토콜 기본 엔드포인트: {default_ep}" = { reason = "pending H2 migration" }
+"views/translation.rs::환경 변수로 다운로드 미러가 재정의됨: {override_url}" = { reason = "pending H2 migration" }
+
+[bridge_untranslated]
+"archive_failed" = { reason = "pending H2 migration" }
+"catalogue_too_large" = { reason = "pending H2 migration" }
+"component_missing" = { reason = "pending H2 migration" }
+"desktop_modified" = { reason = "pending H2 migration" }
+"feature_unavailable" = { reason = "pending H2 migration" }
+"fingerprint_mismatch" = { reason = "pending H2 migration" }
+"invalid_overlay_settings" = { reason = "pending H2 migration" }
+"metadata_write_failed" = { reason = "pending H2 migration" }
+"not_configured" = { reason = "pending H2 migration" }
+"overloaded" = { reason = "pending H2 migration" }
+"recovery_pending" = { reason = "pending H2 migration" }
+"repair_incomplete" = { reason = "pending H2 migration" }
+"resource_missing" = { reason = "pending H2 migration" }
+"response_too_large" = { reason = "pending H2 migration" }
+"snapshot_expired" = { reason = "pending H2 migration" }
+"stale_fingerprint" = { reason = "pending H2 migration" }
+"stale_interaction" = { reason = "pending H2 migration" }
+"terminal_unavailable" = { reason = "pending H2 migration" }
+"too_many_entries" = { reason = "pending H2 migration" }
+"unverified" = { reason = "pending H2 migration" }
+"version_mismatch" = { reason = "pending H2 migration" }
+"wineserver_running" = { reason = "pending H2 migration" }
+"wineserver_unknown" = { reason = "pending H2 migration" }
+
+[unused_keys]
+"library.open_in_finder_tip" = { reason = "dead at HEAD baseline (c635ea2b); kept for H2" }
+"translation.lang_ja" = { reason = "dead at HEAD baseline (c635ea2b); kept for H2" }
+"translation.lang_en" = { reason = "dead at HEAD baseline (c635ea2b); kept for H2" }
+"translation.lang_ko" = { reason = "dead at HEAD baseline (c635ea2b); kept for H2" }
+"translation.lang_zh_hans" = { reason = "dead at HEAD baseline (c635ea2b); kept for H2" }
+"translation.lang_zh_hant" = { reason = "dead at HEAD baseline (c635ea2b); kept for H2" }
+"translation.title_providers" = { reason = "dead at HEAD baseline (c635ea2b); kept for H2" }
+"translation.err_debounce_range" = { reason = "dead at HEAD baseline (c635ea2b); kept for H2" }
+"dialogs.about_tab_overview" = { reason = "dead at HEAD baseline (c635ea2b); kept for H2" }
+"dialogs.about_tab_ack" = { reason = "dead at HEAD baseline (c635ea2b); kept for H2" }
+"dialogs.about_tab_license" = { reason = "dead at HEAD baseline (c635ea2b); kept for H2" }
+"dialogs.about_tab_notices" = { reason = "dead at HEAD baseline (c635ea2b); kept for H2" }

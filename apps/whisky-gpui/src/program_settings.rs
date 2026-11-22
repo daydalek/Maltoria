@@ -679,9 +679,9 @@ pub(crate) fn relative_time(unix_seconds: f64) -> String {
     let delta = (now - unix_seconds).max(0.0) as u64;
     match delta {
         0..=59 => crate::i18n::s().program_settings.just_now.to_owned(),
-        60..=3_599 => crate::i18n::fmt::relative_minutes_ago(delta / 60),
-        3_600..=86_399 => crate::i18n::fmt::relative_hours_ago(delta / 3_600),
-        _ => crate::i18n::fmt::relative_days_ago(delta / 86_400),
+        60..=3_599 => crate::i18n::s().program_settings.relative_minutes_ago(delta / 60),
+        3_600..=86_399 => crate::i18n::s().program_settings.relative_hours_ago(delta / 3_600),
+        _ => crate::i18n::s().program_settings.relative_days_ago(delta / 86_400),
     }
 }
 

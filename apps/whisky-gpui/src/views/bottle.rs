@@ -246,7 +246,7 @@ impl WhiskyApp {
             strings.bottle.demo_summary.to_owned()
         } else {
             let bottle = self.selected_bottle.and_then(|idx| self.bottles.get(idx));
-            let mut parts = vec![crate::i18n::fmt::games_count(total_games)];
+            let mut parts = vec![crate::i18n::s().library.games_count(total_games)];
             if let Some(bottle) = bottle {
                 if let Some(cfg) = self.config.as_ref().filter(|c| c.container == bottle.path && !c.loading) {
                     if let Some(win) = cfg.values.get("windowsVersion").and_then(|v| v.as_str()) {
@@ -285,7 +285,7 @@ impl WhiskyApp {
                     .when(total_games > 6, |d| {
                         d.child(
                             Button::new("bottle-view-all-games")
-                                .label(crate::i18n::fmt::view_all_games_in_library(total_games))
+                                .label(crate::i18n::s().library.view_all_games_in_library(total_games))
                                 .ghost()
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.preview.page = PreviewPage::Library;
@@ -600,20 +600,17 @@ impl WhiskyApp {
                 let selected_gated = policy_for(selected.as_str())
                     .is_some_and(|policy| policy.disabled);
                 if selected_gated {
-                    title = crate::i18n::fmt::value_inactive(&title);
+                    title = crate::i18n::s().program_settings.value_inactive(&title);
                 }
                 let disabled_reasons: Vec<String> = options
                     .iter()
                     .filter_map(|option| {
                         let policy = policy_for(&option.id)?;
                         policy.disabled.then(|| {
-                            crate::i18n::fmt::engine_unsupported_reason(
-                                option.display_title(&field.id),
-                                policy
+                            crate::i18n::s().bottle.engine_unsupported_reason(option.display_title(&field.id), policy
                                     .reason
                                     .as_deref()
-                                    .unwrap_or(b.unsupported_by_engine),
-                            )
+                                    .unwrap_or(b.unsupported_by_engine))
                         })
                     })
                     .collect();
@@ -708,7 +705,7 @@ impl WhiskyApp {
                                                 && policy.state == "unverified"
                                         });
                                     let option_title = if choice_confirmable {
-                                        crate::i18n::fmt::value_requires_confirm(option_title)
+                                        crate::i18n::s().program_settings.value_requires_confirm(option_title)
                                     } else {
                                         option_title.clone()
                                     };
@@ -1681,7 +1678,7 @@ impl WhiskyApp {
             if engine.is_some_and(|engine| engine.available) || engine.is_none() {
                 title.clone()
             } else {
-                crate::i18n::fmt::engine_unavailable_item(&title)
+                crate::i18n::s().bottle.engine_unavailable_item(&title)
             },
         )];
         if let Some(reason) = unavailable_reason {
@@ -1707,7 +1704,7 @@ impl WhiskyApp {
                                 let label = if engine.available {
                                     engine.name.clone()
                                 } else {
-                                    crate::i18n::fmt::engine_unavailable_item(&engine.name)
+                                    crate::i18n::s().bottle.engine_unavailable_item(&engine.name)
                                 };
                                 menu = menu.item(
                                     PopupMenuItem::new(label)

@@ -91,7 +91,7 @@ impl WhiskyApp {
         if let Some(count) = state.completed {
             rows.insert(
                 0,
-                muted(crate::i18n::fmt::import_added_count(count)).into_any_element(),
+                muted(crate::i18n::s().import_bottles.import_added_count(count)).into_any_element(),
             );
         }
         let select_label = if state.candidates.len() > 128 {
@@ -273,7 +273,7 @@ impl WhiskyApp {
                                     .label(if busy {
                                         strings.import_bottles.importing.to_owned()
                                     } else {
-                                        crate::i18n::fmt::import_selected_button(count)
+                                        crate::i18n::s().import_bottles.import_selected_button(count)
                                     })
                                     .primary()
                                     .disabled(busy || loading || count == 0 || !connected)

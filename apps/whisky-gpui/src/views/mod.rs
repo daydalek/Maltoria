@@ -280,7 +280,7 @@ impl WhiskyApp {
             // preferences live in the settings page's library section.
             for (i, label) in sort_names.into_iter().enumerate() {
                 items.push(
-                    self.menu_item(crate::i18n::fmt::sort_by(label), Command::Sort(i), cx)
+                    self.menu_item(crate::i18n::s().library.sort_by(label), Command::Sort(i), cx)
                         .checked(self.preview.sort == i),
                 );
             }
@@ -293,7 +293,7 @@ impl WhiskyApp {
                     .checked(self.group_by_studio),
             );
             let hidden = self.hidden_count();
-            let hidden_label = crate::i18n::fmt::show_hidden_games(hidden);
+            let hidden_label = crate::i18n::s().library.show_hidden_games(hidden);
             items.push(
                 self.menu_item(hidden_label, Command::Toggle("show-hidden"), cx)
                     .checked(self.show_hidden()),
@@ -393,7 +393,7 @@ impl WhiskyApp {
         ];
         if let Some(studio) = game.and_then(|game| game.studio_name()) {
             items.push(self.menu_item(
-                crate::i18n::fmt::filter_same_studio(&studio),
+                crate::i18n::s().library.filter_same_studio(&studio),
                 Command::FilterStudio(index),
                 cx,
             ));
