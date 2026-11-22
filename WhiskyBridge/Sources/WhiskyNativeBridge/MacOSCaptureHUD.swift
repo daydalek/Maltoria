@@ -117,7 +117,26 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
     private var isCollapsed = false
     private var isWaitingForLaunch = false
     private var isWorking = false
-    private var errorMessage: String?
+    private var rawErrorMessage: String?
+    private var errorMessageID: String?
+    private var strings: CapturePopupStrings { subtitleOverlay.strings }
+    private var errorMessage: String? {
+        get {
+            if let errorMessageID { return strings.text(errorMessageID) }
+            return rawErrorMessage.map { strings.errorText($0) }
+        }
+        set {
+            errorMessageID = nil
+            rawErrorMessage = newValue
+        }
+    }
+
+    func localize(_ values: [String: JSONValue]) {
+        strings.update(values)
+        subtitleOverlay.refreshLocalization()
+        panel?.title = strings.text("hud_title")
+        if isVisible { rebuildUI(preservingScroll: true) }
+    }
     private var lastCaptureState: String = "stopped"
     private var topRightAnchor: NSPoint?
     private var applyingFrame = false
@@ -271,14 +290,12 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
 
     private func startCaptureForLaunch(container: URL, entryID: String, preset: CapturePreset) async {
         guard let capture, let workspace else {
-            errorMessage = "捕获服务不可用"
+            errorMessageID = "capture_unavailable"
             rebuildUI(preservingScroll: false)
             return
         }
         guard let resolvedProviderID = resolveLaunchProviderID(preset: preset) else {
-            errorMessage = providers.isEmpty
-                ? "未配置翻译提供商，请先在 Maltoria 中配置"
-                : "请在上方选择翻译提供商后开始扫描"
+            errorMessageID = providers.isEmpty ? "no_provider" : "pick_provider"
             rebuildUI(preservingScroll: false)
             return
         }
@@ -347,12 +364,12 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
 
     private func triggerManualStart(autoAttach: Bool) {
         guard let capture, let workspace, let container = activeContainer, let entry = activeEntry else {
-            errorMessage = "请先从游戏库启动或选择一个游戏"
+            errorMessageID = "pick_game"
             rebuildUI(preservingScroll: false)
             return
         }
         guard let providerID = selectedProviderID ?? (providers.count == 1 ? providers[0].id : nil) else {
-            errorMessage = "未配置翻译提供商，请先在 Maltoria 中配置"
+            errorMessageID = "no_provider"
             rebuildUI(preservingScroll: false)
             return
         }
@@ -411,7 +428,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
                 if response.object?["attached"]?.bool == true, !self.subtitleOverlay.isVisible {
                     self.subtitleOverlay.setVisible(true)
                 } else if response.object?["attached"]?.bool == false {
-                    self.errorMessage = "未找到匹配预设的游戏进程，请手动附加或刷新"
+                    self.errorMessageID = "preset_target_missing"
                 }
             } catch {
                 self.applyCaptureError(error)
@@ -556,9 +573,9 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
     private func applyCaptureError(_ error: any Error) {
         if let failure = error as? BridgeFailure {
             if failure.code == "provider_not_found" || failure.code == "invalid_provider" {
-                errorMessage = "未配置翻译提供商，请先在 Maltoria 中配置"
+                errorMessageID = "no_provider"
             } else {
-                errorMessage = failure.message
+                errorMessage = strings.errorText(failure.code) == failure.code ? failure.message : failure.code
             }
         } else {
             errorMessage = error.localizedDescription
@@ -574,7 +591,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        FullscreenOverlaySupport.configurePanel(panel, title: "Maltoria capture HUD", delegate: self)
+        FullscreenOverlaySupport.configurePanel(panel, title: strings.text("hud_title"), delegate: self)
 
         let root = NSView()
         root.wantsLayer = true
@@ -664,7 +681,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
 
     private func buildCollapsedUI(in root: NSView) {
         let attached = currentCaptureState() == "attached"
-        let title = attached ? "🌐 已附加" : "🌐 待附加"
+        let title = "🌐 " + strings.text(attached ? "attached" : "standby")
         let pillLabel = makeLabel(title, size: 11, weight: .semibold, color: .white, lines: 1)
         pillLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
@@ -679,7 +696,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
             verticalPadding: 2
         )
         let expandButton = HUDActionButton(
-            title: "展开",
+            title: strings.text("expand"),
             background: NSColor.white.withAlphaComponent(0.14),
             foreground: .white,
             fontSize: 11,
@@ -753,7 +770,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
     }
 
     private func buildOverlayQuickBar() -> NSView {
-        let label = makeLabel("字幕浮窗", size: 11, weight: .medium, color: .lightGray, lines: 1)
+        let label = makeLabel(strings.text("subtitle_overlay"), size: 11, weight: .medium, color: .lightGray, lines: 1)
         label.setContentHuggingPriority(.defaultLow, for: .horizontal)
         let subtitleButton = makeSubtitleToggleButton()
         let dragButton = makeOverlayDragToggleButton()
@@ -778,7 +795,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
     ) -> HUDActionButton {
         let subtitleOn = subtitleOverlay.isVisible
         let button = HUDActionButton(
-            title: subtitleOn ? "字幕开" : "字幕关",
+            title: strings.text(subtitleOn ? "sub_on" : "sub_off"),
             background: subtitleOn
                 ? NSColor.systemGreen.withAlphaComponent(0.30)
                 : NSColor.white.withAlphaComponent(0.12),
@@ -804,7 +821,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
     ) -> HUDActionButton {
         let unlocked = !subtitleOverlay.clickThrough
         let button = HUDActionButton(
-            title: unlocked ? "可拖动" : "锁定",
+            title: strings.text(unlocked ? "draggable" : "locked"),
             background: unlocked
                 ? NSColor.systemBlue.withAlphaComponent(0.36)
                 : NSColor.white.withAlphaComponent(0.12),
@@ -824,7 +841,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
     }
 
     private func buildHeaderRow() -> NSView {
-        let gameTitle = activeEntry?.displayName ?? "文本捕获"
+        let gameTitle = activeEntry?.displayName ?? strings.text("hud_title")
         let titleLabel = makeLabel(gameTitle, size: 13, weight: .semibold, color: .white, lines: 1)
         titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -837,7 +854,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
         titleStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         let refreshButton = HUDActionButton(
-            title: "刷新",
+            title: strings.text("refresh"),
             background: NSColor.white.withAlphaComponent(0.10),
             foreground: .white,
             fontSize: 11,
@@ -849,7 +866,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
         }
 
         let collapseButton = HUDActionButton(
-            title: "收起",
+            title: strings.text("collapse"),
             background: NSColor.white.withAlphaComponent(0.10),
             foreground: .white,
             fontSize: 11,
@@ -901,14 +918,14 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
     private func statusAppearance() -> (String, NSColor, NSColor) {
         if isWaitingForLaunch {
             return (
-                "正在等待游戏进程启动…",
+                strings.text("waiting_game"),
                 NSColor.systemBlue.withAlphaComponent(0.24),
                 NSColor(calibratedRed: 0.65, green: 0.85, blue: 1, alpha: 1)
             )
         }
         if errorMessage != nil || currentCaptureState() == "error" {
             return (
-                "错误",
+                strings.text("error"),
                 NSColor.systemRed.withAlphaComponent(0.25),
                 NSColor(calibratedRed: 1, green: 0.62, blue: 0.62, alpha: 1)
             )
@@ -916,26 +933,26 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
         switch currentCaptureState() {
         case "selecting":
             return (
-                "请选择游戏进程",
+                strings.text("pick_process"),
                 NSColor.systemOrange.withAlphaComponent(0.24),
                 NSColor(calibratedRed: 1, green: 0.82, blue: 0.52, alpha: 1)
             )
         case "connecting", "attaching":
             return (
-                "正在连接…",
+                strings.text("connecting"),
                 NSColor.systemBlue.withAlphaComponent(0.24),
                 NSColor(calibratedRed: 0.65, green: 0.85, blue: 1, alpha: 1)
             )
         case "attached":
             let exe = windowsBasename(latestSnapshot.object?["target"]?.object?["exePath"]?.string ?? "")
-            let label = exe.isEmpty ? "已附加" : "已附加 · \(exe)"
+            let label = exe.isEmpty ? strings.text("attached") : strings.text("attached_target", ["exe": exe])
             return (
                 label,
                 NSColor.systemGreen.withAlphaComponent(0.24),
                 NSColor(calibratedRed: 0.58, green: 0.94, blue: 0.68, alpha: 1)
             )
         default:
-            return ("准备扫描", NSColor.white.withAlphaComponent(0.10), NSColor.lightGray)
+            return (strings.text("standby_scan"), NSColor.white.withAlphaComponent(0.10), NSColor.lightGray)
         }
     }
 
@@ -955,7 +972,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
         }
         popup.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        let archTitle = "架构: \(selectedArchitecture)"
+        let archTitle = strings.text("architecture_label", ["arch": selectedArchitecture])
         let archButton = HUDActionButton(
             title: archTitle,
             background: NSColor.white.withAlphaComponent(0.12),
@@ -988,12 +1005,12 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
         let state = currentCaptureState()
         if isWaitingForLaunch {
             return makeInfoCard(
-                message: "正在等待游戏进程启动…\n将在 1 秒后自动扫描并准备附加。",
+                message: strings.text("waiting_launch_detail"),
                 color: NSColor(calibratedWhite: 0.85, alpha: 1)
             )
         }
         if state == "connecting" || state == "attaching" {
-            let msg = state == "attaching" ? "正在附加到游戏进程…" : "正在启动捕获助手…"
+            let msg = strings.text(state == "attaching" ? "attaching_detail" : "starting_helper_detail")
             return makeInfoCard(message: msg, color: NSColor(calibratedWhite: 0.85, alpha: 1))
         }
         if state == "selecting" {
@@ -1014,7 +1031,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
         let effectiveError = errorMessage ?? latestSnapshot.object?["lastError"]?.string
         if let effectiveError, !effectiveError.isEmpty {
             let errorCard = makeInfoCard(
-                message: effectiveError,
+                message: strings.errorText(effectiveError),
                 color: NSColor(calibratedRed: 1, green: 0.65, blue: 0.65, alpha: 1),
                 background: NSColor.systemRed.withAlphaComponent(0.18)
             )
@@ -1022,7 +1039,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
             errorCard.widthAnchor.constraint(equalTo: container.widthAnchor).isActive = true
         } else if providers.isEmpty {
             let warnCard = makeInfoCard(
-                message: "未配置翻译提供商，请先在 Maltoria 中配置",
+                message: strings.text("no_provider"),
                 color: NSColor(calibratedRed: 1, green: 0.84, blue: 0.55, alpha: 1),
                 background: NSColor.systemOrange.withAlphaComponent(0.18)
             )
@@ -1031,7 +1048,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
         }
 
         let startButton = HUDActionButton(
-            title: isWorking ? "正在启动…" : "开始扫描进程",
+            title: strings.text(isWorking ? "starting_label" : "start_scan"),
             background: NSColor.systemBlue.withAlphaComponent(0.75),
             foreground: .white,
             fontSize: 12,
@@ -1047,7 +1064,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
         var buttons: [NSView] = [startButton]
         if let targetPath = activePreset.targetExePath, !targetPath.isEmpty {
             let autoButton = HUDActionButton(
-                title: "自动附加预设",
+                title: strings.text("preset_attach_label"),
                 background: NSColor.white.withAlphaComponent(0.14),
                 foreground: .white,
                 fontSize: 12,
@@ -1087,7 +1104,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
         if let savedTarget = activePreset.targetExePath, !savedTarget.isEmpty {
             let basename = windowsBasename(savedTarget)
             let autoBanner = HUDActionButton(
-                title: "自动附加预设 (\(basename.isEmpty ? savedTarget : basename))",
+                title: strings.text("preset_attach_target", ["exe": basename.isEmpty ? savedTarget : basename]),
                 background: NSColor.systemBlue.withAlphaComponent(0.55),
                 foreground: .white,
                 fontSize: 11,
@@ -1106,7 +1123,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
         let processes = sortedCandidateProcesses()
         if processes.isEmpty {
             let emptyCard = makeInfoCard(
-                message: "未发现可附加的游戏进程，请等待游戏窗口打开后点击右上角刷新。",
+                message: strings.text("process_empty_detail"),
                 color: NSColor(calibratedWhite: 0.78, alpha: 1)
             )
             container.addArrangedSubview(emptyCard)
@@ -1145,7 +1162,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
         nameLabel.lineBreakMode = .byTruncatingMiddle
         nameLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        let metaLabel = makeLabel("\(arch) · PID \(pid)", size: 10, weight: .regular, color: .lightGray, lines: 1)
+        let metaLabel = makeLabel(strings.text("process_metadata", ["arch": arch, "pid": String(pid)]), size: 10, weight: .regular, color: .lightGray, lines: 1)
         let infoStack = NSStackView(views: [nameLabel, metaLabel])
         infoStack.orientation = .vertical
         infoStack.alignment = .leading
@@ -1153,7 +1170,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
         infoStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         let attachButton = HUDActionButton(
-            title: "附加",
+            title: strings.text("attach"),
             background: NSColor.systemBlue.withAlphaComponent(0.75),
             foreground: .white,
             fontSize: 11,
@@ -1177,7 +1194,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
 
         let exe = windowsBasename(latestSnapshot.object?["target"]?.object?["exePath"]?.string ?? "")
         let attachedLabel = makeLabel(
-            "已附加: \(exe.isEmpty ? "游戏进程" : exe)",
+            strings.text("attached_target", ["exe": exe.isEmpty ? strings.text("game_process") : exe]),
             size: 11,
             weight: .medium,
             color: NSColor(calibratedRed: 0.62, green: 0.94, blue: 0.72, alpha: 1),
@@ -1187,7 +1204,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
         attachedLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         let detachButton = HUDActionButton(
-            title: "分离",
+            title: strings.text("detach"),
             background: NSColor.systemRed.withAlphaComponent(0.32),
             foreground: NSColor(calibratedRed: 1, green: 0.72, blue: 0.72, alpha: 1),
             fontSize: 11,
@@ -1199,7 +1216,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
         }
 
         let pillButton = HUDActionButton(
-            title: "收起成悬浮球",
+            title: strings.text("collapse_ball"),
             background: NSColor.white.withAlphaComponent(0.12),
             foreground: .white,
             fontSize: 11,
@@ -1226,7 +1243,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
         let threads = visibleThreads()
         if threads.isEmpty {
             let waitingCard = makeInfoCard(
-                message: "已附加，请在游戏中推进一段对话，非空文本线程会出现在下方供选择。",
+                message: strings.text("waiting_text"),
                 color: NSColor(calibratedWhite: 0.78, alpha: 1)
             )
             container.addArrangedSubview(waitingCard)
@@ -1249,13 +1266,13 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
 
     private func buildThreadRow(_ thread: [String: JSONValue]) -> NSView {
         let threadID = thread["id"]?.string ?? ""
-        let hookName = thread["hookName"]?.string ?? "Thread"
+        let hookName = thread["hookName"]?.string ?? strings.text("thread")
         let currentRole = thread["role"]?.string
         let rawPreview = (thread["preview"]?.string ?? "")
             .replacingOccurrences(of: "\r", with: " ")
             .replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let preview = rawPreview.isEmpty ? "(暂无文本)" : String(rawPreview.prefix(80))
+        let preview = rawPreview.isEmpty ? strings.text("empty_preview") : String(rawPreview.prefix(80))
 
         let titleText = currentRole.map { "\(hookName) · \(roleDisplayName($0))" } ?? hookName
         let titleLabel = makeLabel(titleText, size: 11, weight: .semibold, color: .white, lines: 1)
@@ -1264,10 +1281,10 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
         previewLabel.lineBreakMode = .byTruncatingTail
 
         let buttons: [(String, String?)] = [
-            ("正文", "body"),
-            ("说话人", "speaker"),
-            ("选项", "choice"),
-            ("忽略", nil)
+            (strings.text("role_body"), "body"),
+            (strings.text("role_speaker"), "speaker"),
+            (strings.text("role_choice"), "choice"),
+            (strings.text("role_ignore"), nil)
         ]
         let roleButtons = buttons.map { title, roleValue -> NSView in
             let isSelected = (roleValue != nil && currentRole == roleValue)
@@ -1384,9 +1401,9 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
 
     private func roleDisplayName(_ role: String) -> String {
         switch role {
-        case "body": "正文"
-        case "speaker": "说话人"
-        case "choice": "选项"
+        case "body": strings.text("role_body")
+        case "speaker": strings.text("role_speaker")
+        case "choice": strings.text("role_choice")
         default: role
         }
     }

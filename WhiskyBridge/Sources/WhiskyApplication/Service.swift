@@ -271,7 +271,8 @@ extension ApplicationService {
         case "environment": return try await environmentCall(method, params: params)
         case "processes": return try await processesCall(method, params: params)
         case "translation":
-            if method == "translation.capture.hud/show" || method == "translation.capture.hud/hide" {
+            if method == "translation.capture.hud/show" || method == "translation.capture.hud/hide"
+                || method == "translation.capture.hud/localize" {
                 return try await nativeCall(method, params: params)
             }
             if ApplicationCaptureService.methods.contains(method) {

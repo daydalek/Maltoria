@@ -421,6 +421,12 @@ final class OverlayResizeHandleView: NSView {
 
 @MainActor
 final class MacOSSubtitleOverlay: NSObject, NSWindowDelegate {
+    let strings = CapturePopupStrings()
+
+    func refreshLocalization() {
+        panel?.title = strings.text("overlay_title")
+        refreshText()
+    }
     private var settings = SubtitleOverlaySettings()
     private let defaults: UserDefaults
     private var panel: SubtitlePanel?
@@ -517,7 +523,7 @@ final class MacOSSubtitleOverlay: NSObject, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        FullscreenOverlaySupport.configurePanel(panel, title: "Maltoria subtitles", delegate: self)
+        FullscreenOverlaySupport.configurePanel(panel, title: strings.text("overlay_title"), delegate: self)
         panel.appearance = NSAppearance(named: .darkAqua)
         panel.isMovableByWindowBackground = true
         panel.minSize = NSSize(width: 320, height: 100)
@@ -684,9 +690,9 @@ final class MacOSSubtitleOverlay: NSObject, NSWindowDelegate {
         source?.isHidden = !settings.showSource
         translation?.isHidden = !settings.showTranslation || translation?.stringValue.isEmpty == true
         let message: String = switch display["status"]?.string {
-        case "pending": "Translating…"
-        case "failed": display["error"]?.string ?? "Translation failed"
-        case "cancelled": "Translation cancelled"
+        case "pending": strings.text("translating")
+        case "failed": (display["error"]?.string).map { strings.errorText($0) } ?? strings.text("translation_failed")
+        case "cancelled": strings.text("translation_cancelled")
         default: ""
         }
         status?.stringValue = message

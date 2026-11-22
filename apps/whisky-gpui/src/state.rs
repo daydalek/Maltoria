@@ -1513,6 +1513,7 @@ impl WhiskyApp {
             }
             BridgeEvent::Services(methods) => {
                 self.service_methods = methods.into_iter().collect();
+                self.localize_native_capture_popup();
                 if self.service_available("gameConfig.match") {
                     if let Some(page) = self.game_info.as_mut().filter(|page| page.matches.is_none() && page.config_error.is_some()) {
                         page.config_error = None;
@@ -5131,6 +5132,16 @@ impl WhiskyApp {
         self.show_notice(crate::i18n::s().theme.appearance_toggled(next.label()), cx);
     }
 
+    fn localize_native_capture_popup(&mut self) {
+        if !self.demo && self.service_available("translation.capture.hud/localize") {
+            let _ = self.bridge.translation_request(
+                crate::translation::next_request_id(),
+                "translation.capture.hud/localize",
+                serde_json::json!({"strings": crate::capture::native_popup_strings()}),
+            );
+        }
+    }
+
     pub(crate) fn set_language(
         &mut self,
         mode: crate::i18n::LanguageMode,
@@ -5140,6 +5151,7 @@ impl WhiskyApp {
         self.preview.choices.insert("language", mode.wire().into());
         crate::ui_state::save_language(mode);
         let _ = crate::i18n::set_language(mode);
+        self.localize_native_capture_popup();
         #[cfg(not(test))]
         crate::install_menus(cx);
         self.show_notice(crate::i18n::s().settings.language_changed(mode.label()), cx);
