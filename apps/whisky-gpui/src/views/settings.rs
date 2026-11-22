@@ -26,51 +26,67 @@ fn blur_level_at(x: f32, bounds: [f32; 2]) -> f64 {
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-const COVER_UPSCALE_LABEL: &str = "封面超分";
+fn cover_upscale_label() -> &'static str {
+    crate::i18n::s().settings.cover_upscale
+}
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-const COVER_ENGINE_LABEL: &str = "超分引擎";
+fn cover_engine_label() -> &'static str {
+    crate::i18n::s().settings.cover_engine
+}
 
 #[cfg(target_os = "macos")]
-const COVER_ENGINES: &[(&str, &str)] = &[
-    ("Real-CUGAN（质量优先）", "realcugan"),
-    ("Anime4K（更快）", "anime4k"),
-];
+fn cover_engines() -> [(&'static str, &'static str); 2] {
+    let s = &crate::i18n::s().settings;
+    [
+        (s.cover_engine_realcugan_mac, "realcugan"),
+        (s.cover_engine_anime4k_mac, "anime4k"),
+    ]
+}
 #[cfg(target_os = "linux")]
-const COVER_ENGINES: &[(&str, &str)] = &[
-    ("Real-CUGAN（Vulkan GPU）", "realcugan"),
-    ("Real-CUGAN（CPU）", "realcugan-cpu"),
-];
+fn cover_engines() -> [(&'static str, &'static str); 2] {
+    let s = &crate::i18n::s().settings;
+    [
+        (s.cover_engine_realcugan_gpu_linux, "realcugan"),
+        (s.cover_engine_realcugan_cpu_linux, "realcugan-cpu"),
+    ]
+}
 
 #[cfg(not(target_os = "linux"))]
-const TERMINALS: [(&str, &str); 3] = [
-    ("Terminal", preferences::TERMINAL_VALUES[0]),
-    ("iTerm2", preferences::TERMINAL_VALUES[1]),
-    ("Warp", preferences::TERMINAL_VALUES[2]),
-];
+fn terminals() -> [(&'static str, &'static str); 3] {
+    [
+        ("Terminal", preferences::TERMINAL_VALUES[0]),
+        ("iTerm2", preferences::TERMINAL_VALUES[1]),
+        ("Warp", preferences::TERMINAL_VALUES[2]),
+    ]
+}
 
 #[cfg(target_os = "linux")]
-const TERMINALS: [(&str, &str); 5] = [
-    ("自动选择", preferences::TERMINAL_VALUES[0]),
-    ("系统终端", preferences::TERMINAL_VALUES[1]),
-    ("GNOME Terminal", preferences::TERMINAL_VALUES[2]),
-    ("XTerm", preferences::TERMINAL_VALUES[3]),
-    ("Foot", preferences::TERMINAL_VALUES[4]),
-];
+fn terminals() -> [(&'static str, &'static str); 5] {
+    let s = &crate::i18n::s().settings;
+    [
+        (s.terminal_auto, preferences::TERMINAL_VALUES[0]),
+        (s.terminal_system, preferences::TERMINAL_VALUES[1]),
+        ("GNOME Terminal", preferences::TERMINAL_VALUES[2]),
+        ("XTerm", preferences::TERMINAL_VALUES[3]),
+        ("Foot", preferences::TERMINAL_VALUES[4]),
+    ]
+}
 
 impl WhiskyApp {
     /// One-click derivation for the whole library, with live progress; the same
     /// button cancels a pass that is already running.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn cover_batch_row(&self, cx: &Context<Self>) -> AnyElement {
+        let s = &crate::i18n::s().settings;
         let running = self.cover_batch;
         let (action, detail) = match running {
             Some(batch) => (
-                format!("取消（{}/{}）", batch.done, batch.total),
-                "正在后台逐张处理，已完成的会保留。".to_owned(),
+                crate::i18n::fmt::cover_batch_cancel(batch.done, batch.total),
+                s.cover_batch_running_desc.to_owned(),
             ),
             None => (
-                "全部超分".to_owned(),
-                "按所选倍率处理整个游戏库，已缓存的会跳过；过大图片会降低倍率。".to_owned(),
+                s.cover_batch_all.to_owned(),
+                s.cover_batch_idle_desc.to_owned(),
             ),
         };
         let disabled = running.is_none()
@@ -84,7 +100,7 @@ impl WhiskyApp {
                     .flex_1()
                     .min_w_0()
                     .gap(px(4.))
-                    .child("批量封面超分")
+                    .child(s.cover_batch_title)
                     .child(muted(detail).line_height(relative(1.4))),
             )
             .child(
@@ -203,6 +219,8 @@ impl WhiskyApp {
                     );
                 }));
         }
+        let s = &crate::i18n::s().settings;
+        let blur_names = crate::preferences::backdrop_blur_names();
         row()
             .py(px(10.))
             .gap(px(16.))
@@ -212,15 +230,15 @@ impl WhiskyApp {
                     .flex_1()
                     .min_w_0()
                     .gap(px(4.))
-                    .child("背景模糊")
+                    .child(s.backdrop_blur)
                     .child(
-                        muted("填充背景的高斯模糊强度；最左侧为清晰原图，拖动即切换。")
+                        muted(s.backdrop_blur_desc)
                             .line_height(relative(1.4)),
                     ),
             )
             .child(track)
             .child(
-                muted(crate::preferences::BACKDROP_BLUR_NAMES[usize::from(level)])
+                muted(blur_names[usize::from(level)])
                     .w(px(30.))
                     .text_size(px(11.)),
             )
@@ -229,10 +247,11 @@ impl WhiskyApp {
 
     #[cfg(target_os = "linux")]
     fn cover_upscale_status(&self) -> AnyElement {
+        let s = &crate::i18n::s().settings;
         let text = if crate::upscale::ready() {
-            "已找到 realcugan-ncnn-vulkan；自动模式先使用 Vulkan，失败后尝试 CPU。CPU 模式仍需要 Vulkan 加载器，处理速度较慢。"
+            s.cover_upscale_linux_ready
         } else {
-            "未找到 realcugan-ncnn-vulkan 或 models-se 模型目录；安装后可设置 WHISKY_REALCUGAN_HELPER 与 WHISKY_REALCUGAN_MODELS 指定路径，重启应用后生效。"
+            s.cover_upscale_linux_missing
         };
         row()
             .py(px(10.))
@@ -241,9 +260,11 @@ impl WhiskyApp {
     }
 
     fn terminal_preferences(&self, cx: &Context<Self>) -> AnyElement {
+        let s = &crate::i18n::s().settings;
+        let term_list = terminals();
         #[cfg(not(target_os = "linux"))]
         {
-            return self.choice_pairs("terminal", "首选终端", &TERMINALS, cx);
+            return self.choice_pairs("terminal", s.preferred_terminal, &term_list, cx);
         }
         #[cfg(target_os = "linux")]
         {
@@ -253,12 +274,12 @@ impl WhiskyApp {
                 .get("terminal")
                 .map(|value| value.as_ref())
                 .unwrap_or("auto");
-            let label = TERMINALS
+            let label = term_list
                 .iter()
                 .find(|(_, id)| *id == selected)
                 .map(|(label, _)| *label)
-                .unwrap_or("已配置的终端");
-            let choices = TERMINALS
+                .unwrap_or(s.terminal_configured);
+            let choices = term_list
                 .iter()
                 .copied()
                 .filter(|(_, id)| {
@@ -269,22 +290,22 @@ impl WhiskyApp {
                 })
                 .collect::<Vec<_>>();
             let status = if !self.service_available("system.terminals") {
-                "终端发现服务接入后可选择".to_owned()
+                s.terminal_service_unavailable.to_owned()
             } else {
                 self.host_terminal_error
                     .clone()
                     .unwrap_or_else(|| match &self.host_terminals {
                         Some(status) if status.available.is_empty() => {
-                            "请安装适用于当前会话的终端（Foot、GNOME Terminal 或 XTerm）".to_owned()
+                            s.terminal_none_available.to_owned()
                         }
                         Some(status)
                             if selected != "auto"
                                 && !status.available.iter().any(|term| term.id == selected) =>
                         {
-                            "首选终端暂不可用，请重新选择".to_owned()
+                            s.terminal_preferred_unavailable.to_owned()
                         }
                         Some(status) if !status.display_available => {
-                            "图形会话连接后可打开终端".to_owned()
+                            s.terminal_need_display.to_owned()
                         }
                         Some(status) => status
                             .available
@@ -292,7 +313,7 @@ impl WhiskyApp {
                             .map(|term| format!("{} · {}", term.name, term.path))
                             .collect::<Vec<_>>()
                             .join("；"),
-                        None => "正在发现 Linux 终端…".to_owned(),
+                        None => s.terminal_discovering.to_owned(),
                     })
             };
             let view = cx.entity().downgrade();
@@ -308,7 +329,7 @@ impl WhiskyApp {
                     row()
                         .py(px(10.))
                         .gap(px(16.))
-                        .child(div().flex_1().child("首选终端"))
+                        .child(div().flex_1().child(s.preferred_terminal))
                         .child(
                             Button::new("linux-terminal")
                                 .label(format!("{label}  ⌄"))
@@ -332,7 +353,7 @@ impl WhiskyApp {
                         )
                         .child(
                             Button::new("refresh-terminals")
-                                .label("重新检测")
+                                .label(s.terminal_redetect)
                                 .disabled(!self.service_available("system.terminals"))
                                 .on_click(
                                     cx.listener(|this, _, _, _| this.bridge.load_terminals()),
@@ -346,12 +367,13 @@ impl WhiskyApp {
 
     #[cfg(target_os = "linux")]
     fn desktop_preferences(&self, cx: &Context<Self>) -> AnyElement {
+        let s = &crate::i18n::s().settings;
         let installed = self
             .desktop_status
             .as_ref()
             .is_some_and(|status| status.installed);
         let message = if !self.service_available("system.desktop.status") {
-            "桌面集成服务接入后可配置".into()
+            s.desktop_service_unavailable.into()
         } else {
             self.desktop_error
                 .clone()
@@ -360,7 +382,7 @@ impl WhiskyApp {
                         .as_ref()
                         .map(|status| status.path.clone())
                 })
-                .unwrap_or_else(|| "正在读取桌面集成状态…".into())
+                .unwrap_or_else(|| s.desktop_reading.into())
         };
         crate::controls::col()
             .gap(px(6.))
@@ -368,21 +390,21 @@ impl WhiskyApp {
                 row()
                     .py(px(10.))
                     .gap(px(16.))
-                    .child(div().flex_1().child("桌面入口与打开方式"))
+                    .child(div().flex_1().child(s.desktop_entry_title))
                     .child(
                         Button::new("install-desktop")
                             .label(if self.desktop_installing {
-                                "正在添加…"
+                                s.desktop_adding
                             } else if self
                                 .desktop_status
                                 .as_ref()
                                 .is_some_and(|status| status.needs_update)
                             {
-                                "更新…"
+                                s.desktop_update
                             } else if installed {
-                                "已添加"
+                                s.desktop_added
                             } else {
-                                "添加…"
+                                s.desktop_add
                             })
                             .disabled(
                                 self.desktop_installing
@@ -439,10 +461,12 @@ impl WhiskyApp {
     }
 
     fn general_section(&self, cx: &Context<Self>) -> AnyElement {
+        let strings = crate::i18n::s();
+        let s = &strings.settings;
         let bottle_location = self
             .default_bottle_location
             .clone()
-            .unwrap_or_else(|| "正在读取容器位置…".into());
+            .unwrap_or_else(|| s.reading_bottle_location.into());
         let terminal = self.terminal_preferences(cx);
         #[cfg(target_os = "linux")]
         let terminal = crate::controls::col()
@@ -452,34 +476,40 @@ impl WhiskyApp {
             .into_any_element();
         self.section(
             "general",
-            "通用",
+            s.general_title,
             vec![
                 self.toggle(
                     "kill",
-                    "退出 Maltoria 时结束所有进程",
+                    s.kill_on_terminate_title,
                     if self.toggle_available("kill") {
-                        "退出应用时按此设置处理运行中的 Windows 程序。"
+                        s.kill_on_terminate_desc
                     } else {
-                        "运行时服务接入后可设置。"
+                        s.kill_on_terminate_unavailable
                     },
                     cx,
                 ),
-                // "在菜单栏显示 Whisky" is deliberately absent: the
+                // "Show Whisky in Menu Bar" is deliberately absent: the
                 // GPUI toolkit has no menu-bar/status-item API, so
                 // the toggle would write a shared default nothing
                 // reads here. It stays in the schema for SwiftUI.
                 #[cfg(not(target_os = "linux"))]
                 self.choice_pairs(
                     "appearance",
-                    "主题外观",
-                    &crate::theme::APPEARANCE_OPTIONS,
+                    s.appearance_label,
+                    &crate::theme::appearance_options(),
+                    cx,
+                ),
+                self.choice_pairs(
+                    "language",
+                    s.language_label,
+                    &crate::i18n::LanguageMode::options(),
                     cx,
                 ),
                 terminal,
                 row()
                     .py(px(10.))
                     .gap(px(16.))
-                    .child(div().flex_1().min_w_0().child("默认容器位置"))
+                    .child(div().flex_1().min_w_0().child(s.default_bottle_location))
                     .child(
                         muted(bottle_location)
                             .max_w(relative(0.5))
@@ -487,7 +517,7 @@ impl WhiskyApp {
                     )
                     .child(
                         Button::new("choose-bottle-location")
-                            .label("更改…")
+                            .label(s.change_ellipsis)
                             .disabled(
                                 !self.service_available("system.chooseFolder")
                                     || !self.service_available("preferences.set"),
@@ -503,30 +533,31 @@ impl WhiskyApp {
     }
 
     fn library_prefs_section(&self, cx: &Context<Self>) -> AnyElement {
+        let s = &crate::i18n::s().settings;
         let mut rows = vec![
             self.library_mode_cards(cx),
             self.toggle(
                 "refresh",
-                "退出游戏后刷新游戏库",
+                s.refresh_after_exit,
                 if self.toggle_available("refresh") {
                     ""
                 } else {
-                    "运行时事件服务接入后可设置。"
+                    s.refresh_after_exit_unavailable
                 },
                 cx,
             ),
             self.toggle(
                 "group-by-studio",
-                "按厂商聚类展示",
-                "按开发商 / 厂商分组显示作品，支持在网格、画廊、时间线与沉浸式视图中一键归类。",
+                s.group_by_studio,
+                s.group_by_studio_desc,
                 cx,
             ),
             self.choice_pairs(
                 "tag-bar-mode",
-                "标签与厂商栏显示方式",
+                s.tag_bar_mode,
                 &[
-                    ("顶部二次下滑抽出", "pull-down"),
-                    ("始终常驻显示", "always"),
+                    (s.tag_bar_pull_down, "pull-down"),
+                    (s.tag_bar_always, "always"),
                 ],
                 cx,
             ),
@@ -542,15 +573,15 @@ impl WhiskyApp {
                             .flex_1()
                             .min_w_0()
                             .gap(px(4.))
-                            .child("顶部下滑抽出引导")
+                            .child(s.tag_bar_hint_title)
                             .child(
-                                muted("返回首页并演示微微下滑露出标签与厂商栏的引导动画。")
+                                muted(s.tag_bar_hint_desc)
                                     .line_height(relative(1.4)),
                             ),
                     )
                     .child(
                         Button::new("replay-tag-bar-hint")
-                            .label("重播引导")
+                            .label(s.tag_bar_hint_replay)
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.command(super::Command::ReplayTagBarHint, cx);
                             })),
@@ -561,30 +592,34 @@ impl WhiskyApp {
         rows.extend([
             self.toggle(
                 "mixed",
-                "混合封面布局",
-                "横版封面跨两列，竖版封面占一列。",
+                s.mixed_cover,
+                s.mixed_cover_desc,
                 cx,
             ),
-            self.toggle("single-title", "单行显示标题", "", cx),
+            self.toggle("single-title", s.single_line_titles, "", cx),
             self.toggle(
                 "backdrop-fill",
-                "图片填充背景",
-                "悬停时用游戏封面填充窗口与详情页背景；关闭后使用主题纯色。",
+                s.backdrop_fill,
+                s.backdrop_fill_desc,
                 cx,
             ),
             self.backdrop_blur_row(cx),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             self.choice_pairs(
                 "cover-upscale",
-                COVER_UPSCALE_LABEL,
-                &[("关闭", "off"), ("2× 实用", "x2"), ("4× 激进", "x4")],
+                cover_upscale_label(),
+                &[
+                    (crate::i18n::s().common.off, "off"),
+                    (s.cover_upscale_x2, "x2"),
+                    (s.cover_upscale_x4, "x4"),
+                ],
                 cx,
             ),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             self.choice_pairs(
                 "cover-engine",
-                COVER_ENGINE_LABEL,
-                COVER_ENGINES,
+                cover_engine_label(),
+                &cover_engines(),
                 cx,
             ),
             #[cfg(target_os = "linux")]
@@ -593,14 +628,14 @@ impl WhiskyApp {
             self.cover_batch_row(cx),
             self.toggle(
                 "scrape-characters",
-                "默认获取人物资料",
-                "从支持的数据源获取人物、声优与头像。",
+                s.scrape_characters,
+                s.scrape_characters_desc,
                 cx,
             ),
             self.toggle(
                 "center-cover-text",
-                "宽封面文字居中",
-                "横版封面上的标题与信息居中对齐。",
+                s.center_wide_text,
+                s.center_wide_text_desc,
                 cx,
             ),
             // The SwiftUI-only display preferences (blurred cover
@@ -612,33 +647,34 @@ impl WhiskyApp {
             // driven by the `libraryBackdrop*` keys above.
             self.toggle(
                 "motion",
-                "界面动画",
-                "滚动回弹、卡片弹簧重排、悬停与详情页过渡。",
+                s.motion_title,
+                s.motion_desc,
                 cx,
             ),
             self.toggle(
                 "lively",
-                "明显弹性动画",
-                "卡片重排使用更明显的弹性曲线（默认：柔和）。",
+                s.lively_title,
+                s.lively_desc,
                 cx,
             ),
         ]);
-        self.section("library-prefs", "游戏库", rows, cx)
+        self.section("library-prefs", s.library_title, rows, cx)
     }
 
     fn translation_entry_section(&self, cx: &Context<Self>) -> AnyElement {
+        let s = &crate::i18n::s().settings;
         self.section(
             "translation-settings",
-            "游戏翻译",
+            s.translation_title,
             vec![
-                muted("配置翻译服务、模型和对话上下文。游戏翻译入口也可从游戏菜单打开。")
+                muted(s.translation_desc)
                     .line_height(relative(1.4))
                     .into_any_element(),
                 row()
                     .py(px(6.))
                     .child(
                         Button::new("translation-settings-open")
-                            .label("提供商与翻译设置…")
+                            .label(s.translation_open)
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.open_translation_settings(cx)
                             })),
@@ -650,25 +686,22 @@ impl WhiskyApp {
     }
 
     fn metadata_section(&self, cx: &Context<Self>) -> AnyElement {
+        let s = &crate::i18n::s().settings;
         self.section(
             "metadata-preferences",
-            "资料来源",
+            s.metadata_title,
             vec![
                 self.info(
-                    "默认来源",
-                    crate::onboarding::SOURCES
-                        .iter()
-                        .find(|(id, _)| *id == self.metadata_preferences.default_source)
-                        .map(|(_, label)| *label)
-                        .unwrap_or("Bangumi"),
+                    s.metadata_default_source,
+                    crate::onboarding::source_label(&self.metadata_preferences.default_source),
                 ),
-                muted("按资料类型选择平台。更改默认偏好不会覆盖已有作品或手动编辑。")
+                muted(s.metadata_desc)
                     .into_any_element(),
                 row()
                     .gap(px(8.))
                     .child(
                         Button::new("metadata-preferences-open")
-                            .label("调整来源…")
+                            .label(s.metadata_adjust)
                             .disabled(!self.service_available("preferences.setMany"))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.open_onboarding(false, cx)
@@ -676,7 +709,7 @@ impl WhiskyApp {
                     )
                     .child(
                         Button::new("welcome-reopen")
-                            .label("使用指南…")
+                            .label(s.metadata_guide)
                             .ghost()
                             .disabled(!self.service_available("preferences.setMany"))
                             .on_click(cx.listener(|this, _, _, cx| {
@@ -690,23 +723,25 @@ impl WhiskyApp {
     }
 
     fn runtime_section(&self, cx: &Context<Self>) -> AnyElement {
+        let strings = crate::i18n::s();
+        let s = &strings.settings;
         self.section(
             "runtime",
-            "Wine 运行时",
+            s.runtime_title,
             if self.service_available("setup.status") {
                 vec![
                     self.info(
-                        "状态",
+                        strings.common.status,
                         self.setup_status.as_ref().map_or_else(
-                            || "未知".to_owned(),
+                            || strings.common.unknown.to_owned(),
                             |status| {
                                 if status.installed {
                                     status.version.clone().map_or_else(
-                                        || "已安装".to_owned(),
-                                        |version| format!("已安装 · {version}"),
+                                        || strings.common.installed.to_owned(),
+                                        |version| crate::i18n::fmt::runtime_installed_version(&version),
                                     )
                                 } else {
-                                    "未安装".to_owned()
+                                    strings.common.not_installed.to_owned()
                                 }
                             },
                         ),
@@ -715,7 +750,7 @@ impl WhiskyApp {
                         .py(px(6.))
                         .child(
                             Button::new("runtime-install")
-                                .label("安装或更新运行时…")
+                                .label(s.runtime_install_update)
                                 .disabled(!self.service_available("setup.install"))
                                 .on_click(
                                     cx.listener(|this, _, _, cx| this.install_wine_runtime(cx)),
@@ -724,30 +759,31 @@ impl WhiskyApp {
                         .into_any_element(),
                 ]
             } else {
-                vec![self.info("当前服务", "文件管理与宿主集成")]
+                vec![self.info(s.current_service, s.service_file_host)]
             },
             cx,
         )
     }
 
     fn network_section(&self, cx: &Context<Self>) -> AnyElement {
+        let s = &crate::i18n::s().settings;
         self.section(
             "network",
-            "网络与更新",
+            s.network_title,
             vec![
                 self.toggle(
                     "offline",
-                    "离线模式",
-                    "阻止 Maltoria 自身的联网请求；游戏不受影响。",
+                    s.offline_mode,
+                    s.offline_mode_desc,
                     cx,
                 ),
                 self.toggle(
                     "updates",
-                    "检查 Wine 更新",
+                    s.check_updates,
                     if self.toggle_available("updates") {
                         ""
                     } else {
-                        "运行时更新服务接入后可设置。"
+                        s.check_updates_unavailable
                     },
                     cx,
                 ),
@@ -758,12 +794,14 @@ impl WhiskyApp {
 
     #[cfg(not(target_os = "linux"))]
     fn gptk_section(&self, cx: &Context<Self>) -> AnyElement {
+        let strings = crate::i18n::s();
+        let s = &strings.settings;
         let status = self.gptk_status.as_ref();
         let installed = status.is_some_and(|s| s.installed);
         let capable = status.is_some_and(|s| s.capable);
         let version = status
             .and_then(|s| s.version.clone())
-            .unwrap_or_else(|| "未知".into());
+            .unwrap_or_else(|| strings.common.unknown.into());
         let unverified = status.is_some_and(|s| s.unverified);
         let error = status.and_then(|s| s.error.clone());
 
@@ -775,14 +813,14 @@ impl WhiskyApp {
                     .gap(px(8.))
                     .py(px(10.))
                     .child(Spinner::new().with_size(px(14.)))
-                    .child(muted("正在处理 Game Porting Toolkit 负载…"))
+                    .child(muted(s.gptk_importing))
                     .into_any_element(),
             );
         } else if installed {
-            rows.push(self.info("D3DMetal 版本", version));
+            rows.push(self.info(s.gptk_d3dmetal_version, version));
             if unverified || error.is_some() {
                 rows.push(
-                    muted(error.unwrap_or_else(|| "此负载未通过 Apple 签名检查".into()))
+                    muted(error.unwrap_or_else(|| s.gptk_unverified_default.into()))
                         .text_size(px(12.))
                         .into_any_element(),
                 );
@@ -793,26 +831,26 @@ impl WhiskyApp {
                     .gap(px(12.))
                     .child(
                         Button::new("gptk-reimport")
-                            .label("从 Game Porting Toolkit 导入…")
+                            .label(s.gptk_import_btn)
                             .disabled(self.gptk_importing)
                             .on_click(cx.listener(|this, _, _, cx| this.choose_gptk_image(cx))),
                     )
                     .child(
                         Button::new("gptk-remove")
-                            .label("移除已导入的负载")
+                            .label(s.gptk_remove_btn)
                             .disabled(self.gptk_importing)
                             .on_click(cx.listener(|this, _, _, cx| this.remove_gptk(cx))),
                     )
                     .into_any_element(),
             );
         } else {
-            rows.push(self.info("状态", "尚未导入 D3DMetal 负载"));
+            rows.push(self.info(strings.common.status, s.gptk_not_imported));
             rows.push(
                 row()
                     .py(px(6.))
                     .child(
                         Button::new("gptk-import")
-                            .label("从 Game Porting Toolkit 导入…")
+                            .label(s.gptk_import_btn)
                             .disabled(self.gptk_importing)
                             .on_click(cx.listener(|this, _, _, cx| this.choose_gptk_image(cx))),
                     )
@@ -821,9 +859,9 @@ impl WhiskyApp {
         }
 
         let footer_text = if capable {
-            "已安装的引擎可以运行 D3DMetal。已导入的负载会自动部署。"
+            s.gptk_capable_footer
         } else {
-            "已安装的引擎版本尚无法运行 D3DMetal。已导入的负载会保留，并在安装支持 GPTK 的引擎后自动部署。"
+            s.gptk_incapable_footer
         };
         rows.push(muted(footer_text).text_size(px(11.)).into_any_element());
 
@@ -832,25 +870,27 @@ impl WhiskyApp {
 }
 
 impl WhiskyApp {
-    /// 自定义 Wine 引擎: registered external engine trees. The managed row is
-    /// immutable — install/update lives in the Wine 运行时 section — and
+    /// Custom Wine engines: registered external engine trees. The managed row is
+    /// immutable — install/update lives in the Wine runtime section — and
     /// removal only drops the registration, never the files.
     fn engines_section(&self, cx: &Context<Self>) -> AnyElement {
+        let strings = crate::i18n::s();
+        let s = &strings.settings;
         let mut rows = Vec::new();
 
         if self.service_available("wine.engines.list") {
             for engine in &self.wine_engines {
                 let mut status = if engine.managed {
-                    "受管".to_owned()
+                    s.engine_managed.to_owned()
                 } else if engine.available {
                     // Detection never launches the engine, so a version is
                     // known only when the tree ships metadata.
                     match &engine.version {
-                        Some(version) => format!("已注册 · {version}"),
-                        None => "已注册 · 版本未知".to_owned(),
+                        Some(version) => crate::i18n::fmt::engine_registered(version),
+                        None => s.engine_registered_unknown_ver.to_owned(),
                     }
                 } else {
-                    "不可用".to_owned()
+                    strings.common.unavailable.to_owned()
                 };
                 if !engine.architectures.is_empty() {
                     status = format!("{status} · {}", engine.architectures.join("/"));
@@ -865,25 +905,16 @@ impl WhiskyApp {
                     .features
                     .iter()
                     .filter(|feature| feature.state == "unverified")
-                    .map(|feature| feature.id.as_str())
+                    .map(|feature| crate::i18n::config::engine_feature_label(&feature.id))
                     .collect();
                 let unavailable: Vec<&str> = engine
                     .features
                     .iter()
                     .filter(|feature| feature.state == "unavailable")
-                    .map(|feature| feature.id.as_str())
+                    .map(|feature| crate::i18n::config::engine_feature_label(&feature.id))
                     .collect();
                 if !unverified.is_empty() || !unavailable.is_empty() {
-                    let mut summary = String::new();
-                    if !unverified.is_empty() {
-                        summary.push_str(&format!("未验证（需确认）: {}", unverified.join("、")));
-                    }
-                    if !unavailable.is_empty() {
-                        if !summary.is_empty() {
-                            summary.push_str("；");
-                        }
-                        summary.push_str(&format!("不可用: {}", unavailable.join("、")));
-                    }
+                    let summary = crate::i18n::fmt::engine_features_summary(&unverified, &unavailable);
                     rows.push(
                         muted(summary)
                             .text_size(px(11.))
@@ -901,7 +932,7 @@ impl WhiskyApp {
                             .py(px(4.))
                             .child(
                                 Button::new(format!("engine-remove:{id}"))
-                                    .label("移除注册")
+                                    .label(s.engine_remove_reg)
                                     .danger()
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         this.remove_wine_engine(&id, cx);
@@ -912,7 +943,7 @@ impl WhiskyApp {
                 }
             }
             if let Some(error) = &self.wine_engines_error {
-                rows.push(muted(format!("引擎注册表读取失败：{error}")).into_any_element());
+                rows.push(muted(crate::i18n::fmt::engine_registry_read_failed(error)).into_any_element());
             }
             rows.push(
                 row()
@@ -920,7 +951,7 @@ impl WhiskyApp {
                     .gap(px(12.))
                     .child(
                         Button::new("engine-register")
-                            .label("添加引擎目录…")
+                            .label(s.engine_add_dir)
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.choose_wine_engine_directory(cx);
                             })),
@@ -929,20 +960,20 @@ impl WhiskyApp {
             );
             rows.push(
                 #[cfg(not(target_os = "linux"))]
-                muted("外部引擎仅做静态检测并以只读方式使用：不会在目录内写入、更新或部署 D3DMetal。每个容器可在其配置页绑定引擎。")
+                muted(s.engines_footer_mac)
                     .text_size(px(11.))
                     .line_height(relative(1.4))
                     .into_any_element(),
                 #[cfg(target_os = "linux")]
-                muted("外部引擎仅做静态检测并以只读方式使用：不会向目录内写入或更新任何文件。每个容器可在其配置页绑定引擎。")
+                muted(s.engines_footer_linux)
                     .text_size(px(11.))
                     .line_height(relative(1.4))
                     .into_any_element(),
             );
         } else {
-            rows.push(self.info("当前服务", "自定义引擎需要兼容的 Wine 宿主适配器"));
+            rows.push(self.info(s.current_service, s.engines_service_unavailable));
         }
 
-        self.section("wine-engines", "自定义 Wine 引擎", rows, cx)
+        self.section("wine-engines", s.engines_title, rows, cx)
     }
 }

@@ -43,12 +43,12 @@ impl JobStatus {
     /// Sheet copy for the status, paired with the job's stage.
     pub(crate) fn label(self) -> &'static str {
         match self {
-            Self::Queued => "排队中…",
-            Self::Running => "正在扫描…",
-            Self::Cancelling => "正在取消…",
-            Self::Completed => "扫描完成",
-            Self::Failed => "扫描失败",
-            Self::Cancelled => "已取消",
+            Self::Queued => crate::i18n::tr("排队中…", "待機中…", "Queued…", "대기 중…"),
+            Self::Running => crate::i18n::tr("正在扫描…", "スキャン中…", "Scanning…", "스캔 중…"),
+            Self::Cancelling => crate::i18n::tr("正在取消…", "キャンセル中…", "Cancelling…", "취소 중…"),
+            Self::Completed => crate::i18n::tr("扫描完成", "スキャン完了", "Scan Complete", "스캔 완료"),
+            Self::Failed => crate::i18n::tr("扫描失败", "スキャン失敗", "Scan Failed", "스캔 실패"),
+            Self::Cancelled => crate::i18n::tr("已取消", "キャンセル済み", "Cancelled", "취소됨"),
         }
     }
 }
@@ -57,13 +57,13 @@ impl JobStatus {
 /// this frontend's own phase while it walks `library.page`.
 pub(crate) fn progress_label(status: JobStatus, stage: Option<&str>) -> &'static str {
     match (status, stage) {
-        (JobStatus::Queued, _) => "排队中…",
-        (JobStatus::Running, Some("paging")) => "正在载入条目…",
-        (JobStatus::Running, _) => "正在扫描…",
-        (JobStatus::Cancelling, _) => "正在取消…",
-        (JobStatus::Completed, _) => "扫描完成",
-        (JobStatus::Failed, _) => "扫描失败",
-        (JobStatus::Cancelled, _) => "已取消",
+        (JobStatus::Queued, _) => crate::i18n::tr("排队中…", "待機中…", "Queued…", "대기 중…"),
+        (JobStatus::Running, Some("paging")) => crate::i18n::tr("正在载入条目…", "項目を読み込み中…", "Loading entries…", "항목 불러오는 중…"),
+        (JobStatus::Running, _) => crate::i18n::tr("正在扫描…", "スキャン中…", "Scanning…", "스캔 중…"),
+        (JobStatus::Cancelling, _) => crate::i18n::tr("正在取消…", "キャンセル中…", "Cancelling…", "취소 중…"),
+        (JobStatus::Completed, _) => crate::i18n::tr("扫描完成", "スキャン完了", "Scan Complete", "스캔 완료"),
+        (JobStatus::Failed, _) => crate::i18n::tr("扫描失败", "スキャン失敗", "Scan Failed", "스캔 실패"),
+        (JobStatus::Cancelled, _) => crate::i18n::tr("已取消", "キャンセル済み", "Cancelled", "취소됨"),
     }
 }
 

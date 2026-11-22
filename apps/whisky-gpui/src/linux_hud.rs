@@ -89,7 +89,7 @@ impl WhiskyApp {
             .unwrap_or_else(|| entry.clone());
         let context = (container, entry.clone(), title);
         let other_session = self.capture.active_game.as_ref().filter(|g| g.0 != context.0 || g.1 != context.1);
-        let warning = other_session.map(|g| format!("正在捕获 {}；请先停止该会话，再开始当前游戏的捕获。", g.2));
+        let warning = other_session.map(|g| crate::i18n::fmt::other_game_capturing_warning(&g.2));
         self.capture.set_context(Some(context.clone()));
         if self.capture.active_game.as_ref().is_none_or(|g| g.0 != context.0 || g.1 != context.1) {
             let preset = self.capture.preset.clone().unwrap_or_default();
@@ -147,13 +147,13 @@ impl WhiskyApp {
         let settings_disabled =
             (attached && !other_session) || working || self.capture.is_pending("translation.capture.preset/save");
         let badge = if self.capture.hud.launch_at.is_some() {
-            "等待游戏…"
+            strings.linux_hud.waiting_game
         } else if attached {
-            "已附加"
+            strings.linux_hud.attached
         } else if selecting {
-            "选择进程"
+            strings.linux_hud.pick_process
         } else {
-            "待机"
+            strings.linux_hud.standby
         };
         let header = row()
             .h(px(34.))
@@ -182,7 +182,7 @@ impl WhiskyApp {
                     .child(if collapsed {
                         badge.to_owned()
                     } else {
-                        format!("捕获 · {badge}")
+                        crate::i18n::fmt::hud_capture_badge(badge)
                     })
                     .on_mouse_down(MouseButton::Left, |_, window, _| {
                         if std::env::var_os("WAYLAND_DISPLAY").is_some() {
@@ -198,9 +198,9 @@ impl WhiskyApp {
                             Button::new("hud-collapsed-overlay")
                                 .compact()
                                 .label(if overlay.visible {
-                                    "字幕开"
+                                    strings.linux_hud.sub_on
                                 } else {
-                                    "字幕关"
+                                    strings.linux_hud.sub_off
                                 })
                                 .disabled(self.capture.overlay.is_none())
                                 .on_click(cx.listener(|this, _, _, cx| {
@@ -212,9 +212,9 @@ impl WhiskyApp {
                             Button::new("hud-collapsed-input")
                                 .compact()
                                 .label(if overlay.click_through {
-                                    "穿透"
+                                    strings.linux_hud.passthrough
                                 } else {
-                                    "拖动"
+                                    strings.linux_hud.drag
                                 })
                                 .disabled(!self.capture.overlay_supports_click_through)
                                 .on_click(cx.listener(|this, _, _, cx| {
@@ -226,7 +226,11 @@ impl WhiskyApp {
                     .child(
                         Button::new("hud-collapse")
                             .compact()
-                            .label(if collapsed { "展开" } else { "收起" })
+                            .label(if collapsed {
+                                strings.common.expand
+                            } else {
+                                strings.common.collapse
+                            })
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.capture.hud.collapsed = !this.capture.hud.collapsed;
                                 cx.notify();
@@ -235,7 +239,7 @@ impl WhiskyApp {
                     .child(
                         Button::new("hud-close")
                             .compact()
-                            .label(if collapsed { "×" } else { "关闭" })
+                            .label(if collapsed { "×" } else { strings.common.close })
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.capture.hud.hide();
                                 cx.notify();
@@ -247,7 +251,7 @@ impl WhiskyApp {
             .bg(rgb(theme::bg()))
             .text_color(rgb(theme::text()))
             .text_size(px(12.))
-            .font_family("Noto Sans CJK SC")
+            .font_family(crate::platform::ui_font())
             .border_1()
             .border_color(rgba(theme::surface_border()))
             .child(header);
@@ -265,9 +269,9 @@ impl WhiskyApp {
                 .as_ref()
                 .or(self.capture.active_game.as_ref())
                 .map(|g| g.2.clone())
-                .unwrap_or_else(|| "请从游戏菜单打开悬浮捕获窗".into()),
+                .unwrap_or_else(|| strings.linux_hud.open_from_menu.into()),
         ));
-        let mut providers = row().gap(px(4.)).flex_wrap().child("提供商");
+        let mut providers = row().gap(px(4.)).flex_wrap().child(strings.linux_hud.provider);
         for provider in self.translation_page.providers.clone() {
             let id = provider.id.clone();
             providers = providers.child(selectable_pill(
@@ -283,10 +287,10 @@ impl WhiskyApp {
             ));
         }
         if self.translation_page.providers.is_empty() {
-            providers = providers.child(muted("尚未配置翻译提供商"));
+            providers = providers.child(muted(strings.translation.no_providers_generic));
         }
         body = body.child(providers);
-        let mut architecture = row().gap(px(4.)).child("架构");
+        let mut architecture = row().gap(px(4.)).child(strings.linux_hud.arch);
         for arch in ["x64", "x86"] {
             architecture = architecture.child(selectable_pill(
                 arch,
@@ -304,13 +308,13 @@ impl WhiskyApp {
         body = body.child(
             row()
                 .gap(px(5.))
-                .child("字幕浮窗")
+                .child(strings.linux_hud.subtitle_overlay)
                 .child(
                     Button::new("hud-overlay-visible")
                         .label(if overlay.visible {
-                            "隐藏字幕"
+                            strings.linux_hud.hide_subtitle
                         } else {
-                            "显示字幕"
+                            strings.linux_hud.show_subtitle
                         })
                         .disabled(self.capture.overlay.is_none())
                         .on_click(cx.listener(|this, _, _, cx| {
@@ -321,9 +325,9 @@ impl WhiskyApp {
                 .child(
                     Button::new("hud-overlay-input")
                         .label(if overlay.click_through {
-                            "解锁拖动"
+                            strings.linux_hud.unlock_drag
                         } else {
-                            "鼠标穿透"
+                            strings.linux_hud.mouse_passthrough
                         })
                         .disabled(!self.capture.overlay_supports_click_through)
                         .on_click(cx.listener(|this, _, _, cx| {
@@ -345,9 +349,9 @@ impl WhiskyApp {
         }
         if attached {
             body = body.child(
-                row().justify_between().child("捕获线程 · 分配角色").child(
+                row().justify_between().child(strings.linux_hud.thread_roles_header).child(
                     Button::new("hud-detach")
-                        .label("分离")
+                        .label(strings.capture.detach)
                         .disabled(working)
                         .on_click(cx.listener(|this, _, _, cx| {
                             let _ = this.capture.request(
@@ -360,15 +364,15 @@ impl WhiskyApp {
                 ),
             );
             if self.capture.threads.is_empty() {
-                body = body.child(muted("等待游戏输出文本…"));
+                body = body.child(muted(strings.linux_hud.waiting_text_output));
             }
             for thread in self.capture.threads.clone() {
                 let mut roles = row().gap(px(3.)).flex_wrap();
                 for (role, label) in [
-                    ("ignore", "忽略"),
-                    ("body", "正文"),
-                    ("speaker", "说话人"),
-                    ("choice", "选项"),
+                    ("ignore", strings.capture.role_ignore),
+                    ("body", strings.capture.role_body),
+                    ("speaker", strings.capture.role_speaker),
+                    ("choice", strings.capture.role_choice),
                 ] {
                     let id = thread.id.clone();
                     let active = self
@@ -403,7 +407,7 @@ impl WhiskyApp {
                         .gap(px(4.))
                         .child(
                             Button::new("hud-threads-prev")
-                                .label("上一页")
+                                .label(strings.common.previous_page)
                                 .disabled(self.capture.thread_offset == 0)
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.capture.refresh_threads(
@@ -415,7 +419,7 @@ impl WhiskyApp {
                         )
                         .child(
                             Button::new("hud-threads-next")
-                                .label("下一页")
+                                .label(strings.common.next_page)
                                 .disabled(
                                     self.capture.thread_offset + self.capture.threads.len()
                                         >= self.capture.thread_total,
@@ -437,7 +441,7 @@ impl WhiskyApp {
                     .flex_wrap()
                     .child(
                         Button::new("hud-start")
-                            .label("开始扫描")
+                            .label(strings.linux_hud.start_scan)
                             .primary()
                             .disabled(
                                 working
@@ -452,7 +456,7 @@ impl WhiskyApp {
                     )
                     .child(
                         Button::new("hud-refresh")
-                            .label("刷新进程")
+                            .label(strings.capture.refresh_processes)
                             .disabled(!selecting || working)
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.capture.request_processes(&this.bridge);
@@ -461,7 +465,7 @@ impl WhiskyApp {
                     )
                     .child(
                         Button::new("hud-auto-attach")
-                            .label("自动附加")
+                            .label(strings.linux_hud.auto_attach)
                             .disabled(
                                 working
                                     || (!selecting
@@ -480,12 +484,12 @@ impl WhiskyApp {
                             })),
                     ),
             );
-            body = body.child(div().child("游戏进程"));
+            body = body.child(div().child(strings.linux_hud.game_processes));
             if self.capture.processes.is_empty() {
                 body = body.child(muted(if selecting {
-                    "暂无可附加进程；请启动游戏后刷新。"
+                    strings.linux_hud.no_process_hint
                 } else {
-                    "请先选择提供商并开始扫描进程。"
+                    strings.linux_hud.pick_provider_hint
                 }));
             }
             for process in self.capture.processes.clone() {
@@ -508,11 +512,11 @@ impl WhiskyApp {
                 ));
             }
             if self.capture.truncated {
-                body = body.child(muted("进程列表已截断；可刷新重试。"));
+                body = body.child(muted(strings.linux_hud.list_truncated_hint));
             }
             body = body.child(
                 Button::new("hud-attach")
-                    .label("附加所选进程")
+                    .label(strings.capture.attach_selected)
                     .disabled(!selecting || working || self.capture.selected_process.is_none())
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.capture.attach(&this.bridge);
@@ -536,7 +540,7 @@ impl WhiskyApp {
                 .p(px(10.))
                 .child(
                     Button::new("hud-stop")
-                        .label("停止捕获")
+                        .label(strings.capture.stop_capture)
                         .danger()
                         .disabled(self.capture.active_game.is_none() || working)
                         .on_click(cx.listener(|this, _, _, cx| {
@@ -627,7 +631,7 @@ impl HudController {
                         .is_some_and(|g| g.0 != container || g.1 != entry);
                     app.show_linux_hud(container, entry);
                     if other_session {
-                        app.capture.error = Some("已有其他游戏的捕获会话；请先停止该会话。".into());
+                        app.capture.error = Some(crate::i18n::s().linux_hud.other_session_active.into());
                     } else {
                         app.capture.preset = Some(preset);
                         app.capture.hud.launch_at =
@@ -669,9 +673,14 @@ impl HudController {
                     if app.capture.provider_id.is_none() {
                         app.capture.error = Some(
                             if providers.is_empty() {
-                                "未配置翻译提供商，请先在 Maltoria 中配置"
+                                crate::i18n::tr(
+                                    "未配置翻译提供商，请先在 Maltoria 中配置",
+                                    "翻訳プロバイダーが未設定です。先に Maltoria で設定してください",
+                                    "No translation provider configured; configure one in Maltoria first",
+                                    "번역 제공자가 설정되지 않았습니다. 먼저 Maltoria에서 설정하세요",
+                                )
                             } else {
-                                "请在上方选择翻译提供商后开始扫描"
+                                crate::i18n::s().linux_hud.pick_provider_then_scan
                             }
                             .into(),
                         );
@@ -780,7 +789,20 @@ impl HudController {
                 Err(error) => {
                     entity.update(cx, |app, cx| {
                         app.capture.hud.hide();
-                        app.capture.error = Some(format!("无法打开悬浮捕获窗：{error}"));
+                        app.capture.error = Some(match crate::i18n::locale() {
+                            crate::i18n::Locale::ZhHans => {
+                                format!("无法打开悬浮捕获窗：{error}")
+                            }
+                            crate::i18n::Locale::Ja => {
+                                format!("フローティングキャプチャウィンドウを開けません：{error}")
+                            }
+                            crate::i18n::Locale::En => {
+                                format!("Unable to open floating capture window: {error}")
+                            }
+                            crate::i18n::Locale::Ko => {
+                                format!("플로팅 캡처 창을 열 수 없습니다: {error}")
+                            }
+                        });
                         cx.notify();
                     });
                 }

@@ -223,13 +223,14 @@ impl WinetricksState {
 }
 
 pub(crate) fn category_label(id: &str) -> &str {
+    let w = &crate::i18n::s().winetricks;
     match id {
-        "apps" => "应用",
-        "benchmarks" => "基准测试",
-        "dlls" => "DLL",
-        "fonts" => "字体",
-        "games" => "游戏",
-        "settings" => "设置",
+        "apps" => w.cat_apps,
+        "benchmarks" => w.cat_benchmarks,
+        "dlls" => w.cat_dlls,
+        "fonts" => w.cat_fonts,
+        "games" => w.cat_games,
+        "settings" => w.cat_settings,
         other => other,
     }
 }
@@ -258,35 +259,36 @@ pub(crate) fn filtered_verbs<'a>(
 pub(crate) fn install_label(job: &InstallJob) -> String {
     let status = job.status.unwrap_or(JobStatus::Queued);
     let verb = job.progress.verb.as_deref().unwrap_or("");
+    let w = &crate::i18n::s().winetricks;
     match (status, job.progress.stage.as_deref()) {
-        (JobStatus::Queued, _) => "排队中…".to_owned(),
+        (JobStatus::Queued, _) => w.queued.to_owned(),
         (JobStatus::Running, Some("preparing")) if !verb.is_empty() => {
-            format!("正在准备 {verb}…")
+            crate::i18n::fmt::winetricks_preparing(verb)
         }
         (JobStatus::Running, Some("output")) if !verb.is_empty() => {
-            format!("正在安装 {verb}…")
+            crate::i18n::fmt::winetricks_installing(verb)
         }
         (JobStatus::Running, Some("installed")) if !verb.is_empty() => {
-            format!("已安装 {verb}")
+            crate::i18n::fmt::winetricks_installed(verb)
         }
         (JobStatus::Running, Some("failed")) if !verb.is_empty() => {
-            format!("安装失败：{verb}")
+            crate::i18n::fmt::winetricks_failed(verb)
         }
         // The helper re-checks a nonzero exit against `winetricks
         // list-installed` before giving up on a verb.
-        (JobStatus::Running, Some("verifying")) => "正在核对安装结果…".to_owned(),
-        (JobStatus::Running, _) => "正在安装组件…".to_owned(),
-        (JobStatus::Cancelling, _) => "正在取消…".to_owned(),
+        (JobStatus::Running, Some("verifying")) => w.verifying.to_owned(),
+        (JobStatus::Running, _) => w.installing_components.to_owned(),
+        (JobStatus::Cancelling, _) => w.cancelling.to_owned(),
         (JobStatus::Completed, _) if !job.failed.is_empty() => {
             if job.succeeded.is_empty() {
-                "安装失败".to_owned()
+                w.install_failed.to_owned()
             } else {
-                "部分组件安装失败".to_owned()
+                w.partial_failed.to_owned()
             }
         }
-        (JobStatus::Completed, _) => "安装完成".to_owned(),
-        (JobStatus::Failed, _) => "安装失败".to_owned(),
-        (JobStatus::Cancelled, _) => "已取消".to_owned(),
+        (JobStatus::Completed, _) => w.install_complete.to_owned(),
+        (JobStatus::Failed, _) => w.install_failed.to_owned(),
+        (JobStatus::Cancelled, _) => w.cancelled.to_owned(),
     }
 }
 

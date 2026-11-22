@@ -812,11 +812,11 @@ impl CaptureState {
 
     pub(crate) fn start_with_auto_attach(&mut self, bridge: &BridgeSupervisor, auto_attach: bool) {
         let Some((container, entry_id, _)) = &self.context else {
-            self.error = Some("请从游戏菜单选择游戏后开始捕获。".into());
+            self.error = Some(crate::i18n::s().capture.err_select_game_first.into());
             return;
         };
         let Some(provider_id) = &self.provider_id else {
-            self.error = Some("请先明确选择已保存的提供商。".into());
+            self.error = Some(crate::i18n::s().capture.err_select_saved_provider.into());
             return;
         };
         if self.active_game.is_some() || self.is_pending("translation.capture.start") {
@@ -977,22 +977,22 @@ impl CaptureState {
                     self.start_with_auto_attach(bridge, true);
                     if self.active_game.is_some() {
                         self.preset_notice =
-                            Some("检测到游戏启动，正在扫描并自动附加到目标进程…".into());
+                            Some(crate::i18n::s().capture.msg_auto_scanning_proc.into());
                     }
                 } else {
                     self.preset_notice =
-                        Some("检测到游戏启动；选择提供商后可点击「自动附加并恢复」。".into());
+                        Some(crate::i18n::s().capture.msg_launch_need_provider.into());
                 }
             } else if self.is_selecting() {
                 self.auto_attach_pending = true;
                 self.auto_attach_attempts = 0;
                 self.schedule_auto_attach_retry(cx);
                 self.preset_notice =
-                    Some("检测到游戏启动，正在检测目标进程并自动附加…".into());
+                    Some(crate::i18n::s().capture.msg_auto_detecting_proc.into());
             }
         } else if preset.has_saved_state() && (self.is_idle() || self.is_selecting()) {
             self.preset_notice =
-                Some("检测到游戏启动；已记忆附加预设，可点击「自动附加并恢复」。".into());
+                Some(crate::i18n::s().capture.msg_launch_remembered.into());
         }
     }
 
@@ -1096,7 +1096,7 @@ impl CaptureState {
         };
         update(&mut settings);
         if !settings.validate() {
-            self.error = Some("叠层设置超出支持范围，或必须至少显示一种文本。".into());
+            self.error = Some(crate::i18n::s().capture.err_overlay_range.into());
             return;
         }
         let _ = self.request(
@@ -1157,7 +1157,7 @@ impl CaptureState {
         self.history_text_progress = None;
         self.error = Some(
             reason
-                .unwrap_or("桥接已断开；请显式重新开始捕获。 ")
+                .unwrap_or(crate::i18n::s().capture.err_bridge_disconnected)
                 .to_owned(),
         );
     }
@@ -1254,7 +1254,7 @@ impl CaptureState {
                 self.auto_attach_pending = false;
                 self.auto_attach_retry_scheduled = false;
                 self.preset_notice = Some(
-                    "未检测到目标进程；可在游戏启动后点击「自动附加并恢复」或手动选择进程。".into(),
+                    crate::i18n::s().capture.msg_no_target_proc.into(),
                 );
             }
         }
@@ -1338,7 +1338,20 @@ impl CaptureState {
                                 self.auto_attach_on_preset_load = false;
                                 self.preset_needs_apply = false;
                             }
-                            self.error = Some(format!("无效的捕获预设数据：{error}"));
+                            self.error = Some(match crate::i18n::locale() {
+                                crate::i18n::Locale::ZhHans => {
+                                    format!("无效的捕获预设数据：{error}")
+                                }
+                                crate::i18n::Locale::Ja => {
+                                    format!("無効なキャプチャプリセットデータ：{error}")
+                                }
+                                crate::i18n::Locale::En => {
+                                    format!("Invalid capture preset data: {error}")
+                                }
+                                crate::i18n::Locale::Ko => {
+                                    format!("잘못된 캡처 프리셋 데이터: {error}")
+                                }
+                            });
                         }
                     }
                 }
@@ -1357,7 +1370,7 @@ impl CaptureState {
                         if let Some(snapshot) = &mut self.snapshot {
                             snapshot.preset = None;
                         }
-                        self.preset_notice = Some("已清除当前游戏的捕获记忆预设。".into());
+                        self.preset_notice = Some(crate::i18n::s().capture.msg_cleared_preset.into());
                     }
                 }
                 "translation.capture.processes" => {
@@ -1400,7 +1413,7 @@ impl CaptureState {
                             .and_then(Value::as_u64)
                             .unwrap_or(next as u64) as usize;
                         if next < total && next <= current_offset {
-                            self.error = Some("历史文本响应未前进；已停止分块读取。".into());
+                            self.error = Some(crate::i18n::s().capture.err_history_stalled.into());
                             self.history_text_progress = None;
                         } else {
                             self.history_text
@@ -1498,7 +1511,7 @@ impl CaptureState {
             return;
         }
         let Ok(next) = role_selection(&self.thread_roles, thread_id, role) else {
-            self.error = Some("最多选择 8 个文本线程，且正文/说话者各只能选择一个。".into());
+            self.error = Some(crate::i18n::s().capture.err_thread_limit.into());
             return;
         };
         self.role_edit_generation = self.role_edit_generation.wrapping_add(1);

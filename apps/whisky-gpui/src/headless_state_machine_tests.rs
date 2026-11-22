@@ -592,6 +592,9 @@ fn test_picker_remote_error_isolation_and_supervisor_timeout() {
     // covered by the Swift LinuxFilePicker tests.
     assert_eq!(PICKER_TIMEOUT, Duration::from_secs(330));
 
+    // Pin English so localized error text keeps the asserted fragments.
+    let _locale = crate::i18n::LocaleGuard::new(crate::i18n::Locale::En);
+
     // Verify classify(): Remote error isolation vs Session failure
     let remote_timeout_err = whisky_bridge::Error::Remote(whisky_bridge::RemoteError {
         code: "5".into(),
@@ -1169,7 +1172,8 @@ fn test_challenge_picker_wire_error_decode_and_remote_classification() {
     assert_eq!(remote_err.message, "File selection timed out; open the picker again");
     assert!(remote_err.retryable);
 
-    // 3. Classify error into CallFailure
+    // 3. Classify error into CallFailure (English locale pins the translated text)
+    let _locale = crate::i18n::LocaleGuard::new(crate::i18n::Locale::En);
     let bridge_err = whisky_bridge::Error::Remote(remote_err);
     let classified = classify(bridge_err);
     match &classified {
@@ -2654,7 +2658,7 @@ fn studio_filter_and_clustering_compose_with_tags(cx: &mut gpui_kit::TestAppCont
                 assert_eq!(app.staggered_group_label(0, 0).as_deref(), Some("Key"));
                 assert_eq!(
                     app.staggered_group_label(3, 3).as_deref(),
-                    Some(crate::library_view::UNKNOWN_STUDIO_LABEL)
+                    Some(crate::library_view::unknown_studio_label())
                 );
 
                 // Filter by studio and compose with tag filter.
@@ -3369,6 +3373,78 @@ fn multi_executable_launch_chooser_and_picker_keyboard_navigation(
                 app.preview.sheet,
                 Some(crate::state::PreviewSheet::RunSettings(0))
             ));
+        })
+        .unwrap();
+}
+
+#[gpui_kit::test]
+fn language_selection_switches_locale_live_across_cjk_and_english(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    let _locale_guard = crate::i18n::LocaleGuard::new(crate::i18n::Locale::ZhHans);
+    cx.update(|app| gpui_kit::init(app));
+    let (_events_tx, events_rx) = smol::channel::unbounded();
+    let (bridge, _drain) = crate::bridge::BridgeSupervisor::recording_for_tests();
+    let window = cx.add_window(|window, cx| {
+        crate::WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, true)
+    });
+
+    window
+        .update(cx, |this, _, cx| {
+            assert_eq!(this.language, crate::i18n::LanguageMode::System);
+            let mut library_titles = std::collections::HashSet::new();
+
+            for (wire, expected_mode, expected_locale) in [
+                (
+                    "ja",
+                    crate::i18n::LanguageMode::Ja,
+                    crate::i18n::Locale::Ja,
+                ),
+                (
+                    "en",
+                    crate::i18n::LanguageMode::En,
+                    crate::i18n::Locale::En,
+                ),
+                (
+                    "ko",
+                    crate::i18n::LanguageMode::Ko,
+                    crate::i18n::Locale::Ko,
+                ),
+                (
+                    "zh-Hans",
+                    crate::i18n::LanguageMode::ZhHans,
+                    crate::i18n::Locale::ZhHans,
+                ),
+            ] {
+                this.choose("language", wire.into(), cx);
+                assert_eq!(this.language, expected_mode);
+                assert_eq!(crate::i18n::language_mode(), expected_mode);
+                assert_eq!(crate::i18n::locale(), expected_locale);
+                assert_eq!(
+                    this.preview.choices.get("language").map(|s| s.as_ref()),
+                    Some(wire)
+                );
+                let title = this.preview_title().to_string();
+                assert!(!title.is_empty());
+                assert_eq!(title, crate::i18n::s().library.title);
+                library_titles.insert(title);
+                assert_eq!(
+                    this.notice.as_deref(),
+                    Some(crate::i18n::fmt::language_changed(expected_mode.label()).as_str())
+                );
+            }
+            assert_eq!(library_titles.len(), 4);
+
+            this.choose("language", "system".into(), cx);
+            assert_eq!(this.language, crate::i18n::LanguageMode::System);
+            assert_eq!(
+                crate::i18n::language_mode(),
+                crate::i18n::LanguageMode::System
+            );
+            assert_eq!(
+                this.preview.choices.get("language").map(|s| s.as_ref()),
+                Some("system")
+            );
         })
         .unwrap();
 }

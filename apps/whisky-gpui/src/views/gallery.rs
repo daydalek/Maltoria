@@ -106,16 +106,17 @@ impl WhiskyApp {
             parts.push(self.bottle_name().to_owned());
         }
         if self.studio_filter.is_active() {
-            parts.push(format!("厂商：{}", self.studio_filter.display_label()));
+            parts.push(crate::i18n::fmt::title_studio(&self.studio_filter.display_label()));
         }
         if self.tag_filter.is_active() {
             parts.push(self.tag_filter.display_label());
         }
+        let strings = crate::i18n::s();
         let heading: SharedString = if parts.is_empty() {
             if self.group_by_studio {
-                "按厂商聚类".into()
+                strings.library.group_by_studio.into()
             } else {
-                "全部游戏".into()
+                strings.library.all_games.into()
             }
         } else {
             parts.join(" · ").into()
@@ -132,7 +133,11 @@ impl WhiskyApp {
                 } else {
                     self.studio_filter.is_studio(&cluster.label)
                 };
-                let filter_label = if is_filtered { "全部厂商" } else { "仅看此厂商" };
+                let filter_label = if is_filtered {
+                    strings.library.all_studios
+                } else {
+                    strings.library.only_this_studio
+                };
                 let cluster_label = cluster.label.clone();
                 let is_unknown = cluster.is_unknown;
                 cluster_col = cluster_col.child(
@@ -146,7 +151,7 @@ impl WhiskyApp {
                                 .font_weight(FontWeight::BOLD)
                                 .child(cluster.label.clone()),
                         )
-                        .child(muted(format!("{} 款", cluster.indices.len())).text_size(px(11.)))
+                        .child(muted(crate::i18n::fmt::studio_count(cluster.indices.len())).text_size(px(11.)))
                         .child(div().flex_1())
                         .child(crate::controls::selectable_pill(
                             ("gallery-studio-filter", ci),
@@ -304,7 +309,7 @@ impl WhiskyApp {
             )
             .child(match self.runtime_state(index) {
                 Some(RuntimeState::Running) => {
-                    live_badge(self.runtime_badge_label(index, "运行中"))
+                    live_badge(self.runtime_badge_label(index, crate::i18n::s().runtime.running))
                         .absolute()
                         .top(px(7.))
                         .right(px(7.))
@@ -351,22 +356,23 @@ impl WhiskyApp {
         let Some(game) = self.game(index) else {
             return div().into_any_element();
         };
+        let strings = crate::i18n::s();
         let hero_height = ((width - 32.) * 0.60).clamp(150., 300.);
         let artwork = self.artwork(index);
         let (ph_start, ph_end) = placeholder_gradient();
         let bottle = if game.bottle > 0 {
             let name = self.bottle_name_at(game.bottle);
             if name.is_empty() {
-                "未关联容器".to_owned()
+                strings.library.unlinked_bottle.to_owned()
             } else {
                 name.to_owned()
             }
         } else {
-            "未关联容器".to_owned()
+            strings.library.unlinked_bottle.to_owned()
         };
         let last_played =
             crate::model::format_last_played(game.last_session_ended_at.or(game.last_played))
-                .unwrap_or_else(|| "尚无游玩记录".to_owned());
+                .unwrap_or_else(|| strings.library.never_played.to_owned());
         let week_seconds = {
             let cutoff = chrono::Local::now().date_naive() - chrono::Duration::days(7);
             game.daily_play_time
@@ -386,7 +392,7 @@ impl WhiskyApp {
         badges = badges.child(badge("package", "Wine"));
         if let Some(state) = self.runtime_state(index) {
             if state == RuntimeState::Running {
-                badges = badges.child(live_badge(self.runtime_badge_label(index, "运行中")));
+                badges = badges.child(live_badge(self.runtime_badge_label(index, strings.runtime.running)));
             } else if state.is_active() {
                 badges = badges.child(phase_badge(
                     self.runtime_badge_label(index, state.phase_label()),
@@ -463,7 +469,7 @@ impl WhiskyApp {
                             .cursor_pointer()
                             .hover(|s| s.bg(rgba(hover())))
                             .tooltip(move |_, cx| {
-                                cx.new(|_| Tooltip::new("点击按此厂商筛选")).into()
+                                cx.new(|_| Tooltip::new(crate::i18n::s().library.click_filter_studio_tip)).into()
                             })
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.click_studio_filter(&studio_click, cx);
@@ -513,9 +519,9 @@ impl WhiskyApp {
                 tag_row = tag_row.child(crate::controls::selectable_pill(
                     ("gallery-edit-tags", index),
                     if game.tags.is_empty() {
-                        "+ 标签"
+                        strings.library.add_tag_chip
                     } else {
-                        "编辑标签"
+                        strings.library.edit_tags_chip
                     },
                     false,
                     false,
@@ -547,9 +553,9 @@ impl WhiskyApp {
                 // Grouped info card: icon + label on the left, value on the
                 // right, hairlines between rows.
                 let mut info_rows: Vec<AnyElement> = vec![
-                    info_row("star", "评分", {
+                    info_row("star", strings.library.rating, {
                         let value = game.rating.map_or_else(
-                            || "未评分".to_owned(),
+                            || strings.library.unrated.to_owned(),
                             |rating| format!("{} / 10", rating.min(10)),
                         );
                         row()
@@ -561,14 +567,14 @@ impl WhiskyApp {
                             .into_any_element()
                     })
                     .into_any_element(),
-                    info_row("container", "运行环境", info_value(bottle).into_any_element())
+                    info_row("container", strings.library.runtime_env, info_value(bottle).into_any_element())
                         .into_any_element(),
-                    info_row("clock", "上次游玩", info_value(last_played).into_any_element())
+                    info_row("clock", strings.library.last_played, info_value(last_played).into_any_element())
                         .into_any_element(),
                 ];
                 if let Some(play_time) = crate::model::format_play_time(game.play_time) {
                     info_rows.push(
-                        info_row("hourglass", "累计游玩", info_value(play_time).into_any_element())
+                        info_row("hourglass", strings.library.total_playtime, info_value(play_time).into_any_element())
                             .into_any_element(),
                     );
                 }
@@ -576,7 +582,7 @@ impl WhiskyApp {
                     info_rows.push(
                         info_row(
                             "calendar-clock",
-                            "近 7 天游玩",
+                            strings.library.last_7_days_play,
                             info_value(play_time).into_any_element(),
                         )
                         .into_any_element(),
@@ -593,7 +599,7 @@ impl WhiskyApp {
                             .cursor_pointer()
                             .hover(|s| s.bg(rgba(hover())))
                             .tooltip(move |_, cx| {
-                                cx.new(|_| Tooltip::new("在访达中打开")).into()
+                                cx.new(|_| Tooltip::new(crate::platform::reveal_label())).into()
                             })
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.command(
@@ -602,7 +608,7 @@ impl WhiskyApp {
                                 );
                             }))
                             .child(icon("folder", 13.).text_color(rgb(muted_color())))
-                            .child(muted("安装位置").text_size(px(12.)))
+                            .child(muted(strings.library.install_location).text_size(px(12.)))
                             .child(div().flex_1().min_w_0())
                             .child(
                                 div()
@@ -639,14 +645,14 @@ impl WhiskyApp {
                 )
             })
             .child(
-                self.play_button(("gallery-play", index), index, "启动游戏", cx)
+                self.play_button(("gallery-play", index), index, strings.library.launch_game, cx)
                     .w_full()
                     .h(px(44.)),
             )
             .child(gallery_action_pill(
                 ("gallery-settings", index),
                 "sliders-horizontal",
-                "游戏设置",
+                strings.library.game_settings,
                 cx.listener(move |this, _, _, cx| {
                     this.open_preview_sheet(PreviewSheet::RunSettings(index), cx);
                 }),
@@ -654,7 +660,7 @@ impl WhiskyApp {
             .child(gallery_action_pill(
                 ("gallery-translation", index),
                 "languages",
-                "游戏翻译与捕获",
+                strings.library.game_translation_capture,
                 cx.listener(move |this, _, _, cx| {
                     this.open_translation_for_game(index, cx);
                 }),
@@ -672,7 +678,7 @@ impl WhiskyApp {
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.open_detail_from(index, window, cx);
                     }))
-                    .child(muted("查看完整详情"))
+                    .child(muted(strings.library.view_full_details))
                     .key_focus(("gallery-details-link", index)),
             )
             .into_any_element()

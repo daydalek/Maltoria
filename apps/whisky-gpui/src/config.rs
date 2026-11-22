@@ -27,11 +27,27 @@ pub(crate) struct ConfigOption {
 }
 
 impl ConfigOption {
+    pub(crate) fn display_title(&self, field_id: &str) -> &str {
+        crate::i18n::config::option_title(field_id, &self.id, &self.title)
+    }
+
     pub(crate) fn title_for(options: &[ConfigOption], id: &str) -> String {
         options
             .iter()
             .find(|option| option.id == id)
             .map(|option| option.title.clone())
+            .unwrap_or_else(|| id.to_owned())
+    }
+
+    pub(crate) fn localized_title_for(
+        field_id: &str,
+        options: &[ConfigOption],
+        id: &str,
+    ) -> String {
+        options
+            .iter()
+            .find(|option| option.id == id)
+            .map(|option| option.display_title(field_id).to_owned())
             .unwrap_or_else(|| id.to_owned())
     }
 }
@@ -84,6 +100,10 @@ pub(crate) struct ConfigField {
 }
 
 impl ConfigField {
+    pub(crate) fn display_title(&self) -> &str {
+        crate::i18n::config::field_title(&self.title_key, &self.id, &self.title)
+    }
+
     /// Whether the connected helper advertises everything this field needs.
     pub(crate) fn enabled(&self, capabilities: &[String]) -> bool {
         self.requires
@@ -278,7 +298,7 @@ pub(crate) fn display_value(field: &ConfigField, value: &Value) -> Option<String
     match (&field.kind, value) {
         (FieldKind::Toggle, _) => None,
         (FieldKind::Choice { options }, Value::String(id)) => {
-            Some(ConfigOption::title_for(options, id))
+            Some(ConfigOption::localized_title_for(&field.id, options, id))
         }
         (_, Value::String(text)) => Some(text.clone()),
         (_, Value::Number(number)) => Some(number.to_string()),
@@ -291,26 +311,24 @@ pub(crate) fn display_value(field: &ConfigField, value: &Value) -> Option<String
 /// the schema range; the helper rejects the same values, so this is a local
 /// pre-check that keeps a bad edit off the wire.
 pub(crate) fn encode_edit(field: &ConfigField, raw: &str) -> Result<Value, String> {
+    let title = field.display_title();
     match &field.kind {
         FieldKind::Text => Ok(json!(raw)),
         FieldKind::Number { min, max } => {
             let trimmed = raw.trim();
             if trimmed.is_empty() {
-                return Err(format!("请为“{}”输入一个整数", field.title));
+                return Err(crate::i18n::fmt::config_number_required_empty(title));
             }
             let number: i64 = trimmed
                 .parse()
-                .map_err(|_| format!("“{}”需要一个整数", field.title))?;
+                .map_err(|_| crate::i18n::fmt::config_number_invalid(title))?;
             if number < *min || number > *max {
-                return Err(format!(
-                    "“{}”必须在 {min} 到 {max} 之间",
-                    field.title
-                ));
+                return Err(crate::i18n::fmt::config_number_range(title, *min, *max));
             }
             Ok(json!(number))
         }
         FieldKind::Toggle | FieldKind::Choice { .. } => {
-            Err(format!("“{}”不是文本字段", field.title))
+            Err(crate::i18n::fmt::config_not_text(title))
         }
     }
 }
@@ -338,13 +356,28 @@ pub(crate) fn environment_payload(container: &str, key: &str, value: Option<&str
 pub(crate) fn validate_environment_name(raw: &str) -> Result<&str, &'static str> {
     let key = raw.trim();
     if key.is_empty() {
-        return Err("变量名不能为空");
+        return Err(crate::i18n::tr(
+            "变量名不能为空",
+            "変数名を入力してください",
+            "Variable name cannot be empty",
+            "변수 이름을 입력하세요",
+        ));
     }
     if key.contains('=') {
-        return Err("变量名不能包含 =");
+        return Err(crate::i18n::tr(
+            "变量名不能包含 =",
+            "変数名に = は使用できません",
+            "Variable name cannot contain '='",
+            "변수 이름에 '='을 포함할 수 없습니다",
+        ));
     }
     if key.contains('\0') {
-        return Err("变量名不能包含空字符");
+        return Err(crate::i18n::tr(
+            "变量名不能包含空字符",
+            "変数名に NUL 文字は使用できません",
+            "Variable name cannot contain NUL",
+            "변수 이름에 NUL 문자를 포함할 수 없습니다",
+        ));
     }
     Ok(key)
 }
@@ -363,6 +396,12 @@ pub(crate) fn environment_rows(values: &BTreeMap<String, String>) -> Vec<(&str, 
 pub(crate) struct SectionSpec {
     pub(crate) id: &'static str,
     pub(crate) title: &'static str,
+}
+
+impl SectionSpec {
+    pub(crate) fn display_title(&self) -> &'static str {
+        crate::i18n::config::section_title(self.id)
+    }
 }
 
 /// `ContainerConfiguration.sections` order and titles, plus the program section

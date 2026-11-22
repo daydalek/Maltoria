@@ -252,7 +252,7 @@ impl SystemInfoDto {
     /// Version text for the About panel; never blank.
     pub(crate) fn version_label(&self) -> String {
         match (self.app_version.is_empty(), self.build.is_empty()) {
-            (true, _) => "预览版".into(),
+            (true, _) => crate::i18n::s().dialogs.preview_badge.into(),
             (false, true) => self.app_version.clone(),
             (false, false) => format!("{} ({})", self.app_version, self.build),
         }
@@ -414,11 +414,12 @@ impl CandidateDto {
 /// Human-friendly relative directory label for `.exe` paths in pickers & choosers.
 /// Returns `(label, is_root)` where root files map to `("根目录", true)`.
 pub(crate) fn relative_directory_label(path: &str, folder: &str) -> (String, bool) {
+    let root_label = || crate::i18n::tr("根目录", "ルートディレクトリ", "Root Folder", "루트 폴더").to_owned();
     let file_path = std::path::Path::new(path);
     let base_path = std::path::Path::new(folder);
     let parent = file_path.parent();
     if parent == Some(base_path) {
-        return ("根目录".to_owned(), true);
+        return (root_label(), true);
     }
     let rel = parent
         .and_then(|dir| dir.strip_prefix(base_path).ok())
@@ -428,7 +429,7 @@ pub(crate) fn relative_directory_label(path: &str, folder: &str) -> (String, boo
             parent
                 .and_then(|dir| dir.file_name())
                 .map(|name| name.to_string_lossy().to_string())
-                .unwrap_or_else(|| "根目录".to_owned())
+                .unwrap_or_else(root_label)
         });
     (rel, false)
 }
@@ -732,11 +733,7 @@ pub(crate) struct BridgeFailureDto {
 
 impl BridgeFailureDto {
     pub(crate) fn reason(&self) -> String {
-        if self.code.is_empty() {
-            self.message.clone()
-        } else {
-            format!("{}: {}", self.code, self.message)
-        }
+        crate::i18n::bridge_errors::describe(&self.code, &self.message)
     }
 }
 
@@ -997,11 +994,9 @@ impl EntryDto {
             characters: metadata.characters.unwrap_or_default(),
             metadata_sources: metadata.provenance.into_iter().filter_map(|(category, origin)| {
                 let label = if origin.manual {
-                    Some("本地编辑".to_owned())
+                    Some(crate::i18n::tr("本地编辑", "ローカル編集", "Manual Edit", "수동 편집").to_owned())
                 } else {
-                    origin.source.map(|source| crate::onboarding::SOURCES.iter()
-                        .find(|(id, _)| *id == source)
-                        .map(|(_, label)| (*label).to_owned()).unwrap_or(source))
+                    origin.source.map(|source| crate::onboarding::source_label(&source).to_owned())
                 };
                 label.map(|label| (category, label))
             }).collect(),
@@ -1708,7 +1703,7 @@ mod tests {
         assert_eq!(job.status, "cancelled");
         assert_eq!(
             job.error.as_ref().map(BridgeFailureDto::reason).as_deref(),
-            Some("cancelled: Operation cancelled")
+            Some("cancelled: 操作已取消")
         );
     }
 

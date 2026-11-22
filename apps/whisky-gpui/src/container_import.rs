@@ -51,7 +51,7 @@ impl ImportState {
         self.loading = false;
         self.importing = false;
         self.error = Some(if error.starts_with("candidate_changed:") {
-            "候选容器已变化，请重新扫描后再导入".to_owned()
+            crate::i18n::s().import_bottles.candidate_changed.to_owned()
         } else {
             error
         });
@@ -70,7 +70,7 @@ impl ImportState {
             if self.selected.len() < 128 {
                 self.selected.insert(path.to_owned());
             } else {
-                self.error = Some("每批最多选择 128 个容器，可分批导入".into());
+                self.error = Some(crate::i18n::s().import_bottles.max_128_error.into());
             }
         } else {
             self.selected.remove(path);

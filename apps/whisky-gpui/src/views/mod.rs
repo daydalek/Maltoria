@@ -257,40 +257,43 @@ impl WhiskyApp {
         }
     }
     pub(crate) fn options_menu(&self, cx: &Context<Self>) -> AnyElement {
+        let strings = crate::i18n::s();
         let is_library = self.preview.page == PreviewPage::Library && !self.settings;
         let has_bottle = self.selected_bottle.is_some() && !self.settings;
-        let sort_names = ["最近游玩", "名称", "容器"];
+        let sort_names = [
+            strings.library.sort_recent,
+            strings.library.sort_name,
+            strings.library.sort_bottle,
+        ];
         let mut items = vec![];
         let tooltip = if is_library {
-            let current_sort = sort_names.get(self.preview.sort).copied().unwrap_or("最近游玩");
-            let order = if self.reversed { " · 倒序" } else { "" };
-            SharedString::from(format!("排序与更多（当前：{current_sort}{order}）"))
+            let current_sort = sort_names
+                .get(self.preview.sort)
+                .copied()
+                .unwrap_or(strings.library.sort_recent);
+            SharedString::from(crate::i18n::fmt::sort_tooltip(current_sort, self.reversed))
         } else {
-            SharedString::from("更多操作")
+            SharedString::from(strings.common.more_actions)
         };
         if is_library {
             // Library view actions only; appearance, motion and layout
-            // preferences live in the settings page's 游戏库 section.
+            // preferences live in the settings page's library section.
             for (i, label) in sort_names.into_iter().enumerate() {
                 items.push(
-                    self.menu_item(format!("按{label}排序"), Command::Sort(i), cx)
+                    self.menu_item(crate::i18n::fmt::sort_by(label), Command::Sort(i), cx)
                         .checked(self.preview.sort == i),
                 );
             }
             items.push(
-                self.menu_item("倒序排列", Command::Toggle("reverse-sort"), cx)
+                self.menu_item(strings.library.sort_reverse, Command::Toggle("reverse-sort"), cx)
                     .checked(self.reversed),
             );
             items.push(
-                self.menu_item("按厂商聚类", Command::Toggle("group-by-studio"), cx)
+                self.menu_item(strings.library.group_by_studio, Command::Toggle("group-by-studio"), cx)
                     .checked(self.group_by_studio),
             );
             let hidden = self.hidden_count();
-            let hidden_label = if hidden == 0 {
-                "显示已隐藏的游戏".to_string()
-            } else {
-                format!("显示已隐藏的游戏（{hidden}）")
-            };
+            let hidden_label = crate::i18n::fmt::show_hidden_games(hidden);
             items.push(
                 self.menu_item(hidden_label, Command::Toggle("show-hidden"), cx)
                     .checked(self.show_hidden()),
@@ -298,17 +301,17 @@ impl WhiskyApp {
             items.push(MenuEntry::separator(cx.entity().downgrade()));
             if self.mode == 0 && self.cover_width > f32::EPSILON {
                 items.push(self.menu_item(
-                    "封面大小：恢复自动（双击滑块同效）",
+                    strings.library.reset_cover_size,
                     Command::CoverSize(crate::library_layout::AUTOMATIC_COVER_WIDTH),
                     cx,
                 ));
                 items.push(MenuEntry::separator(cx.entity().downgrade()));
             }
-            items.push(self.menu_item("扫描并同步游戏信息", Command::SyncMetadata, cx));
-            items.push(self.menu_item("管理扫描文件夹…", Command::Sheet(PreviewSheet::Scan), cx));
-            items.push(self.menu_item("管理标签…", Command::ManageTags, cx));
+            items.push(self.menu_item(strings.library.sync_metadata, Command::SyncMetadata, cx));
+            items.push(self.menu_item(strings.library.manage_scan_folders_btn, Command::Sheet(PreviewSheet::Scan), cx));
+            items.push(self.menu_item(strings.library.manage_tags, Command::ManageTags, cx));
             items.push(
-                self.menu_item("标签栏：顶部二次下滑抽出", Command::Toggle("tag-bar-pull-down"), cx)
+                self.menu_item(strings.library.tag_bar_pull_down_item, Command::Toggle("tag-bar-pull-down"), cx)
                     .checked(self.tag_bar_mode == crate::ui_state::TagBarMode::PullDown),
             );
             if self.tag_bar_mode == crate::ui_state::TagBarMode::PullDown
@@ -316,34 +319,34 @@ impl WhiskyApp {
             {
                 items.push(self.menu_item(
                     if self.pull_reveal.is_open() {
-                        "收起标签与厂商栏"
+                        strings.library.collapse_filter_bar
                     } else {
-                        "展开标签与厂商栏"
+                        strings.library.expand_filter_bar
                     },
                     Command::Toggle("toggle-tag-drawer"),
                     cx,
                 ));
             }
             items.push(MenuEntry::separator(cx.entity().downgrade()));
-            items.push(self.menu_item("刷新游戏库", Command::RefreshLibrary, cx));
+            items.push(self.menu_item(strings.menus.refresh_library, Command::RefreshLibrary, cx));
         } else if has_bottle {
             items.push(self.menu_item(
-                "容器配置",
+                strings.bottle.configure_bottle,
                 Command::Page(PreviewPage::ConfigureBottle),
                 cx,
             ));
-            items.push(self.menu_item("已安装的程序", Command::Page(PreviewPage::Programs), cx));
-            items.push(self.menu_item("运行中的进程", Command::Page(PreviewPage::Processes), cx));
-            items.push(self.menu_item("游戏配置", Command::Page(PreviewPage::GameConfigs), cx));
+            items.push(self.menu_item(strings.bottle.installed_programs, Command::Page(PreviewPage::Programs), cx));
+            items.push(self.menu_item(strings.bottle.running_processes, Command::Page(PreviewPage::Processes), cx));
+            items.push(self.menu_item(strings.bottle.game_configs, Command::Page(PreviewPage::GameConfigs), cx));
             items.push(MenuEntry::separator(cx.entity().downgrade()));
-            items.push(self.menu_item("管理扫描文件夹…", Command::Sheet(PreviewSheet::Scan), cx));
-            items.push(self.menu_item("Winetricks…", Command::Sheet(PreviewSheet::Winetricks), cx));
-            items.push(self.menu_item("创建新容器…", Command::Sheet(PreviewSheet::CreateBottle), cx));
+            items.push(self.menu_item(strings.library.manage_scan_folders_btn, Command::Sheet(PreviewSheet::Scan), cx));
+            items.push(self.menu_item(strings.bottle.winetricks_ellipsis, Command::Sheet(PreviewSheet::Winetricks), cx));
+            items.push(self.menu_item(strings.library.create_new_bottle, Command::Sheet(PreviewSheet::CreateBottle), cx));
         } else {
-            items.push(self.menu_item("返回游戏库", Command::Page(PreviewPage::Library), cx));
-            items.push(self.menu_item("创建容器…", Command::Sheet(PreviewSheet::CreateBottle), cx));
+            items.push(self.menu_item(strings.library.back_to_library, Command::Page(PreviewPage::Library), cx));
+            items.push(self.menu_item(strings.library.create_bottle_btn, Command::Sheet(PreviewSheet::CreateBottle), cx));
             items.push(MenuEntry::separator(cx.entity().downgrade()));
-            items.push(self.menu_item("刷新数据", Command::RefreshLibrary, cx));
+            items.push(self.menu_item(strings.library.refresh_data, Command::RefreshLibrary, cx));
         }
         Button::new("options-menu")
             .label("•••")
@@ -376,45 +379,47 @@ impl WhiskyApp {
                 .map(|(tag, _)| tag)
                 .collect();
         let view = cx.entity().downgrade();
+        let strings = crate::i18n::s();
+        let l = &strings.library;
         let mut items = vec![
-            self.menu_item("运行", Command::Runtime(index), cx),
+            self.menu_item(strings.common.run, Command::Runtime(index), cx),
             MenuEntry::separator(cx.entity().downgrade()),
             self.menu_item(
-                if hidden { "取消隐藏" } else { "隐藏游戏" },
+                if hidden { l.unhide_game } else { l.hide_game },
                 Command::Hide(index),
                 cx,
             ),
-            self.menu_item("游戏详情", Command::Details(index), cx),
+            self.menu_item(l.game_details, Command::Details(index), cx),
         ];
         if let Some(studio) = game.and_then(|game| game.studio_name()) {
             items.push(self.menu_item(
-                format!("查看同厂商作品（{studio}）"),
+                crate::i18n::fmt::filter_same_studio(&studio),
                 Command::FilterStudio(index),
                 cx,
             ));
         }
         items.extend([
-            self.menu_item("游戏资料与封面…", Command::GameInfo(index), cx),
+            self.menu_item(l.game_info_cover_ellipsis, Command::GameInfo(index), cx),
             self.menu_item(
-                "运行设置…",
+                l.run_settings_ellipsis,
                 Command::Sheet(PreviewSheet::RunSettings(index)),
                 cx,
             ),
         ]);
-        items.push(self.menu_item("游戏翻译…", Command::Translation(index), cx));
+        items.push(self.menu_item(l.game_translation_ellipsis, Command::Translation(index), cx));
         if has_path {
-            items.push(self.menu_item(crate::platform::REVEAL_LABEL, Command::Reveal(index), cx));
+            items.push(self.menu_item(crate::platform::reveal_label(), Command::Reveal(index), cx));
         }
         if game.is_some_and(|game| game.game_directory().is_some()) {
-            items.push(self.menu_item("打开游戏目录", Command::OpenGameDirectory(index), cx));
+            items.push(self.menu_item(l.open_game_dir, Command::OpenGameDirectory(index), cx));
         }
         items.extend([
             MenuEntry::separator(cx.entity().downgrade()),
-            self.menu_item("配置容器", Command::Configure(index), cx),
+            self.menu_item(l.configure_bottle, Command::Configure(index), cx),
         ]);
         if has_path && self.service_available("entry.move")
             && !game.is_some_and(|game| game.id.starts_with("steam:")) {
-            items.push(self.menu_item("移动到容器…", Command::Move(index), cx));
+            items.push(self.menu_item(l.move_to_bottle_ellipsis, Command::Move(index), cx));
         }
         // Only a folder entry or a multi-exe work picks launch executables from
         // its directory; a single pinned or Steam entry runs its fixed target.
@@ -422,14 +427,16 @@ impl WhiskyApp {
             items.push(MenuEntry::separator(cx.entity().downgrade()));
             items.push(self.menu_item(
                 if multi_exe {
-                    "管理启动入口…"
+                    l.manage_launch_entries_ellipsis
                 } else {
-                    "选择启动程序…"
+                    l.select_launch_exe_ellipsis
                 },
                 Command::Executable(index),
                 cx,
             ));
         }
+        let tags_label = l.tab_tags;
+        let edit_tags_label = l.edit_new_tag_ellipsis;
         move |mut menu, window, cx| {
             let mut inserted_tags = false;
             for (idx, item) in items.iter().enumerate() {
@@ -439,7 +446,7 @@ impl WhiskyApp {
                     let library_tags = library_tags.clone();
                     let entry_tags = entry_tags.clone();
                     let view = view.clone();
-                    menu = menu.submenu("标签", window, cx, move |mut sub, _, _| {
+                    menu = menu.submenu(tags_label, window, cx, move |mut sub, _, _| {
                         for tag in &library_tags {
                             let tag_key = tag.to_lowercase();
                             let active = entry_tags.iter().any(|t| t.to_lowercase() == tag_key);
@@ -459,7 +466,7 @@ impl WhiskyApp {
                             sub = sub.separator();
                         }
                         let view = view.clone();
-                        sub.item(PopupMenuItem::new("编辑 / 新建标签…").on_click(
+                        sub.item(PopupMenuItem::new(edit_tags_label).on_click(
                             move |_, _, cx| {
                                 let _ = view.update(cx, |this, cx| {
                                     this.command(Command::EditTags(index), cx);
@@ -474,18 +481,19 @@ impl WhiskyApp {
     }
     /// One bottle's context-menu entries, mirroring the SwiftUI bottle list.
     fn bottle_menu_entries(&self, index: usize, cx: &Context<Self>) -> Vec<MenuEntry> {
+        let strings = crate::i18n::s();
         let available = self.bottles.get(index).is_some_and(|bottle| bottle.available);
         let mut items = vec![];
         if available {
-            items.push(self.menu_item("重命名…", Command::BottleRename(index), cx));
-            items.push(self.menu_item("删除…", Command::BottleRemove(index), cx));
+            items.push(self.menu_item(strings.library.rename_ellipsis, Command::BottleRename(index), cx));
+            items.push(self.menu_item(strings.library.bottle_delete_ellipsis, Command::BottleRemove(index), cx));
             items.push(MenuEntry::separator(cx.entity().downgrade()));
-            items.push(self.menu_item("移动容器…", Command::BottleMove(index), cx));
-            items.push(self.menu_item("复制容器…", Command::BottleDuplicate(index), cx));
-            items.push(self.menu_item("导出容器…", Command::BottleExport(index), cx));
+            items.push(self.menu_item(strings.library.bottle_move_ellipsis, Command::BottleMove(index), cx));
+            items.push(self.menu_item(strings.library.bottle_duplicate_ellipsis, Command::BottleDuplicate(index), cx));
+            items.push(self.menu_item(strings.library.bottle_export_ellipsis, Command::BottleExport(index), cx));
             items.push(MenuEntry::separator(cx.entity().downgrade()));
         }
-        items.push(self.menu_item(crate::platform::REVEAL_LABEL, Command::BottleReveal(index), cx));
+        items.push(self.menu_item(crate::platform::reveal_label(), Command::BottleReveal(index), cx));
         items
     }
     /// Sidebar context menu, mirroring the SwiftUI bottle list entry.
@@ -506,7 +514,7 @@ impl WhiskyApp {
         Button::new(("game-options", index))
             .label("•••")
             .ghost()
-            .tooltip("更多")
+            .tooltip(crate::i18n::s().common.more)
             .dropdown_menu(self.game_menu(index, cx))
             .into_any_element()
     }
@@ -565,7 +573,7 @@ impl WhiskyApp {
         &self,
         key: &'static str,
         label: &'static str,
-        options: &'static [&'static str],
+        options: &[&'static str],
         cx: &Context<Self>,
     ) -> AnyElement {
         let selected = self
@@ -576,6 +584,7 @@ impl WhiskyApp {
             .unwrap_or_else(|| options[0].into());
         let view = cx.entity().downgrade();
         let current = selected.clone();
+        let options: Vec<&'static str> = options.to_vec();
         row()
             .py(px(10.))
             .gap(px(16.))
@@ -584,7 +593,7 @@ impl WhiskyApp {
                 Button::new(key)
                     .label(format!("{}  ⌄", selected))
                     .dropdown_menu(move |mut menu, _, _| {
-                        for &option in options {
+                        for &option in &options {
                             let view = view.clone();
                             menu = menu.item(
                                 PopupMenuItem::new(option)
@@ -608,7 +617,7 @@ impl WhiskyApp {
         &self,
         key: &'static str,
         label: &'static str,
-        options: &'static [(&'static str, &'static str)],
+        options: &[(&'static str, &'static str)],
         cx: &Context<Self>,
     ) -> AnyElement {
         let selected = self
@@ -623,6 +632,7 @@ impl WhiskyApp {
             .map_or(options[0].0, |(label, _)| label);
         let view = cx.entity().downgrade();
         let current = SharedString::from(selected);
+        let options: Vec<(&'static str, &'static str)> = options.to_vec();
         row()
             .py(px(10.))
             .gap(px(16.))
@@ -631,7 +641,7 @@ impl WhiskyApp {
                 Button::new(key)
                     .label(format!("{selected_label}  ⌄"))
                     .dropdown_menu(move |mut menu, _, _| {
-                        for &(option_label, value) in options {
+                        for &(option_label, value) in &options {
                             let view = view.clone();
                             let checked = current.as_ref() == value;
                             menu = menu.item(

@@ -48,11 +48,9 @@ impl Journal {
 fn duration(seconds: f64) -> String {
     let minutes = (seconds.max(0.) / 60.).floor() as u64;
     if seconds > 0. && minutes == 0 {
-        "不足 1 分钟".into()
-    } else if minutes < 60 {
-        format!("{minutes} 分钟")
+        crate::i18n::s().statistics.under_one_minute.into()
     } else {
-        format!("{} 小时 {} 分钟", minutes / 60, minutes % 60)
+        crate::i18n::fmt::statistics_duration(minutes)
     }
 }
 
@@ -87,15 +85,16 @@ impl WhiskyApp {
         let active = journal.days.range(start..=today).count();
         let daily_games = journal.days.get(&selected).cloned().unwrap_or_default();
 
+        let strings = crate::i18n::s();
         let mut calendar = row().items_start().gap(px(5.));
         calendar = calendar.child(col().gap(px(5.)).pt(px(24.))
-            .children(["一", "二", "三", "四", "五", "六", "日"].map(|day| {
+            .children(strings.statistics.weekdays.map(|day| {
                 muted(day).h(px(18.)).w(px(18.)).text_size(px(10.))
             })));
         for week in 0..26 {
             let first = start + Duration::weeks(week);
             let label = if week == 0 || first.month() != (first - Duration::weeks(1)).month() {
-                format!("{}月", first.month())
+                crate::i18n::fmt::statistics_month(first.month())
             } else { String::new() };
             let mut column = col().gap(px(5.)).child(muted(label).text_size(px(10.)).h(px(19.)));
             for day in 0..7 {
@@ -110,7 +109,7 @@ impl WhiskyApp {
                             rgb(theme::ACCENT).into()
                         } else { rgba(0x00000000) })
                         .disabled(date > today)
-                        .tooltip(format!("{date} · {count} 款游戏 · {}", duration(seconds)))
+                        .tooltip(crate::i18n::fmt::statistics_day_tooltip(date, count, &duration(seconds)))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.preview.statistics_day = Some(date);
                             cx.notify();
@@ -121,10 +120,10 @@ impl WhiskyApp {
         }
 
         let summaries = [
-            ("累计游玩", duration(journal.lifetime as f64), "包含旧版累计记录"),
-            ("最近 7 天", duration(weekly), "已记录的每日游玩时间"),
-            ("活跃天数", format!("{active} 天"), "最近 26 周"),
-            ("今天", duration(journal.seconds(today)), "每段冒险都值得记住"),
+            (strings.statistics.total_playtime, duration(journal.lifetime as f64), strings.statistics.total_playtime_sub),
+            (strings.statistics.last_7_days, duration(weekly), strings.statistics.last_7_days_sub),
+            (strings.statistics.active_days, crate::i18n::fmt::statistics_active_days(active), strings.statistics.active_days_sub),
+            (strings.statistics.today, duration(journal.seconds(today)), strings.statistics.today_sub),
         ];
         let summary = div().grid().grid_cols(if width < 960. { 2 } else { 4 }).gap(px(12.)).children(
             summaries.into_iter().map(|(label, value, subtitle)| {
@@ -138,8 +137,8 @@ impl WhiskyApp {
         let mut details = panel().child(
             row().justify_between().gap(px(12.))
                 .child(col().gap(px(5.)).child(heading(format!("{selected}")))
-                    .child(muted(format!("{} 款游戏 · {}", daily_games.len(), duration(journal.seconds(selected))))))
-                .child(Button::new("statistics-today").label("回到今天").ghost()
+                    .child(muted(crate::i18n::fmt::statistics_day_summary(daily_games.len(), &duration(journal.seconds(selected))))))
+                .child(Button::new("statistics-today").label(strings.statistics.back_to_today).ghost()
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.preview.statistics_day = None;
                         cx.notify();
@@ -148,9 +147,9 @@ impl WhiskyApp {
         if daily_games.is_empty() {
             details = details.child(col().items_center().gap(px(10.)).py(px(30.))
                 .child(icon("package", 30.).text_color(rgb(theme::muted_color())))
-                .child(heading("这一天，还没有留下游玩足迹"))
-                .child(muted("从游戏库开始一段新冒险，游玩时间会自动记录。"))
-                .child(self.action("statistics-library", "前往游戏库", Command::Page(PreviewPage::Library), cx)));
+                .child(heading(strings.statistics.empty_day_title))
+                .child(muted(strings.statistics.empty_day_desc))
+                .child(self.action("statistics-library", strings.statistics.go_to_library, Command::Page(PreviewPage::Library), cx)));
         }
         let total = journal.seconds(selected).max(1.);
         for (index, seconds) in daily_games {
@@ -171,11 +170,11 @@ impl WhiskyApp {
                     .child(Progress::new(("statistics-progress", index))
                         .value((seconds / total * 100.) as f32).small()
                         .color(rgb(theme::ACCENT))
-                        .accessibility_label(format!("{} 当日时长占比", game.title)))
+                        .accessibility_label(crate::i18n::fmt::statistics_progress_aria(&game.title)))
                     .child(muted(self.bottles.iter().find(|b| b.path == game.container)
-                        .map_or("容器不可用", |b| b.name.as_str()).to_owned()).text_size(px(11.))))
+                        .map_or(strings.statistics.bottle_unavailable, |b| b.name.as_str()).to_owned()).text_size(px(11.))))
                 .child(Button::new(("statistics-resume", index))
-                    .label(if self.demo || primary.label == "启动" { "继续游玩" } else { primary.label })
+                    .label(if self.demo || primary.label == strings.runtime.launch { strings.library.resume_play } else { primary.label })
                     .primary().disabled(!self.demo && !primary.enabled)
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.command(Command::Runtime(index), cx);
@@ -184,22 +183,22 @@ impl WhiskyApp {
         self.preview_scroll("statistics-scroll",
             col().w_full().p(px(26.)).gap(px(22.))
                 .child(row().justify_between().gap(px(12.)).flex_wrap()
-                    .child(col().gap(px(6.)).child(div().text_size(px(28.)).font_weight(FontWeight::BOLD).child("游玩足迹"))
-                        .child(muted("把每一天的冒险，连成属于你的故事。")))
-                    .child(self.action("statistics-refresh", "刷新记录", Command::RefreshLibrary, cx)))
+                    .child(col().gap(px(6.)).child(div().text_size(px(28.)).font_weight(FontWeight::BOLD).child(strings.statistics.page_title))
+                        .child(muted(strings.statistics.page_subtitle)))
+                    .child(self.action("statistics-refresh", strings.statistics.refresh_records, Command::RefreshLibrary, cx)))
                 .child(summary)
                 .child(panel()
                     .child(row().justify_between().flex_wrap().gap(px(8.))
-                        .child(heading("游玩日历"))
+                        .child(heading(strings.statistics.play_calendar))
                         .child(muted(format!("{} — {}", start.format("%Y.%m.%d"), today.format("%Y.%m.%d")))))
                     .child(div().id("statistics-calendar-scroll").overflow_x_scroll().child(calendar))
-                    .child(row().justify_end().gap(px(6.)).child(muted("少"))
+                    .child(row().justify_end().gap(px(6.)).child(muted(strings.statistics.less))
                         .children([0., 600., 1800., 3600., 7200.].map(|seconds| {
                             div().size(px(12.)).rounded(px(3.)).bg(rgb(theme::ACCENT).opacity(intensity(seconds)))
-                        })).child(muted("多")))
-                    .child(muted("点击日期查看明细 · 颜色按每日时长分级：半小时 / 1 小时 / 2 小时")))
+                        })).child(muted(strings.statistics.more)))
+                    .child(muted(strings.statistics.calendar_legend)))
                 .child(details)
-                .child(muted("每日明细从此版本开始记录，旧版累计时长不会被分配到历史日期。日期按记录时的本地时区划分；统计范围为当前库中的游戏，不含启动器。"))
+                .child(muted(strings.statistics.footer_note))
         )
     }
 }

@@ -34,10 +34,11 @@ pub(crate) enum BridgeStatus {
 
 impl BridgeStatus {
     pub(crate) fn label(&self) -> &'static str {
+        let d = &crate::i18n::s().dialogs;
         match self {
-            Self::Locating | Self::Starting => "连接中…",
-            Self::Connected { .. } => "运行服务已连接",
-            Self::Failed { .. } | Self::Stopped => "服务不可用",
+            Self::Locating | Self::Starting => d.bridge_connecting,
+            Self::Connected { .. } => d.bridge_connected,
+            Self::Failed { .. } | Self::Stopped => d.bridge_unavailable,
         }
     }
 }

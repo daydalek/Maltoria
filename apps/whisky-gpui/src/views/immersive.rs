@@ -210,7 +210,8 @@ impl WhiskyApp {
         opacity: f32,
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
-        let tip: &'static str = if left { "上一款精选" } else { "下一款精选" };
+        let lib = &crate::i18n::s().library;
+        let tip: &'static str = if left { lib.prev_featured } else { lib.next_featured };
         let button = row()
             .id(id)
             .absolute()
@@ -298,7 +299,7 @@ impl WhiskyApp {
             .opacity(alpha);
         if let Some(state) = self.runtime_state(index) {
             if state == RuntimeState::Running {
-                block = block.child(live_badge(self.runtime_badge_label(index, "运行中")));
+                block = block.child(live_badge(self.runtime_badge_label(index, crate::i18n::s().runtime.running)));
             } else if state.is_active() {
                 block =
                     block.child(phase_badge(self.runtime_badge_label(index, state.phase_label())));
@@ -357,6 +358,7 @@ impl WhiskyApp {
                     ),
             );
         }
+        let strings = crate::i18n::s();
         block = block.child(
             row()
                 .flex_shrink_0()
@@ -365,13 +367,13 @@ impl WhiskyApp {
                 .child(self.play_button(
                     ("immersive-play", index),
                     index,
-                    "继续游玩",
+                    strings.library.resume_play,
                     cx,
                 ))
                 .child(hero_chip_button(
                     ("immersive-detail", index),
                     "info",
-                    "详情",
+                    strings.common.details,
                     cx.listener(move |this, _, window, cx| {
                         this.open_detail_from(index, window, cx);
                     }),
@@ -379,7 +381,7 @@ impl WhiskyApp {
                 .child(hero_chip_button(
                     ("immersive-translation", index),
                     "languages",
-                    "游戏翻译",
+                    strings.capture.title,
                     cx.listener(move |this, _, _, cx| {
                         this.open_translation_for_game(index, cx);
                     }),
@@ -468,7 +470,7 @@ impl WhiskyApp {
                     d.child(
                         crate::controls::selectable_pill(
                             SharedString::from(format!("immersive-filter-{row_key}")),
-                            "筛选此标签",
+                            crate::i18n::s().library.filter_this_tag,
                             false,
                             false,
                             cx.listener(move |this, _, _, cx| {
@@ -482,7 +484,7 @@ impl WhiskyApp {
                     d.child(
                         crate::controls::selectable_pill(
                             SharedString::from(format!("immersive-studio-filter-{row_key}")),
-                            "筛选此厂商",
+                            crate::i18n::s().library.filter_this_studio,
                             false,
                             false,
                             cx.listener(move |this, _, _, cx| {
@@ -554,7 +556,8 @@ impl WhiskyApp {
         direction: f32,
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
-        let tip: &'static str = if direction < 0. { "向左滚动" } else { "向右滚动" };
+        let lib = &crate::i18n::s().library;
+        let tip: &'static str = if direction < 0. { lib.scroll_left } else { lib.scroll_right };
         row()
             .id(SharedString::from(id))
             .justify_center()
@@ -671,7 +674,7 @@ impl WhiskyApp {
             // Running and pending states stay visible; the idle affordance
             // waits for hover, matching the shelf covers.
             .child(match self.runtime_state(index) {
-                Some(RuntimeState::Running) => live_badge(self.runtime_badge_label(index, "运行中"))
+                Some(RuntimeState::Running) => live_badge(self.runtime_badge_label(index, crate::i18n::s().runtime.running))
                     .absolute()
                     .top(px(9.))
                     .right(px(9.))

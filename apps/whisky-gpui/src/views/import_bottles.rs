@@ -22,7 +22,7 @@ impl WhiskyApp {
             if let Some(state) = self.import_bottles.as_mut() {
                 state.failed(
                     self.import_generation,
-                    "桥接尚未连接，请恢复连接后重新扫描".into(),
+                    crate::i18n::s().import_bottles.bridge_disconnected.into(),
                 );
             }
             self.bridge.retry();
@@ -36,6 +36,7 @@ impl WhiskyApp {
         height: f32,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        let strings = crate::i18n::s();
         let Some(state) = self.import_bottles.as_ref() else {
             return div().into_any_element();
         };
@@ -50,9 +51,9 @@ impl WhiskyApp {
         let root = state.root.clone();
         let mut rows: Vec<AnyElement> = Vec::new();
         if loading {
-            rows.push(muted("正在扫描已有容器…").into_any_element());
+            rows.push(muted(strings.import_bottles.scanning).into_any_element());
         } else if state.candidates.is_empty() && state.error.is_none() {
-            rows.push(muted("当前扫描位置没有待导入的容器").into_any_element());
+            rows.push(muted(strings.import_bottles.empty).into_any_element());
         }
         for candidate in &state.candidates {
             let path = candidate.path.clone();
@@ -90,13 +91,13 @@ impl WhiskyApp {
         if let Some(count) = state.completed {
             rows.insert(
                 0,
-                muted(format!("本次新增 {count} 个容器")).into_any_element(),
+                muted(crate::i18n::fmt::import_added_count(count)).into_any_element(),
             );
         }
         let select_label = if state.candidates.len() > 128 {
-            "选中前 128 项"
+            strings.import_bottles.select_first_128
         } else {
-            "全选"
+            strings.common.select_all
         };
         let count = selected.len();
         let no_candidates = state.candidates.is_empty();
@@ -148,14 +149,14 @@ impl WhiskyApp {
                                 div()
                                     .flex_1()
                                     .font_weight(FontWeight::SEMIBOLD)
-                                    .child("导入已有容器"),
+                                    .child(strings.import_bottles.title),
                             )
                             .child(
                                 Button::new("import-bottles-close")
                                     .ghost()
                                     .small()
                                     .icon(icon("x", 14.))
-                                    .tooltip("关闭（Esc）")
+                                    .tooltip(strings.common.close_esc)
                                     .disabled(busy)
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.import_bottles = None;
@@ -172,7 +173,7 @@ impl WhiskyApp {
                             .child(
                                 muted(
                                     root.clone()
-                                        .unwrap_or_else(|| "扫描默认容器位置及已知容器目录".into()),
+                                        .unwrap_or_else(|| strings.import_bottles.default_root_desc.into()),
                                 )
                                 .truncate(),
                             )
@@ -181,7 +182,7 @@ impl WhiskyApp {
                                     .gap(px(8.))
                                     .child(
                                         Button::new("rescan-candidates")
-                                            .label("重新扫描")
+                                            .label(strings.import_bottles.rescan)
                                             .disabled(busy || loading)
                                             .on_click(cx.listener(move |this, _, _, cx| {
                                                 this.begin_import_scan(root.clone(), cx);
@@ -189,7 +190,7 @@ impl WhiskyApp {
                                     )
                                     .child(
                                         Button::new("choose-scan-root")
-                                            .label("选择扫描目录…")
+                                            .label(strings.import_bottles.choose_scan_root)
                                             .disabled(busy || loading)
                                             .on_click(cx.listener(|this, _, _, _| {
                                                 this.bridge.choose_path(
@@ -203,7 +204,7 @@ impl WhiskyApp {
                                     )
                                     .child(
                                         Button::new("choose-one-prefix")
-                                            .label("选择容器目录…")
+                                            .label(strings.import_bottles.choose_bottle_dir)
                                             .disabled(busy || loading)
                                             .on_click(cx.listener(|this, _, window, cx| {
                                                 this.import_bottles = None;
@@ -259,7 +260,7 @@ impl WhiskyApp {
                             .border_color(rgba(surface_border()))
                             .child(
                                 Button::new("close-candidates")
-                                    .label("关闭")
+                                    .label(strings.common.close)
                                     .disabled(busy)
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.import_bottles = None;
@@ -270,9 +271,9 @@ impl WhiskyApp {
                             .child(
                                 Button::new("import-candidates")
                                     .label(if busy {
-                                        "正在导入…".to_owned()
+                                        strings.import_bottles.importing.to_owned()
                                     } else {
-                                        format!("导入选中项（{count}）")
+                                        crate::i18n::fmt::import_selected_button(count)
                                     })
                                     .primary()
                                     .disabled(busy || loading || count == 0 || !connected)
@@ -284,7 +285,7 @@ impl WhiskyApp {
                                             if let Some(state) = this.import_bottles.as_mut() {
                                                 state.failed(
                                                     request,
-                                                    "桥接尚未连接，请恢复连接后重新扫描".into(),
+                                                    crate::i18n::s().import_bottles.bridge_disconnected.into(),
                                                 );
                                             }
                                             this.bridge.retry();

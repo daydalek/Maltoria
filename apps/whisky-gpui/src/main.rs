@@ -14,6 +14,7 @@ mod capture;
 mod config;
 mod desktop_open;
 mod host;
+mod i18n;
 mod controls;
 mod create_bottle;
 mod container_import;
@@ -72,6 +73,11 @@ gpui_kit::actions!(
         AppearanceSystem,
         AppearanceLight,
         AppearanceDark,
+        LanguageSystem,
+        LanguageZhHans,
+        LanguageJa,
+        LanguageEn,
+        LanguageKo,
         MinimizeWindow,
         ZoomWindow,
         ToggleFullScreen
@@ -82,6 +88,7 @@ impl Render for WhiskyApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.artwork_cache.update(cx, |cache, cx| cache.begin_frame(cx));
         crate::theme::sync_theme(self.appearance, Some(window), cx);
+        self.sync_localized_inputs(window, cx);
         self.scroll_needs_measurement.set(false);
         let ww = f32::from(window.viewport_size().width);
         let wh = f32::from(window.viewport_size().height);
@@ -138,7 +145,7 @@ impl Render for WhiskyApp {
             .size_full()
             .overflow_hidden()
             .bg(rgb(crate::theme::bg()))
-            .font_family(platform::UI_FONT)
+            .font_family(platform::ui_font())
             .text_color(rgb(crate::theme::text()))
             .text_size(px(13.))
             .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| {
@@ -160,10 +167,25 @@ impl Render for WhiskyApp {
             .on_action(cx.listener(|this, _: &AppearanceDark, _, cx| {
                 this.set_appearance(AppearanceMode::Dark, cx);
             }))
+            .on_action(cx.listener(|this, _: &LanguageSystem, _, cx| {
+                this.set_language(crate::i18n::LanguageMode::System, cx);
+            }))
+            .on_action(cx.listener(|this, _: &LanguageZhHans, _, cx| {
+                this.set_language(crate::i18n::LanguageMode::ZhHans, cx);
+            }))
+            .on_action(cx.listener(|this, _: &LanguageJa, _, cx| {
+                this.set_language(crate::i18n::LanguageMode::Ja, cx);
+            }))
+            .on_action(cx.listener(|this, _: &LanguageEn, _, cx| {
+                this.set_language(crate::i18n::LanguageMode::En, cx);
+            }))
+            .on_action(cx.listener(|this, _: &LanguageKo, _, cx| {
+                this.set_language(crate::i18n::LanguageMode::Ko, cx);
+            }))
             .on_action(cx.listener(|this, _: &RefreshLibrary, _, cx| {
                 if this.onboarding.is_some() { return; }
                 if this.demo {
-                    this.show_notice(crate::state::DEMO_NOTICE, cx);
+                    this.show_notice(crate::state::demo_notice(), cx);
                 } else {
                     this.refresh_library(cx);
                 }
@@ -642,45 +664,60 @@ fn cli_value<'a>(arguments: &'a [String], flag: &str) -> Result<Option<&'a str>,
 /// Native menu bar. GPUI does not add the standard macOS app menu, so About,
 /// Settings and Quit are declared explicitly; text fields rely on the Editing
 /// OS actions for their standard shortcuts.
-fn install_menus(cx: &mut App) {
+pub(crate) fn install_menus(cx: &mut App) {
+    let m = &crate::i18n::s().menus;
+    let lang_mode = crate::i18n::language_mode();
     cx.set_menus(vec![
         Menu::new("Maltoria").items(vec![
-            MenuItem::action("关于 Maltoria", ShowAbout),
+            MenuItem::action(m.about, ShowAbout),
             MenuItem::separator(),
-            MenuItem::action("设置…", ShowSettings),
+            MenuItem::action(m.settings, ShowSettings),
             MenuItem::separator(),
-            MenuItem::action("退出 Maltoria", QuitPreview),
+            MenuItem::action(m.quit, QuitPreview),
         ]),
-        Menu::new("编辑").items(vec![
-            MenuItem::os_action("撤销", NoAction, OsAction::Undo),
-            MenuItem::os_action("重做", NoAction, OsAction::Redo),
+        Menu::new(m.edit_menu).items(vec![
+            MenuItem::os_action(m.undo, NoAction, OsAction::Undo),
+            MenuItem::os_action(m.redo, NoAction, OsAction::Redo),
             MenuItem::separator(),
-            MenuItem::os_action("剪切", NoAction, OsAction::Cut),
-            MenuItem::os_action("复制", NoAction, OsAction::Copy),
-            MenuItem::os_action("粘贴", NoAction, OsAction::Paste),
-            MenuItem::os_action("全选", NoAction, OsAction::SelectAll),
+            MenuItem::os_action(m.cut, NoAction, OsAction::Cut),
+            MenuItem::os_action(m.copy, NoAction, OsAction::Copy),
+            MenuItem::os_action(m.paste, NoAction, OsAction::Paste),
+            MenuItem::os_action(m.select_all, NoAction, OsAction::SelectAll),
         ]),
-        Menu::new("显示").items(vec![
-            MenuItem::action("返回上一页", NavigateBack),
+        Menu::new(m.view_menu).items(vec![
+            MenuItem::action(m.navigate_back, NavigateBack),
             MenuItem::separator(),
-            MenuItem::action("搜索游戏库", FocusSearch),
-            MenuItem::action("刷新游戏库", RefreshLibrary),
+            MenuItem::action(m.focus_search, FocusSearch),
+            MenuItem::action(m.refresh_library, RefreshLibrary),
             MenuItem::separator(),
-            MenuItem::action("显示/隐藏侧边栏", ToggleSidebar),
+            MenuItem::action(m.toggle_sidebar, ToggleSidebar),
             MenuItem::separator(),
-            MenuItem::action("外观：跟随系统", AppearanceSystem),
-            MenuItem::action("外观：浅色", AppearanceLight),
-            MenuItem::action("外观：深色", AppearanceDark),
+            MenuItem::action(m.appearance_system, AppearanceSystem),
+            MenuItem::action(m.appearance_light, AppearanceLight),
+            MenuItem::action(m.appearance_dark, AppearanceDark),
+            MenuItem::submenu(Menu::new(m.language_submenu).items(vec![
+                MenuItem::action(m.language_system, LanguageSystem)
+                    .checked(lang_mode == crate::i18n::LanguageMode::System),
+                MenuItem::separator(),
+                MenuItem::action("简体中文", LanguageZhHans)
+                    .checked(lang_mode == crate::i18n::LanguageMode::ZhHans),
+                MenuItem::action("日本語", LanguageJa)
+                    .checked(lang_mode == crate::i18n::LanguageMode::Ja),
+                MenuItem::action("English", LanguageEn)
+                    .checked(lang_mode == crate::i18n::LanguageMode::En),
+                MenuItem::action("한국어", LanguageKo)
+                    .checked(lang_mode == crate::i18n::LanguageMode::Ko),
+            ])),
             MenuItem::separator(),
-            MenuItem::action("设置…", ShowSettings),
+            MenuItem::action(m.settings, ShowSettings),
         ]),
-        Menu::new("窗口").items(vec![
-            MenuItem::action("关闭窗口", CloseWindow),
+        Menu::new(m.window_menu).items(vec![
+            MenuItem::action(m.close_window, CloseWindow),
             MenuItem::separator(),
-            MenuItem::action("最小化", MinimizeWindow),
-            MenuItem::action("缩放", ZoomWindow),
+            MenuItem::action(m.minimize, MinimizeWindow),
+            MenuItem::action(m.zoom, ZoomWindow),
             MenuItem::separator(),
-            MenuItem::action("进入全屏幕", ToggleFullScreen),
+            MenuItem::action(m.fullscreen, ToggleFullScreen),
         ]),
     ]);
 }
@@ -856,6 +893,8 @@ fn main() {
     }
     application.run(move |cx| {
             gpui_kit::init(cx);
+            let language = ui_state::load_language();
+            i18n::init(language);
             bind_shortcuts(cx);
             install_menus(cx);
             let appearance = ui_state::load_appearance();

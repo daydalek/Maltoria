@@ -36,6 +36,16 @@ pub(crate) const STAGGERED_MODE: usize = 5;
 pub(crate) fn picker_mode(mode: usize) -> usize {
     if mode == STAGGERED_MODE { 1 } else { mode }
 }
+pub(crate) fn visible_modes() -> [(usize, &'static str, &'static str, &'static str); 4] {
+    let s = &crate::i18n::s().settings;
+    [
+        (0, "library-big", s.mode_grid, s.mode_grid_desc),
+        (1, "rows-3", s.mode_list, s.mode_list_desc),
+        (3, "tv-minimal-play", s.mode_immersive, s.mode_immersive_desc),
+        (4, "panel-left", s.mode_gallery, s.mode_gallery_desc),
+    ]
+}
+#[cfg(test)]
 pub(crate) const VISIBLE_MODES: [(usize, &str, &str, &str); 4] = [
     (0, "library-big", "网格", "紧凑排列，快速浏览全部封面"),
     (1, "rows-3", "列表", "按行查看游戏与游玩记录"),
@@ -55,8 +65,16 @@ pub(crate) const COVER_FILL_VALUES: [&str; 2] = ["blurred", "theme"];
 /// `LibraryDetailLayoutStyle` raw values (`LibraryGameSheet.swift:25`).
 pub(crate) const DETAIL_LAYOUT_VALUES: [&str; 2] = ["hero", "split"];
 /// Backdrop blur level names, indexed by the `libraryBackdropBlur` level.
-pub(crate) const BACKDROP_BLUR_NAMES: [&str; crate::artwork::BLUR_LEVELS as usize] =
-    ["清晰", "轻微", "中等", "较强", "最强"];
+pub(crate) fn backdrop_blur_names() -> [&'static str; crate::artwork::BLUR_LEVELS as usize] {
+    let s = &crate::i18n::s().settings;
+    [
+        s.blur_sharp,
+        s.blur_light,
+        s.blur_medium,
+        s.blur_strong,
+        s.blur_max,
+    ]
+}
 
 pub(crate) const DISPLAY_MODE: &str = "libraryDisplayMode";
 pub(crate) const SHOW_HIDDEN: &str = "libraryShowHiddenGames";

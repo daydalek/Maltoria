@@ -14,7 +14,7 @@ use crate::state::WhiskyApp;
 use crate::theme::*;
 use crate::translation::{
     CacheEntryDto, LocalModelDto, ModelDescriptorDto, PROVIDER_PRESETS, PROVIDER_SPECS,
-    ProviderCategory, ProviderDto, ProviderPreset, ProviderSpec, THINKING_LEVELS, TranslationTab,
+    ProviderCategory, ProviderDto, ProviderPreset, ProviderSpec, TranslationTab, thinking_levels,
     WizardStep, credential_storage_label, default_endpoint, default_sentence_cache_enabled,
     default_translation_debounce_ms, format_bytes_human, format_eta_human, format_speed_human,
     local_download_stage_label, normalize_credential_storage_mode, normalize_thinking_level,
@@ -22,33 +22,45 @@ use crate::translation::{
     supports_thinking_level,
 };
 
-const LANGUAGE_PRESETS: [(&str, &str); 6] = [
-    ("auto", "自动检测 (auto)"),
-    ("ja", "日本語 (ja)"),
-    ("en", "English (en)"),
-    ("zh-Hans", "简体中文 (zh-Hans)"),
-    ("zh-Hant", "繁體中文 (zh-Hant)"),
-    ("ko", "한국어 (ko)"),
-];
+fn language_presets() -> [(&'static str, &'static str); 6] {
+    [
+        ("auto", crate::i18n::s().translation.lang_auto),
+        ("ja", "日本語 (ja)"),
+        ("en", "English (en)"),
+        ("zh-Hans", "简体中文 (zh-Hans)"),
+        ("zh-Hant", "繁體中文 (zh-Hant)"),
+        ("ko", "한국어 (ko)"),
+    ]
+}
 
-const CREDENTIAL_STORAGE_MODES: [(&str, &str); 3] = [
-    ("keychain", SYSTEM_CREDENTIAL_LABEL),
-    ("localFile", "本地文件（明文，免弹窗）"),
-    ("sessionOnly", "仅本次运行（不落盘）"),
-];
+fn system_credential_label() -> &'static str {
+    let t = &crate::i18n::s().translation;
+    if cfg!(target_os = "linux") {
+        t.cred_secret_service
+    } else {
+        t.cred_keychain_mac
+    }
+}
 
-#[cfg(target_os = "linux")]
-const SYSTEM_CREDENTIAL_LABEL: &str = "系统密钥环（Secret Service，加密）";
-#[cfg(not(target_os = "linux"))]
-const SYSTEM_CREDENTIAL_LABEL: &str = "macOS 钥匙串（加密）";
+fn credential_storage_modes() -> [(&'static str, &'static str); 3] {
+    let t = &crate::i18n::s().translation;
+    [
+        ("keychain", system_credential_label()),
+        ("localFile", t.cred_local_file),
+        ("sessionOnly", t.cred_session_only),
+    ]
+}
 
-const DEBOUNCE_PRESETS: [(u64, &str); 5] = [
-    (0, "0 ms（即时发送）"),
-    (150, "150 ms（推荐）"),
-    (300, "300 ms（适中）"),
-    (500, "500 ms（防连跳）"),
-    (1000, "1000 ms（长句等待）"),
-];
+fn debounce_presets() -> [(u64, &'static str); 5] {
+    let t = &crate::i18n::s().translation;
+    [
+        (0, t.debounce_0),
+        (150, t.debounce_150),
+        (300, t.debounce_300),
+        (500, t.debounce_500),
+        (1000, t.debounce_1000),
+    ]
+}
 
 impl WhiskyApp {
     fn spec_available(&self, spec: &ProviderSpec) -> bool {
@@ -116,14 +128,19 @@ impl WhiskyApp {
                 let active_filter = page.sidebar_category_filter == Some(cat);
                 let (fg, bg, border) = cat.colors();
                 let tip = if !available && count == 0 {
-                    format!("{}：当前构建未启用", cat.label())
+                    match crate::i18n::locale() {
+                        crate::i18n::Locale::ZhHans => format!("{}：当前构建未启用", cat.label()),
+                        crate::i18n::Locale::Ja => format!("{}：現在のビルドでは無効です", cat.label()),
+                        crate::i18n::Locale::En => format!("{}: not enabled in this build", cat.label()),
+                        crate::i18n::Locale::Ko => format!("{}: 현재 빌드에서 비활성화됨", cat.label()),
+                    }
                 } else {
-                    format!(
-                        "{}（{} 个）— {}\n点击筛选左侧列表，再次点击取消筛选",
-                        cat.label(),
-                        count,
-                        cat.tooltip()
-                    )
+                    match crate::i18n::locale() {
+                        crate::i18n::Locale::ZhHans => format!("{}（{} 个）— {}\n点击筛选左侧列表，再次点击取消筛选", cat.label(), count, cat.tooltip()),
+                        crate::i18n::Locale::Ja => format!("{}（{} 件）— {}\nクリックで左のリストを絞り込み、再クリックで解除", cat.label(), count, cat.tooltip()),
+                        crate::i18n::Locale::En => format!("{} ({}) — {}\nClick to filter list; click again to clear", cat.label(), count, cat.tooltip()),
+                        crate::i18n::Locale::Ko => format!("{} ({}개) — {}\n클릭하여 왼쪽 목록 필터링, 다시 클릭하여 해제", cat.label(), count, cat.tooltip()),
+                    }
                 };
 
                 summary_pills.push(
@@ -172,7 +189,7 @@ impl WhiskyApp {
         let mut providers_btn = Button::new("translation-tab-providers")
             .small()
             .icon(icon("layers", 13.))
-            .label("提供商");
+            .label(crate::i18n::s().translation.tab_providers);
         providers_btn = if tab == TranslationTab::Providers {
             providers_btn.primary()
         } else {
@@ -181,7 +198,7 @@ impl WhiskyApp {
         let mut settings_btn = Button::new("translation-tab-settings")
             .small()
             .icon(icon("sliders-horizontal", 13.))
-            .label("全局设置");
+            .label(crate::i18n::s().translation.tab_global);
         settings_btn = if tab == TranslationTab::Settings {
             settings_btn.primary()
         } else {
@@ -208,7 +225,7 @@ impl WhiskyApp {
                                         .font_weight(FontWeight::SEMIBOLD)
                                         .text_size(px(13.))
                                         .text_color(rgb(text()))
-                                        .child("全局翻译行为与安全设置"),
+                                        .child(crate::i18n::s().translation.global_subtitle),
                                 ),
                         )
                     }),
@@ -222,8 +239,8 @@ impl WhiskyApp {
                             .small()
                             .outline()
                             .icon(icon("wand-sparkles", 13.))
-                            .label("配置向导")
-                            .tooltip("打开三步交互式向导，快速接入本地模型、OAuth 或 API")
+                            .label(crate::i18n::s().translation.wizard_btn)
+                            .tooltip(crate::i18n::s().translation.wizard_tip)
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.translation_page.open_wizard(None);
                                 this.translation_page
@@ -275,7 +292,7 @@ impl WhiskyApp {
                         div()
                             .text_size(px(12.))
                             .text_color(rgb(subtext()))
-                            .child("正在请求翻译服务…"),
+                            .child(crate::i18n::s().translation.loading_service),
                     )
                     .into_any_element(),
             );
@@ -360,8 +377,8 @@ impl WhiskyApp {
             .button(
                 Button::new("translation-wizard-add")
                     .icon(icon("plus", 13.))
-                    .label("添加")
-                    .tooltip("打开配置向导（点击右侧箭头可直接按协议新建）")
+                    .label(crate::i18n::s().translation.add_btn)
+                    .tooltip(crate::i18n::s().translation.add_btn_tip)
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.translation_page
                             .open_wizard(this.translation_page.sidebar_category_filter);
@@ -390,7 +407,7 @@ impl WhiskyApp {
                         let view = view.clone();
                         let kind = spec.kind;
                         menu = menu.item(
-                            PopupMenuItem::new(spec.short_label)
+                            PopupMenuItem::new(spec.display_short_label())
                                 .icon(icon(spec.icon, 14.))
                                 .on_click(move |_, _, cx| {
                                     let _ = view.update(cx, |this, cx| {
@@ -408,7 +425,7 @@ impl WhiskyApp {
                 }
                 let wizard_view = view.clone();
                 menu.separator().item(
-                    PopupMenuItem::new("打开配置向导…")
+                    PopupMenuItem::new(crate::i18n::s().translation.open_wizard_item)
                         .icon(icon("wand-sparkles", 14.))
                         .on_click(move |_, _, cx| {
                             let _ = wizard_view.update(cx, |this, cx| {
@@ -445,14 +462,14 @@ impl WhiskyApp {
                                     .text_size(px(11.))
                                     .font_weight(FontWeight::MEDIUM)
                                     .text_color(rgb(fg))
-                                    .child(format!("筛选：{}", filter_cat.label())),
+                                    .child(match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("筛选：{}", filter_cat.label()), crate::i18n::Locale::Ja => format!("絞り込み：{}", filter_cat.label()), crate::i18n::Locale::En => format!("Filter: {}", filter_cat.label()), crate::i18n::Locale::Ko => format!("필터: {}", filter_cat.label()) }),
                             ),
                     )
                     .child(
                         Button::new("translation-clear-filter")
                             .xsmall()
                             .ghost()
-                            .label("全部")
+                            .label(crate::i18n::s().translation.filter_all)
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.translation_page.sidebar_category_filter = None;
                                 cx.notify();
@@ -466,7 +483,7 @@ impl WhiskyApp {
             let draft_cat = provider_category(&page.draft.kind);
             let (fg, bg, border) = draft_cat.colors();
             let draft_name = if page.draft.name.trim().is_empty() {
-                format!("新建{}", provider_short_label(&page.draft.kind))
+                match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("新建{}", provider_short_label(&page.draft.kind)), crate::i18n::Locale::Ja => format!("新規 {}", provider_short_label(&page.draft.kind)), crate::i18n::Locale::En => format!("New {}", provider_short_label(&page.draft.kind)), crate::i18n::Locale::Ko => format!("새 {}", provider_short_label(&page.draft.kind)) }
             } else {
                 page.draft.name.clone()
             };
@@ -513,7 +530,7 @@ impl WhiskyApp {
                                                     .child(draft_name),
                                             )
                                             .child(pill_badge(
-                                                "草稿",
+                                                crate::i18n::s().translation.draft,
                                                 accent_subtle_bg(),
                                                 accent_fg(),
                                                 None,
@@ -581,8 +598,13 @@ impl WhiskyApp {
 
         if total_shown == 0 && !creating_new {
             let empty_msg = match page.sidebar_category_filter {
-                Some(cat) => format!("暂无{}提供商", cat.label()),
-                None => "暂无已配置提供商".to_owned(),
+                Some(cat) => match crate::i18n::locale() {
+                    crate::i18n::Locale::ZhHans => format!("暂无{}提供商", cat.label()),
+                    crate::i18n::Locale::Ja => format!("{}プロバイダーはありません", cat.label()),
+                    crate::i18n::Locale::En => format!("No {} providers yet", cat.label()),
+                    crate::i18n::Locale::Ko => format!("{} 제공자가 없습니다", cat.label()),
+                },
+                None => crate::i18n::s().translation.no_providers_generic.to_owned(),
             };
             list_items.push(
                 col()
@@ -598,7 +620,7 @@ impl WhiskyApp {
                             .text_color(rgb(subtext()))
                             .child(empty_msg),
                     )
-                    .child(muted("点击右上角「+ 添加」启动向导").text_size(px(11.)))
+                    .child(muted(crate::i18n::s().translation.no_providers_hint).text_size(px(11.)))
                     .into_any_element(),
             );
         }
@@ -624,7 +646,7 @@ impl WhiskyApp {
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_size(px(13.))
                                     .text_color(rgb(text()))
-                                    .child("服务列表"),
+                                    .child(crate::i18n::s().translation.service_list),
                             )
                             .when(!page.providers.is_empty(), |d| {
                                 d.child(pill_badge(
@@ -680,7 +702,7 @@ impl WhiskyApp {
                         let k = spec.kind;
                         let checked = k == active_kind;
                         menu = menu.item(
-                            PopupMenuItem::new(spec.label)
+                            PopupMenuItem::new(spec.display_label())
                                 .icon(icon(spec.icon, 14.))
                                 .checked(checked)
                                 .on_click(move |_, window, cx| {
@@ -718,7 +740,7 @@ impl WhiskyApp {
         let (cat_fg, cat_bg, cat_border) = category.colors();
         let kind_label = provider_kind_label(&kind).to_owned();
         let spec_tip = provider_spec(&kind)
-            .map(|s| s.tip)
+            .map(ProviderSpec::display_tip)
             .unwrap_or(category.tooltip());
         let deep_l = kind == "deepL";
         let local_built_in = kind == "localBuiltIn";
@@ -764,7 +786,7 @@ impl WhiskyApp {
         } else {
             let draft_name = self.translation_page.draft.name.trim();
             if draft_name.is_empty() {
-                format!("新建 {}", provider_short_label(&kind))
+                match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("新建 {}", provider_short_label(&kind)), crate::i18n::Locale::Ja => format!("新規 {}", provider_short_label(&kind)), crate::i18n::Locale::En => format!("New {}", provider_short_label(&kind)), crate::i18n::Locale::Ko => format!("새 {}", provider_short_label(&kind)) }
             } else {
                 draft_name.to_owned()
             }
@@ -779,7 +801,7 @@ impl WhiskyApp {
         let name_input = Input::new(&self.translation_page.input(
             "name",
             &name_value,
-            "例如：DeepSeek 主力 / 本地 Ollama",
+            crate::i18n::s().translation.name_placeholder,
             window,
             cx,
         ));
@@ -793,14 +815,14 @@ impl WhiskyApp {
         let model_input = Input::new(&self.translation_page.input(
             "model",
             &model_value,
-            "模型 ID（支持手动输入或在线发现）",
+            crate::i18n::s().translation.model_id_placeholder,
             window,
             cx,
         ));
         let model_search_input = Input::new(
             &self
                 .translation_page
-                .input("model-search", "", "筛选已发现模型…", window, cx),
+                .input("model-search", "", crate::i18n::s().translation.model_search_placeholder, window, cx),
         )
         .prefix(icon("search", 13.).text_color(rgb(muted_color())))
         .cleanable(true);
@@ -808,9 +830,9 @@ impl WhiskyApp {
             "credential",
             "",
             if has_credential {
-                "输入新密钥以替换（掩码保护）"
+                crate::i18n::s().translation.key_replace_placeholder
             } else {
-                "输入 API 密钥（掩码存储，不会回显）"
+                crate::i18n::s().translation.key_input_placeholder
             },
             window,
             cx,
@@ -860,21 +882,21 @@ impl WhiskyApp {
                 Some(n) => {
                     let prov = provenance_label(&m.context_window_provenance);
                     pill_badge(
-                        format!("{} 上下文", format_context_window(n)),
+                        match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("{} 上下文", format_context_window(n)), crate::i18n::Locale::Ja => format!("{} コンテキスト", format_context_window(n)), crate::i18n::Locale::En => format!("{} ctx", format_context_window(n)), crate::i18n::Locale::Ko => format!("{} 컨텍스트", format_context_window(n)) },
                         installed_bg(),
                         installed_fg(),
                         None,
                     )
                     .id("model-context-badge")
-                    .tooltip(hover_tip(format!(
-                        "当前模型上下文窗口：{n} tokens（来源：{prov}）。"
-                    )))
+                    .tooltip(hover_tip(
+                        match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("当前模型上下文窗口：{n} tokens（来源：{prov}）。"), crate::i18n::Locale::Ja => format!("現在のモデルのコンテキストウィンドウ：{n} tokens（取得元：{prov}）。"), crate::i18n::Locale::En => format!("Current model context window: {n} tokens (source: {prov})."), crate::i18n::Locale::Ko => format!("현재 모델 컨텍스트 창: {n} tokens (출처: {prov}).") }
+                    ))
                     .into_any_element()
                 }
-                None => pill_badge("上下文未知", badge_bg(), badge_text(), None)
+                None => pill_badge(crate::i18n::s().translation.context_unknown, badge_bg(), badge_text(), None)
                     .id("model-context-badge")
                     .tooltip(hover_tip(
-                        "尚未探测到该模型的上下文窗口大小，不会根据模型名称猜测。",
+                        crate::i18n::s().translation.context_unknown_tip,
                     ))
                     .into_any_element(),
             });
@@ -882,7 +904,7 @@ impl WhiskyApp {
         let source_field = language_preset_field(
             self,
             "provider-source-language",
-            "源语言",
+            crate::i18n::s().translation.source_language,
             &source_value,
             "auto / ja",
             true,
@@ -892,7 +914,7 @@ impl WhiskyApp {
         let target_field = language_preset_field(
             self,
             "provider-target-language",
-            "目标语言",
+            crate::i18n::s().translation.target_language,
             &target_value,
             "zh-Hans / en",
             false,
@@ -901,13 +923,13 @@ impl WhiskyApp {
         );
 
         let test_tooltip = if !selected {
-            "请先保存提供商再测试连接"
+            crate::i18n::s().translation.test_need_save
         } else if capture_active {
-            "游戏捕获进行中，请先停止捕获"
+            crate::i18n::s().translation.test_stop_capture
         } else if self.translation_page.provider_probe_pending() {
-            "正在执行探测请求，请稍候"
+            crate::i18n::s().translation.test_running
         } else {
-            "向当前配置发送一次快速探测请求"
+            crate::i18n::s().translation.test_tip
         };
 
         // Hero Header Card
@@ -968,14 +990,14 @@ impl WhiskyApp {
                                             .child(category_pill(category))
                                             .child(if selected {
                                                 pill_badge(
-                                                    "已保存",
+                                                    crate::i18n::s().translation.saved_badge,
                                                     installed_bg(),
                                                     installed_fg(),
                                                     None,
                                                 )
                                             } else {
                                                 pill_badge(
-                                                    "草稿",
+                                                    crate::i18n::s().translation.draft,
                                                     accent_subtle_bg(),
                                                     accent_fg(),
                                                     None,
@@ -993,7 +1015,7 @@ impl WhiskyApp {
                                 Button::new("translation-test")
                                     .small()
                                     .icon(icon("plug-zap", 13.))
-                                    .label("测试连接")
+                                    .label(crate::i18n::s().translation.test_connection)
                                     .tooltip(test_tooltip)
                                     .disabled(!selected || probes_blocked)
                                     .on_click(cx.listener(|this, _, _, cx| {
@@ -1007,7 +1029,7 @@ impl WhiskyApp {
                                         .small()
                                         .danger()
                                         .icon(icon("delete", 14.))
-                                        .tooltip("删除此提供商配置")
+                                        .tooltip(crate::i18n::s().translation.delete_provider_tip)
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.translation_page.delete_provider(&this.bridge);
                                             cx.notify();
@@ -1021,20 +1043,29 @@ impl WhiskyApp {
         let kind_selector = self.kind_dropdown(&kind, cx);
         let storage_label = credential_storage_label(&self.translation_page.credential_storage);
         let is_plaintext_storage = self.translation_page.credential_storage == "localPlaintextFile";
+        let t = &crate::i18n::s().translation;
         let storage_short = match self.translation_page.credential_storage.as_str() {
-            "persistentKeychain" => "钥匙串",
-            "persistentSecretService" => "密钥环",
-            "localPlaintextFile" => "明文文件",
-            "sessionOnly" => "仅会话",
-            "unavailable" => "存储不可用",
-            _ => "存储",
+            "persistentKeychain" => t.storage_keychain,
+            "persistentSecretService" => t.storage_keyring,
+            "localPlaintextFile" => t.storage_plaintext,
+            "sessionOnly" => t.storage_session,
+            "unavailable" => t.storage_unavailable,
+            _ => t.storage_generic,
         };
         let storage_tip = if is_plaintext_storage {
-            format!(
-                "当前存储方式：{storage_label}。以 0600 权限明文落盘免弹窗；切换存储模式后需在此重新保存密钥。"
-            )
+            match crate::i18n::locale() {
+                crate::i18n::Locale::ZhHans => format!("当前存储方式：{storage_label}。以 0600 权限明文落盘免弹窗；切换存储模式后需在此重新保存密钥。"),
+                crate::i18n::Locale::Ja => format!("現在の保存方式：{storage_label}。0600 権限の平文ファイルに保存し確認ダイアログを避けます。保存方式を変更した場合はここでキーを再保存してください。"),
+                crate::i18n::Locale::En => format!("Current storage: {storage_label}. Stored in plaintext with 0600 permissions; re-save the key here after changing storage mode."),
+                crate::i18n::Locale::Ko => format!("현재 저장 방식: {storage_label}. 0600 권한 평문 파일로 저장되며, 저장 모드를 바꾼 후 여기서 키를 다시 저장해야 합니다."),
+            }
         } else {
-            format!("当前存储方式：{storage_label}。密钥仅写入安全凭据存储，接口不会回显明文。")
+            match crate::i18n::locale() {
+                crate::i18n::Locale::ZhHans => format!("当前存储方式：{storage_label}。密钥仅写入安全凭据存储，接口不会回显明文。"),
+                crate::i18n::Locale::Ja => format!("現在の保存方式：{storage_label}。キーは安全な資格情報ストアに保存され、平文は表示されません。"),
+                crate::i18n::Locale::En => format!("Current storage: {storage_label}. Key is stored in secure credential storage and never echoed back."),
+                crate::i18n::Locale::Ko => format!("현재 저장 방식: {storage_label}. 키는 보안 자격 증명 저장소에 저장되며 평문으로 반환되지 않습니다."),
+            }
         };
         let storage_badge = row()
             .id("editor-storage-badge")
@@ -1073,31 +1104,31 @@ impl WhiskyApp {
             );
 
         let cred_status = if has_credential {
-            pill_badge("✓ 已保存", installed_bg(), installed_fg(), None)
+            pill_badge(crate::i18n::s().translation.key_saved_badge, installed_bg(), installed_fg(), None)
         } else if is_ollama {
-            pill_badge("本地免密钥", cat_local_bg(), cat_local_fg(), None)
+            pill_badge(crate::i18n::s().translation.local_no_key_badge, cat_local_bg(), cat_local_fg(), None)
         } else {
-            pill_badge("未设置", badge_bg(), warning_fg(), None)
+            pill_badge(crate::i18n::s().translation.key_unset_badge, badge_bg(), warning_fg(), None)
         };
         let cred_hint = if has_credential {
-            "留空将保留现有密钥；输入新密钥后点击底部「保存提供商」即可一并更新。"
+            crate::i18n::s().translation.key_hint_saved
         } else if is_ollama {
-            "本地 Ollama 通常无需密钥；如通过反向代理访问或开启了鉴权，可填写并保存。"
+            crate::i18n::s().translation.key_hint_ollama
         } else {
-            "输入 API 密钥后点击底部「保存提供商」，即可与接口配置一并保存。"
+            crate::i18n::s().translation.key_hint_api
         };
 
         let basic_card = if local_built_in {
             section_card_v2(
                 "hard-drive",
                 cat_fg,
-                "基本信息",
+                crate::i18n::s().translation.section_basic,
                 Some("local-basic-tip"),
                 Some(spec_tip),
                 None,
                 two_col_row(
-                    labeled_stack("名称", name_input),
-                    labeled_stack("协议类型", kind_selector),
+                    labeled_stack(crate::i18n::s().translation.field_name, name_input),
+                    labeled_stack(crate::i18n::s().translation.field_protocol, kind_selector),
                 ),
             )
         } else if is_ollama {
@@ -1117,7 +1148,7 @@ impl WhiskyApp {
                                         div()
                                             .text_size(px(12.))
                                             .text_color(rgb(subtext()))
-                                            .child("可选鉴权密钥"),
+                                            .child(crate::i18n::s().translation.optional_auth_key),
                                     )
                                     .child(cred_status)
                                     .child(storage_badge)
@@ -1128,7 +1159,7 @@ impl WhiskyApp {
                                     Button::new("ollama-collapse-cred")
                                         .xsmall()
                                         .ghost()
-                                        .label("收起")
+                                        .label(crate::i18n::s().common.collapse)
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.translation_page.ollama_credential_expanded =
                                                 false;
@@ -1147,7 +1178,7 @@ impl WhiskyApp {
                                         .small()
                                         .danger()
                                         .icon(icon("delete", 13.))
-                                        .label("移除密钥")
+                                        .label(crate::i18n::s().translation.remove_key)
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.translation_page.remove_credential(&this.bridge);
                                             cx.notify();
@@ -1170,7 +1201,7 @@ impl WhiskyApp {
                         row()
                             .gap(px(6.))
                             .child(icon("shield-check", 13.).text_color(rgb(cat_fg)))
-                            .child(muted("本机 Ollama 通常免密直连").text_size(px(12.)))
+                            .child(muted(crate::i18n::s().translation.ollama_no_key_note).text_size(px(12.)))
                             .child(help_tip("ollama-cred-tip", cred_hint)),
                     )
                     .child(
@@ -1178,7 +1209,7 @@ impl WhiskyApp {
                             .xsmall()
                             .ghost()
                             .icon(icon("key-round", 12.))
-                            .label("配置可选密钥")
+                            .label(crate::i18n::s().translation.configure_optional_key)
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.translation_page.ollama_credential_expanded = true;
                                 cx.notify();
@@ -1190,19 +1221,19 @@ impl WhiskyApp {
             section_card_v2(
                 "terminal",
                 cat_fg,
-                "本地服务与连接",
+                crate::i18n::s().translation.section_local_conn,
                 Some("ollama-basic-tip"),
                 Some(spec_tip),
                 None,
                 col()
                     .gap(px(12.))
                     .child(two_col_row(
-                        labeled_stack("名称", name_input),
-                        labeled_stack("协议类型", kind_selector),
+                        labeled_stack(crate::i18n::s().translation.field_name, name_input),
+                        labeled_stack(crate::i18n::s().translation.field_protocol, kind_selector),
                     ))
                     .child(labeled_stack_with_tip(
-                        "服务地址",
-                        Some(("ollama-ep-tip", format!("默认本机端口：{default_ep}"))),
+                        crate::i18n::s().translation.service_url,
+                        Some(("ollama-ep-tip", match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("默认本机端口：{default_ep}"), crate::i18n::Locale::Ja => format!("既定のローカルポート：{default_ep}"), crate::i18n::Locale::En => format!("Default local endpoint: {default_ep}"), crate::i18n::Locale::Ko => format!("기본 로컬 엔드포인트: {default_ep}") })),
                         row()
                             .gap(px(8.))
                             .child(div().flex_1().min_w_0().child(endpoint_input))
@@ -1211,7 +1242,7 @@ impl WhiskyApp {
                                     Button::new("translation-reset-endpoint")
                                         .small()
                                         .ghost()
-                                        .label("恢复默认")
+                                        .label(crate::i18n::s().translation.restore_default)
                                         .on_click(cx.listener(move |this, _, window, cx| {
                                             if let Some(input) =
                                                 this.translation_page.inputs.get("endpoint")
@@ -1238,19 +1269,19 @@ impl WhiskyApp {
             section_card_v2(
                 "key-round",
                 cat_fg,
-                "接口与鉴权",
+                crate::i18n::s().translation.section_api_auth,
                 Some("api-basic-tip"),
                 Some(spec_tip),
                 None,
                 col()
                     .gap(px(12.))
                     .child(two_col_row(
-                        labeled_stack("名称", name_input),
-                        labeled_stack("协议类型", kind_selector),
+                        labeled_stack(crate::i18n::s().translation.field_name, name_input),
+                        labeled_stack(crate::i18n::s().translation.field_protocol, kind_selector),
                     ))
                     .child(labeled_stack_with_tip(
-                        "API 端点",
-                        Some(("api-ep-tip", format!("当前协议默认端点：{default_ep}"))),
+                        crate::i18n::s().translation.api_endpoint,
+                        Some(("api-ep-tip", match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("当前协议默认端点：{default_ep}"), crate::i18n::Locale::Ja => format!("このプロトコルの既定エンドポイント：{default_ep}"), crate::i18n::Locale::En => format!("Default endpoint for this protocol: {default_ep}"), crate::i18n::Locale::Ko => format!("현재 프로토콜 기본 엔드포인트: {default_ep}") })),
                         row()
                             .gap(px(8.))
                             .child(div().flex_1().min_w_0().child(endpoint_input))
@@ -1259,7 +1290,7 @@ impl WhiskyApp {
                                     Button::new("translation-reset-endpoint")
                                         .small()
                                         .ghost()
-                                        .label("恢复默认")
+                                        .label(crate::i18n::s().translation.restore_default)
                                         .on_click(cx.listener(move |this, _, window, cx| {
                                             if let Some(input) =
                                                 this.translation_page.inputs.get("endpoint")
@@ -1291,7 +1322,7 @@ impl WhiskyApp {
                                         div()
                                             .text_size(px(12.))
                                             .text_color(rgb(subtext()))
-                                            .child("API 密钥"),
+                                            .child(crate::i18n::s().translation.api_key),
                                     )
                                     .child(cred_status)
                                     .child(storage_badge)
@@ -1307,7 +1338,7 @@ impl WhiskyApp {
                                                 .small()
                                                 .danger()
                                                 .icon(icon("delete", 13.))
-                                                .label("移除密钥")
+                                                .label(crate::i18n::s().translation.remove_key)
                                                 .on_click(cx.listener(|this, _, _, cx| {
                                                     this.translation_page
                                                         .remove_credential(&this.bridge);
@@ -1330,16 +1361,16 @@ impl WhiskyApp {
             )
             .id("local-license-badge")
             .tooltip(hover_tip(
-                "模型权重遵循 PLaMo Community License（个人与非商用免费），按需下载至本地目录，支持断点续传与 SHA-256 校验。",
+                crate::i18n::s().translation.plamo_license_note,
             ))
             .into_any_element();
 
             section_card_v2(
                 "cpu",
                 cat_fg,
-                "本地引擎与模型",
+                crate::i18n::s().translation.section_local_engine,
                 Some("local-models-tip"),
-                Some("由 Maltoria 自动拉取 llama.cpp 引擎与官方 GGUF 权重并校验 SHA-256；空闲 5 分钟自动释放内存。"),
+                Some(crate::i18n::s().translation.section_local_engine_desc),
                 Some(license_pill),
                 self.local_models_panel(&active_model_id, cx),
             )
@@ -1347,7 +1378,7 @@ impl WhiskyApp {
             section_card_v2(
                 "languages",
                 cat_fg,
-                "模型配置",
+                crate::i18n::s().translation.section_model_config,
                 None,
                 None,
                 None,
@@ -1359,26 +1390,27 @@ impl WhiskyApp {
                     .border_1()
                     .border_color(rgba(card_border()))
                     .child(icon("info", 14.).text_color(rgb(cat_fg)))
-                    .child(muted("DeepL 为专用机器翻译引擎，无需选择或配置模型 ID。")),
+                    .child(muted(crate::i18n::s().translation.deepl_no_model_note)),
             )
         } else {
+            let t = &crate::i18n::s().translation;
             let discover_tip = if capture_active {
-                "请先停止当前游戏捕获再发现模型"
+                t.discover_stop_capture
             } else if !selected {
-                "请先保存提供商再在线发现模型"
+                t.discover_need_save
             } else if !model_discovery {
-                "当前协议不支持在线拉取模型列表"
+                t.discover_unsupported
             } else {
-                "从接口拉取当前可用的模型列表"
+                t.discover_tip
             };
             let inspect_tip = if capture_active {
-                "请先停止当前游戏捕获再探测模型信息"
+                t.probe_stop_capture
             } else if !selected {
-                "请先保存提供商再探测模型上下文"
+                t.probe_need_save
             } else if !model_info_available {
-                "当前协议不支持探测模型详情"
+                t.probe_unsupported
             } else {
-                "探测当前模型 ID 的上下文窗口等元数据"
+                t.probe_tip
             };
 
             let model_rows: Vec<AnyElement> = filtered_models
@@ -1465,11 +1497,12 @@ impl WhiskyApp {
             let thinking_supported = supports_thinking_level(&kind);
             let show_token_param = kind == "openAIChat";
             let view_for_thinking = cx.entity().downgrade();
-            let current_thinking_label = THINKING_LEVELS
+            let levels = thinking_levels();
+            let current_thinking_label = levels
                 .iter()
                 .find(|(code, _)| *code == thinking_level)
                 .map(|(_, label)| *label)
-                .unwrap_or("模型默认");
+                .unwrap_or(crate::i18n::s().translation.model_default);
             let thinking_dropdown = Button::new("translation-thinking-dropdown")
                 .outline()
                 .w_full()
@@ -1477,7 +1510,7 @@ impl WhiskyApp {
                 .label(current_thinking_label)
                 .dropdown_caret(true)
                 .dropdown_menu_with_anchor(Anchor::TopRight, move |mut menu, _, _| {
-                    for (code, label) in THINKING_LEVELS {
+                    for (code, label) in thinking_levels() {
                         let view = view_for_thinking.clone();
                         let checked = code == thinking_level;
                         menu = menu.item(
@@ -1510,7 +1543,7 @@ impl WhiskyApp {
                     let v1 = view_for_token.clone();
                     let v2 = view_for_token.clone();
                     menu.item(
-                        PopupMenuItem::new("max_completion_tokens（OpenAI 推荐）")
+                        PopupMenuItem::new(crate::i18n::s().translation.max_completion_tokens_rec)
                             .checked(current_token_label == "max_completion_tokens")
                             .on_click(move |_, _, cx| {
                                 let _ = v1.update(cx, |this, cx| {
@@ -1521,7 +1554,7 @@ impl WhiskyApp {
                             }),
                     )
                     .item(
-                        PopupMenuItem::new("max_tokens（旧版兼容）")
+                        PopupMenuItem::new(crate::i18n::s().translation.max_tokens_legacy)
                             .checked(current_token_label == "max_tokens")
                             .on_click(move |_, _, cx| {
                                 let _ = v2.update(cx, |this, cx| {
@@ -1540,10 +1573,10 @@ impl WhiskyApp {
                         .when(thinking_supported, |r| {
                             r.child(
                                 div().flex_1().min_w_0().child(labeled_stack_with_tip(
-                                    "思考程度 (Thinking)",
+                                    crate::i18n::s().translation.thinking_level,
                                     Some((
                                         "thinking-level-tip",
-                                        "关闭或调低思考深度可显著降低实时字幕翻译延迟（适用于 GPT-5 / Claude / Gemini / cliproxyapi 等推理模型）。"
+                                        crate::i18n::s().translation.thinking_level_desc
                                             .into(),
                                     )),
                                     thinking_dropdown,
@@ -1553,10 +1586,10 @@ impl WhiskyApp {
                         .when(show_token_param, |r| {
                             r.child(
                                 div().flex_1().min_w_0().child(labeled_stack_with_tip(
-                                    "Token 限制参数",
+                                    crate::i18n::s().translation.token_limit_param,
                                     Some((
                                         "token-param-tip",
-                                        "OpenAI 新版及推理模型要求 max_completion_tokens；部分第三方中转或旧服务需切换为 max_tokens。"
+                                        crate::i18n::s().translation.token_limit_param_desc
                                             .into(),
                                     )),
                                     token_dropdown,
@@ -1571,14 +1604,14 @@ impl WhiskyApp {
             section_card_v2(
                 "sparkles",
                 cat_fg,
-                "模型与推理参数",
+                crate::i18n::s().translation.section_model_params,
                 Some("model-cfg-tip"),
-                Some("输入模型 ID 或从接口发现模型；推理模型可按需调低思考深度以加速字幕响应。"),
+                Some(crate::i18n::s().translation.section_model_params_desc),
                 context_badge,
                 col()
                     .gap(px(12.))
                     .child(labeled_stack(
-                        "模型 ID",
+                        crate::i18n::s().translation.model_id,
                         row()
                             .gap(px(8.))
                             .child(div().flex_1().min_w_0().child(model_input))
@@ -1586,7 +1619,7 @@ impl WhiskyApp {
                                 Button::new("translation-discover")
                                     .small()
                                     .icon(icon("search", 13.))
-                                    .label("发现模型")
+                                    .label(crate::i18n::s().translation.discover_models)
                                     .tooltip(discover_tip)
                                     .disabled(!selected || !model_discovery || probes_blocked)
                                     .on_click(cx.listener(|this, _, _, cx| {
@@ -1598,7 +1631,7 @@ impl WhiskyApp {
                                 Button::new("translation-model-info")
                                     .small()
                                     .icon(icon("info", 13.))
-                                    .label("模型信息")
+                                    .label(crate::i18n::s().translation.model_info)
                                     .tooltip(inspect_tip)
                                     .disabled(!selected || !model_info_available || probes_blocked)
                                     .on_click(cx.listener(|this, _, _, cx| {
@@ -1623,7 +1656,7 @@ impl WhiskyApp {
                                         .max_h(px(180.))
                                         .overflow_y_scroll()
                                         .child(if model_rows.is_empty() {
-                                            muted("没有匹配筛选条件的模型。").into_any_element()
+                                            muted(crate::i18n::s().translation.no_matching_models).into_any_element()
                                         } else {
                                             col().gap(px(4.)).children(model_rows).into_any_element()
                                         }),
@@ -1638,9 +1671,9 @@ impl WhiskyApp {
         let lang_card = section_card_v2(
             "languages",
             cat_fg,
-            "默认语言",
+            crate::i18n::s().translation.default_languages,
             Some("provider-lang-tip"),
-            Some("可选：为当前提供商指定默认源语言与目标语言；留空或设为 auto 时跟随全局翻译设置。"),
+            Some(crate::i18n::s().translation.default_languages_desc),
             None,
             row()
                 .gap(px(10.))
@@ -1666,7 +1699,7 @@ impl WhiskyApp {
                         Button::new("translation-save-provider")
                             .primary()
                             .icon(icon("check", 14.))
-                            .label("保存提供商")
+                            .label(crate::i18n::s().translation.save_provider)
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.translation_page
                                     .save_provider(&this.bridge, window, cx);
@@ -1676,7 +1709,7 @@ impl WhiskyApp {
                     .child(
                         Button::new("translation-test-bottom")
                             .icon(icon("plug-zap", 14.))
-                            .label("测试连接")
+                            .label(crate::i18n::s().translation.test_connection)
                             .tooltip(test_tooltip)
                             .disabled(!selected || probes_blocked)
                             .on_click(cx.listener(|this, _, _, cx| {
@@ -1687,9 +1720,9 @@ impl WhiskyApp {
             )
             .when(!selected, |d| {
                 d.child(
-                    pill_badge("草稿未保存", accent_subtle_bg(), accent_fg(), None)
+                    pill_badge(crate::i18n::s().translation.draft_unsaved, accent_subtle_bg(), accent_fg(), None)
                         .id("draft-unsaved-tip")
-                        .tooltip(hover_tip("保存草稿后即可测试连接或发现模型。")),
+                        .tooltip(hover_tip(crate::i18n::s().translation.draft_unsaved_tip)),
                 )
             });
 
@@ -1717,13 +1750,13 @@ impl WhiskyApp {
                     row()
                         .gap(px(8.))
                         .child(Spinner::new().with_size(px(13.)))
-                        .child(muted("正在读取本地推理引擎与模型状态…")),
+                        .child(muted(crate::i18n::s().translation.reading_local_runtime)),
                 )
                 .child(
                     Button::new("translation-local-refresh")
                         .small()
                         .icon(icon("refresh-cw", 13.))
-                        .label("刷新")
+                        .label(crate::i18n::s().common.refresh)
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.translation_page
                                 .refresh_local_status_silent(&this.bridge);
@@ -1744,7 +1777,7 @@ impl WhiskyApp {
                 "cpu" => "CPU",
                 other => other,
             })
-            .unwrap_or("自动");
+            .unwrap_or(crate::i18n::s().common.auto);
 
         let runtime_badge = if runtime.running {
             let loaded_name = runtime
@@ -1753,56 +1786,61 @@ impl WhiskyApp {
                 .and_then(|id| status.models.iter().find(|m| m.id == id))
                 .map(|m| m.display_name.as_str())
                 .or(runtime.loaded_model_id.as_deref())
-                .unwrap_or("本地模型");
+                .unwrap_or(crate::i18n::s().translation.local_model);
             pill_badge(
-                format!("● 运行中 · {loaded_name}"),
+                match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("● 运行中 · {loaded_name}"), crate::i18n::Locale::Ja => format!("● 実行中 · {loaded_name}"), crate::i18n::Locale::En => format!("● Running · {loaded_name}"), crate::i18n::Locale::Ko => format!("● 실행 중 · {loaded_name}") },
                 installed_bg(),
                 installed_fg(),
                 None,
             )
             .id("local-runtime-pill")
-            .tooltip(hover_tip(format!(
-                "llama.cpp 正在运行（{gpu_tag}），空闲 5 分钟后自动释放内存。"
-            )))
+            .tooltip(hover_tip(
+                match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("llama.cpp 正在运行（{gpu_tag}），空闲 5 分钟后自动释放内存。"), crate::i18n::Locale::Ja => format!("llama.cpp は実行中です（{gpu_tag}）。5 分間アイドル後にメモリを自動解放します。"), crate::i18n::Locale::En => format!("llama.cpp is running ({gpu_tag}); memory is released after 5 minutes idle."), crate::i18n::Locale::Ko => format!("llama.cpp가 실행 중입니다({gpu_tag}). 5분 유휴 후 메모리를 자동 해제합니다.") }
+            ))
         } else if runtime.installed {
             let ver = runtime
                 .version
                 .as_deref()
                 .unwrap_or(&runtime.pinned_version);
             pill_badge(
-                format!("✓ 引擎就绪 · {gpu_tag}"),
+                match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("✓ 引擎就绪 · {gpu_tag}"), crate::i18n::Locale::Ja => format!("✓ エンジン準備完了 · {gpu_tag}"), crate::i18n::Locale::En => format!("✓ Engine ready · {gpu_tag}"), crate::i18n::Locale::Ko => format!("✓ 엔진 준비됨 · {gpu_tag}") },
                 installed_bg(),
                 installed_fg(),
                 None,
             )
             .id("local-runtime-pill")
-            .tooltip(hover_tip(format!(
-                "llama.cpp {ver}（{gpu_tag}）已安装，开始翻译时按需启动。"
-            )))
+            .tooltip(hover_tip(
+                match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("llama.cpp {ver}（{gpu_tag}）已安装，开始翻译时按需启动。"), crate::i18n::Locale::Ja => format!("llama.cpp {ver}（{gpu_tag}）はインストール済みです。翻訳開始時にオンデマンドで起動します。"), crate::i18n::Locale::En => format!("llama.cpp {ver} ({gpu_tag}) is installed and will start on demand when translating."), crate::i18n::Locale::Ko => format!("llama.cpp {ver}({gpu_tag})가 설치되어 있으며 번역 시작 시 필요할 때 실행됩니다.") }
+            ))
         } else {
             pill_badge(
-                format!("未安装引擎 · {}", format_bytes_human(runtime.size_bytes)),
+                match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("未安装引擎 · {}", format_bytes_human(runtime.size_bytes)), crate::i18n::Locale::Ja => format!("エンジン未導入 · {}", format_bytes_human(runtime.size_bytes)), crate::i18n::Locale::En => format!("Engine not installed · {}", format_bytes_human(runtime.size_bytes)), crate::i18n::Locale::Ko => format!("엔진 미설치 · {}", format_bytes_human(runtime.size_bytes)) },
                 badge_bg(),
                 badge_text(),
                 None,
             )
             .id("local-runtime-pill")
-            .tooltip(hover_tip(format!(
-                "首次下载模型时将自动安装 llama.cpp（{gpu_tag}，约 {}）。",
-                format_bytes_human(runtime.size_bytes)
-            )))
+            .tooltip(hover_tip({
+                let sz = format_bytes_human(runtime.size_bytes);
+                match crate::i18n::locale() {
+                    crate::i18n::Locale::ZhHans => format!("首次下载模型时将自动安装 llama.cpp（{gpu_tag}，约 {sz}）。"),
+                    crate::i18n::Locale::Ja => format!("初回モデルダウンロード時に llama.cpp（{gpu_tag}、約 {sz}）が自動インストールされます。"),
+                    crate::i18n::Locale::En => format!("llama.cpp ({gpu_tag}, ~{sz}) will be installed automatically on first model download."),
+                    crate::i18n::Locale::Ko => format!("첫 모델 다운로드 시 llama.cpp({gpu_tag}, 약 {sz})가 자동으로 설치됩니다."),
+                }
+            }))
         };
 
         let mirror_control = if let Some(override_url) = status.hf_endpoint_override.as_deref() {
-            pill_badge("环境变量镜像", badge_bg(), accent_fg(), None)
+            pill_badge(crate::i18n::s().translation.env_mirror_badge, badge_bg(), accent_fg(), None)
                 .id("local-mirror-override")
-                .tooltip(hover_tip(format!("下载源已被环境变量覆盖为：{override_url}")))
+                .tooltip(hover_tip(match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("下载源已被环境变量覆盖为：{override_url}"), crate::i18n::Locale::Ja => format!("ダウンロード元は環境変数で上書きされています：{override_url}"), crate::i18n::Locale::En => format!("Download source overridden by env var: {override_url}"), crate::i18n::Locale::Ko => format!("환경 변수로 다운로드 미러가 재정의됨: {override_url}") }))
                 .into_any_element()
         } else {
             let mirror_tip = if status.use_china_mirror {
-                "当前使用国内镜像源（hf-mirror.com），适合中国大陆网络下载 GGUF 权重。"
+                crate::i18n::s().translation.hf_mirror_desc
             } else {
-                "当前使用 Hugging Face 官方源（huggingface.co）；国内下载缓慢时建议开启镜像。"
+                crate::i18n::s().translation.hf_official_desc
             };
             row()
                 .gap(px(6.))
@@ -1811,7 +1849,7 @@ impl WhiskyApp {
                     div()
                         .text_size(px(12.))
                         .text_color(rgb(subtext()))
-                        .child("国内镜像"),
+                        .child(crate::i18n::s().translation.china_mirror),
                 )
                 .child(help_tip("local-mirror-tip", mirror_tip))
                 .child(
@@ -1845,7 +1883,7 @@ impl WhiskyApp {
                         d.child(
                             Button::new("translation-local-unload")
                                 .xsmall()
-                                .label("释放内存")
+                                .label(crate::i18n::s().translation.release_memory)
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.translation_page.unload_local_runtime(&this.bridge);
                                     cx.notify();
@@ -1857,7 +1895,7 @@ impl WhiskyApp {
                             .xsmall()
                             .ghost()
                             .icon(icon("refresh-cw", 12.))
-                            .tooltip("刷新引擎与模型状态")
+                            .tooltip(crate::i18n::s().translation.refresh_engine_tip)
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.translation_page
                                     .refresh_local_status_silent(&this.bridge);
@@ -1875,7 +1913,7 @@ impl WhiskyApp {
                                     div()
                                         .text_size(px(11.))
                                         .text_color(rgb(danger_fg()))
-                                        .child("引擎异常"),
+                                        .child(crate::i18n::s().translation.engine_error),
                                 ),
                         )
                     }),
@@ -1908,11 +1946,11 @@ impl WhiskyApp {
         let (cat_fg, cat_bg, cat_border) = ProviderCategory::Local.colors();
 
         let status_pill = if model.loaded {
-            pill_badge("● 运行中", installed_bg(), installed_fg(), None)
+            pill_badge(crate::i18n::s().translation.badge_running, installed_bg(), installed_fg(), None)
         } else if model.installed {
-            pill_badge("✓ 已下载", installed_bg(), installed_fg(), None)
+            pill_badge(crate::i18n::s().translation.badge_downloaded, installed_bg(), installed_fg(), None)
         } else {
-            pill_badge("未下载", badge_bg(), badge_text(), None)
+            pill_badge(crate::i18n::s().translation.badge_not_downloaded, badge_bg(), badge_text(), None)
         };
 
         let progress_block = model.download.as_ref().map(|dl| {
@@ -1926,7 +1964,7 @@ impl WhiskyApp {
                 "verifyingRuntime" | "extractingRuntime" | "verifyingModel"
             );
             let detail_text = if is_verifying_or_extracting {
-                "正在本地校验与准备文件…".to_owned()
+                crate::i18n::s().translation.verifying_local_files.to_owned()
             } else {
                 format!(
                     "{} / {} · {} · {}",
@@ -1967,7 +2005,7 @@ impl WhiskyApp {
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(rgb(accent_fg()))
                                 .child(if is_verifying_or_extracting {
-                                    "校验中…".to_owned()
+                                    crate::i18n::s().translation.verifying.to_owned()
                                 } else {
                                     format!("{pct:.1}%")
                                 }),
@@ -2006,7 +2044,7 @@ impl WhiskyApp {
                             Button::new(format!("translation-local-cancel:{cancel_id}"))
                                 .xsmall()
                                 .danger()
-                                .label("取消下载")
+                                .label(crate::i18n::s().translation.cancel_download)
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     this.translation_page
                                         .cancel_local_download(&this.bridge, &cancel_id);
@@ -2032,7 +2070,7 @@ impl WhiskyApp {
                         .min_w_0()
                         .text_size(px(11.))
                         .text_color(rgb(danger_fg()))
-                        .child(format!("下载失败：{err}")),
+                        .child(match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("下载失败：{err}"), crate::i18n::Locale::Ja => format!("ダウンロード失敗：{err}"), crate::i18n::Locale::En => format!("Download failed: {err}"), crate::i18n::Locale::Ko => format!("다운로드 실패: {err}") }),
                 )
                 .into_any_element()
         });
@@ -2054,9 +2092,9 @@ impl WhiskyApp {
                         .primary()
                         .icon(icon("download", 13.))
                         .label(if model.last_error.is_some() {
-                            "重试下载"
+                            crate::i18n::s().translation.retry_download
                         } else {
-                            "下载模型"
+                            crate::i18n::s().translation.download_model
                         })
                         .on_click(cx.listener(move |this, _, window, cx| {
                             this.translation_page
@@ -2074,13 +2112,13 @@ impl WhiskyApp {
                     Button::new(format!("translation-local-use:{model_id}"))
                         .small()
                         .icon(icon("check", 13.))
-                        .label("当前已选")
+                        .label(crate::i18n::s().translation.selected_btn)
                         .disabled(true)
                 } else {
                     Button::new(format!("translation-local-use:{model_id}"))
                         .small()
                         .primary()
-                        .label("选用")
+                        .label(crate::i18n::s().translation.select_btn)
                         .on_click(cx.listener(move |this, _, window, cx| {
                             this.translation_page
                                 .choose_local_model(&model_for_pick, window, cx);
@@ -2092,7 +2130,7 @@ impl WhiskyApp {
                         .small()
                         .danger()
                         .icon(icon("delete", 13.))
-                        .tooltip("删除本地模型权重文件")
+                        .tooltip(crate::i18n::s().translation.delete_model_tip)
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.translation_page
                                 .delete_local_model(&this.bridge, &del_id);
@@ -2111,12 +2149,19 @@ impl WhiskyApp {
         };
 
         let specs_summary = if model.recommended_ram_gb > 0 {
-            format!(
-                "{size_label} · 上下文 {ctx_label} · 建议 {} GB 内存",
-                model.recommended_ram_gb
-            )
+            match crate::i18n::locale() {
+                crate::i18n::Locale::ZhHans => format!("{size_label} · 上下文 {ctx_label} · 建议 {} GB 内存", model.recommended_ram_gb),
+                crate::i18n::Locale::Ja => format!("{size_label} · コンテキスト {ctx_label} · 推奨メモリ {} GB", model.recommended_ram_gb),
+                crate::i18n::Locale::En => format!("{size_label} · {ctx_label} ctx · {} GB+ RAM recommended", model.recommended_ram_gb),
+                crate::i18n::Locale::Ko => format!("{size_label} · 컨텍스트 {ctx_label} · 권장 메모리 {} GB", model.recommended_ram_gb),
+            }
         } else {
-            format!("{size_label} · 上下文 {ctx_label}")
+            match crate::i18n::locale() {
+                crate::i18n::Locale::ZhHans => format!("{size_label} · 上下文 {ctx_label}"),
+                crate::i18n::Locale::Ja => format!("{size_label} · コンテキスト {ctx_label}"),
+                crate::i18n::Locale::En => format!("{size_label} · {ctx_label} ctx"),
+                crate::i18n::Locale::Ko => format!("{size_label} · 컨텍스트 {ctx_label}"),
+            }
         };
 
         col()
@@ -2170,7 +2215,7 @@ impl WhiskyApp {
                                             )
                                             .when(model.recommended, |d| {
                                                 d.child(pill_badge(
-                                                    "推荐",
+                                                    crate::i18n::s().translation.recommended_badge,
                                                     accent_subtle_bg(),
                                                     accent_fg(),
                                                     None,
@@ -2194,16 +2239,17 @@ impl WhiskyApp {
         let cards = ProviderCategory::ALL.into_iter().map(|cat| {
             let (fg, bg, border) = cat.colors();
             let available = cat != ProviderCategory::OAuth || oauth_available;
+            let t = &crate::i18n::s().translation;
             let (tags, action_label): (Vec<&'static str>, &'static str) = match cat {
-                ProviderCategory::Local => (vec!["内置 PLaMo 3", "Ollama"], "开始配置"),
+                ProviderCategory::Local => (vec![t.kind_local_builtin_short, "Ollama"], t.start_configure),
                 ProviderCategory::OAuth => {
                     if available {
-                        (vec!["账号直连", "浏览器授权"], "开始配置")
+                        (vec!["OAuth", "Browser"], t.start_configure)
                     } else {
-                        (vec!["浏览器授权", "免密钥"], "当前版本未启用")
+                        (vec!["OAuth", "No API Key"], t.oauth_disabled_short)
                     }
                 }
-                ProviderCategory::Api => (vec!["DeepSeek / OpenAI", "Claude / Gemini"], "开始配置"),
+                ProviderCategory::Api => (vec!["DeepSeek / OpenAI", "Claude / Gemini"], t.start_configure),
             };
 
             let card = col()
@@ -2220,7 +2266,7 @@ impl WhiskyApp {
                 .tooltip(hover_tip(if available {
                     cat.tooltip()
                 } else {
-                    "当前构建未启用 OAuth 账号接入；可使用本地模型或 API 密钥提供商。"
+                    crate::i18n::s().translation.oauth_disabled_note
                 }))
                 .when(available, |d| {
                     d.cursor_pointer()
@@ -2295,10 +2341,10 @@ impl WhiskyApp {
                                     .text_size(px(15.))
                                     .font_weight(FontWeight::BOLD)
                                     .text_color(rgb(text()))
-                                    .child("选择一种方式接入 AI 翻译"),
+                                    .child(crate::i18n::s().translation.empty_welcome_title),
                             ),
                     )
-                    .child(muted("悬停卡片查看详情，点击直接进入配置").text_size(px(11.5))),
+                    .child(muted(crate::i18n::s().translation.empty_welcome_sub).text_size(px(11.5))),
             )
             .child(row().gap(px(12.)).items_stretch().flex_wrap().children(cards))
             .child(
@@ -2309,7 +2355,7 @@ impl WhiskyApp {
                         Button::new("translation-empty-wizard")
                             .primary()
                             .icon(icon("wand-sparkles", 14.))
-                            .label("打开交互式配置向导")
+                            .label(crate::i18n::s().translation.open_wizard_full)
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.translation_page.open_wizard(None);
                                 this.translation_page
@@ -2321,7 +2367,7 @@ impl WhiskyApp {
                         Button::new("translation-empty-manual")
                             .ghost()
                             .icon(icon("plus", 14.))
-                            .label("直接填写自定义 API")
+                            .label(crate::i18n::s().translation.enter_custom_api)
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.translation_page.new_provider("openAIChat");
                                 cx.notify();
@@ -2399,9 +2445,9 @@ impl WhiskyApp {
         let global_source_field = language_preset_field(
             self,
             "source-language",
-            "全局源语言",
+            crate::i18n::s().translation.global_source_lang,
             &global_source_value,
-            "例如：auto / ja",
+            crate::i18n::s().translation.global_source_placeholder,
             true,
             window,
             cx,
@@ -2409,9 +2455,9 @@ impl WhiskyApp {
         let global_target_field = language_preset_field(
             self,
             "target-language",
-            "全局目标语言",
+            crate::i18n::s().translation.global_target_lang,
             &global_target_value,
-            "例如：zh-Hans / en",
+            crate::i18n::s().translation.global_target_placeholder,
             false,
             window,
             cx,
@@ -2427,7 +2473,7 @@ impl WhiskyApp {
         let context_input = Input::new(&self.translation_page.input(
             "context-window",
             &context_value,
-            "留空使用检测值",
+            crate::i18n::s().translation.leave_empty_detected,
             window,
             cx,
         ));
@@ -2454,18 +2500,19 @@ impl WhiskyApp {
         ));
 
         let view_for_debounce = cx.entity().downgrade();
-        let debounce_label = DEBOUNCE_PRESETS
+        let deb_presets = debounce_presets();
+        let debounce_label = deb_presets
             .iter()
             .find(|(ms, _)| *ms == debounce_ms)
             .map(|(_, label)| *label)
-            .unwrap_or("自定义预设");
+            .unwrap_or(crate::i18n::s().translation.custom_preset);
         let debounce_dropdown = Button::new("translation-debounce-dropdown")
             .outline()
             .icon(icon("clock-3", 13.))
             .label(debounce_label)
             .dropdown_caret(true)
             .dropdown_menu_with_anchor(Anchor::TopRight, move |mut menu, _, _| {
-                for (ms, label) in DEBOUNCE_PRESETS {
+                for (ms, label) in debounce_presets() {
                     let view = view_for_debounce.clone();
                     menu = menu.item(
                         PopupMenuItem::new(label)
@@ -2483,11 +2530,12 @@ impl WhiskyApp {
             });
 
         let view_for_storage = cx.entity().downgrade();
-        let storage_mode_label = CREDENTIAL_STORAGE_MODES
+        let storage_modes = credential_storage_modes();
+        let storage_mode_label = storage_modes
             .iter()
             .find(|(mode, _)| *mode == selected_storage_mode)
             .map(|(_, label)| *label)
-            .unwrap_or(SYSTEM_CREDENTIAL_LABEL);
+            .unwrap_or_else(system_credential_label);
         let storage_mode_icon = if selected_storage_mode == "localFile" {
             "shield-alert"
         } else if selected_storage_mode == "sessionOnly" {
@@ -2502,7 +2550,7 @@ impl WhiskyApp {
             .label(storage_mode_label)
             .dropdown_caret(true)
             .dropdown_menu_with_anchor(Anchor::TopRight, move |mut menu, _, _| {
-                for (mode, label) in CREDENTIAL_STORAGE_MODES {
+                for (mode, label) in credential_storage_modes() {
                     let view = view_for_storage.clone();
                     let mode_icon = match mode {
                         "localFile" => "shield-alert",
@@ -2526,15 +2574,15 @@ impl WhiskyApp {
 
         let prompt_entity = self
             .translation_page
-            .textarea(&prompt_value, "自定义系统提示词（留空使用默认指令）", window, cx);
+            .textarea(&prompt_value, crate::i18n::s().translation.custom_prompt_placeholder, window, cx);
         let prompt_area = Textarea::new(&prompt_entity).h(px(120.));
 
         let languages_card = section_card_v2(
             "languages",
             accent_fg(),
-            "默认翻译语言",
+            crate::i18n::s().translation.section_default_langs,
             Some("settings-lang-tip"),
-            Some("当提供商未单独指定语言时，将使用此处的全局源语言与目标语言。"),
+            Some(crate::i18n::s().translation.section_default_langs_desc),
             None,
             row()
                 .gap(px(10.))
@@ -2551,26 +2599,26 @@ impl WhiskyApp {
         let budget_card = section_card_v2(
             "database",
             accent_fg(),
-            "上下文与 Token 预算",
+            crate::i18n::s().translation.section_context_budget,
             Some("settings-budget-tip"),
-            Some("控制单次输出长度限制、历史记忆轮数以及上下文窗口覆盖。"),
+            Some(crate::i18n::s().translation.section_context_budget_desc),
             None,
             col()
                 .gap(px(12.))
                 .child(two_col_row(
-                    labeled_stack("输出 Token 上限", output_input),
-                    labeled_stack("上下文窗口覆盖", context_input),
+                    labeled_stack(crate::i18n::s().translation.output_token_limit, output_input),
+                    labeled_stack(crate::i18n::s().translation.context_window_override, context_input),
                 ))
                 .child(two_col_row(
-                    labeled_stack("上下文参考轮数", turns_input),
-                    labeled_stack("历史保留轮数", retention_input),
+                    labeled_stack(crate::i18n::s().translation.context_turns, turns_input),
+                    labeled_stack(crate::i18n::s().translation.retention_turns, retention_input),
                 ))
                 .child(divider_line())
                 .child(compact_switch_row(
                     "translation-source-history",
-                    "携带源文历史",
+                    crate::i18n::s().translation.include_source_history,
                     "settings-source-hist-tip",
-                    "在翻译请求中附上最近几轮原文，有助于保持人称和语境一致。",
+                    crate::i18n::s().translation.include_source_history_desc,
                     source_history,
                     cx.listener(|this, _, _, cx| {
                         this.translation_page.toggle_source_history();
@@ -2579,9 +2627,9 @@ impl WhiskyApp {
                 ))
                 .child(compact_switch_row(
                     "translation-translated-history",
-                    "携带译文历史",
+                    crate::i18n::s().translation.include_translated_history,
                     "settings-trans-hist-tip",
-                    "附上近期已翻出的译文，有助于保持专有名词与口吻前后统一。",
+                    crate::i18n::s().translation.include_translated_history_desc,
                     translated_history,
                     cx.listener(|this, _, _, cx| {
                         this.translation_page.toggle_translated_history();
@@ -2593,17 +2641,17 @@ impl WhiskyApp {
         let debounce_cache_card = section_card_v2(
             "zap",
             accent_fg(),
-            "快进防抖与句子缓存",
+            crate::i18n::s().translation.section_debounce_cache,
             Some("settings-debounce-tip"),
-            Some("控制文本稳定后再发送翻译，并跨游戏重启复用相同句子的译文以节省调用与费用。"),
+            Some(crate::i18n::s().translation.section_debounce_cache_desc),
             None,
             col()
                 .gap(px(12.))
                 .child(compact_switch_row(
                     "translation-sentence-cache",
-                    "相同句子缓存复用",
+                    crate::i18n::s().translation.sentence_cache_reuse,
                     "settings-cache-reuse-tip",
-                    "命中同游戏、同说话人与语言配置的相同原文时直接复用译文，跨游戏重启生效。",
+                    crate::i18n::s().translation.sentence_cache_reuse_desc,
                     sentence_cache_enabled,
                     cx.listener(|this, _, _, cx| {
                         this.translation_page.toggle_sentence_cache_enabled();
@@ -2623,11 +2671,11 @@ impl WhiskyApp {
                                     div()
                                         .text_size(px(13.))
                                         .text_color(rgb(text()))
-                                        .child("防抖延迟"),
+                                        .child(crate::i18n::s().translation.debounce_delay),
                                 )
                                 .child(help_tip(
                                     "settings-debounce-ms-tip",
-                                    "快进/Ctrl 跳过或 Hook 分段输出时等待文本稳定再翻译，可设为 0–5000 ms。",
+                                    crate::i18n::s().translation.debounce_delay_desc,
                                 )),
                         )
                         .child(
@@ -2643,9 +2691,9 @@ impl WhiskyApp {
         let prompt_card = section_card_v2(
             "sparkles",
             accent_fg(),
-            "自定义系统提示词",
+            crate::i18n::s().translation.section_custom_prompt,
             Some("settings-prompt-tip"),
-            Some("用于指导大语言模型翻译风格、术语表或人称语气（DeepL 会自动忽略此提示词）。"),
+            Some(crate::i18n::s().translation.section_custom_prompt_desc),
             None,
             prompt_area,
         );
@@ -2693,17 +2741,17 @@ impl WhiskyApp {
         let security_card = section_card_v2(
             "shield-check",
             accent_fg(),
-            "网络与凭证存储",
+            crate::i18n::s().translation.section_network_creds,
             Some("settings-security-tip"),
-            Some("控制是否允许连接远程服务，以及 API 密钥的本机保存方式；悬停状态徽章可查看安全说明。"),
+            Some(crate::i18n::s().translation.section_network_creds_desc),
             Some(storage_badge.into_any_element()),
             col()
                 .gap(px(12.))
                 .child(compact_switch_row(
                     "translation-remote",
-                    "允许远程提供商",
+                    crate::i18n::s().translation.allow_remote_providers,
                     "settings-remote-tip",
-                    "关闭后仅允许访问本机环回地址（如本地模型或本机 Ollama），禁止向远程 API 发送文本。",
+                    crate::i18n::s().translation.allow_remote_providers_desc,
                     remote_enabled,
                     cx.listener(|this, _, _, cx| {
                         this.translation_page.toggle_remote_enabled();
@@ -2723,7 +2771,7 @@ impl WhiskyApp {
                                     div()
                                         .text_size(px(13.))
                                         .text_color(rgb(text()))
-                                        .child("凭证存储方式"),
+                                        .child(crate::i18n::s().translation.credential_storage_mode),
                                 )
                                 .child(help_tip("settings-storage-mode-tip", storage_tip)),
                         )
@@ -2735,9 +2783,9 @@ impl WhiskyApp {
         let cache_management_card = section_card_v2(
             "layers",
             accent_fg(),
-            "翻译结果缓存管理",
+            crate::i18n::s().translation.section_cache_mgmt,
             Some("settings-cache-browser-tip"),
-            Some("查看、检索、按条删除或清空已持久化保存的句子翻译缓存。"),
+            Some(crate::i18n::s().translation.section_cache_mgmt_desc),
             None,
             self.translation_cache_browser(false, current_game_id, window, cx),
         );
@@ -2754,7 +2802,7 @@ impl WhiskyApp {
                     Button::new("translation-save-settings")
                         .primary()
                         .icon(icon("check", 14.))
-                        .label("保存翻译设置")
+                        .label(crate::i18n::s().translation.save_translation_settings)
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.translation_page.save_settings(&this.bridge, cx);
                             cx.notify();
@@ -2799,7 +2847,7 @@ impl WhiskyApp {
                         .tooltip(hover_tip(if available {
                             cat.tooltip()
                         } else {
-                            "当前构建未启用 OAuth 账号接入；请选择本地模型或 API 密钥。"
+                            crate::i18n::s().translation.oauth_disabled_note
                         }))
                         .when(available, |d| {
                             d.cursor_pointer()
@@ -2834,7 +2882,7 @@ impl WhiskyApp {
                                 .child(muted(cat.tagline()).text_size(px(11.))),
                         )
                         .when(!available, |d| {
-                            d.child(pill_badge("未启用", badge_bg(), badge_text(), None))
+                            d.child(pill_badge(crate::i18n::s().translation.oauth_disabled_short, badge_bg(), badge_text(), None))
                         })
                         .into_any_element()
                 });
@@ -2842,7 +2890,7 @@ impl WhiskyApp {
                 col()
                     .gap(px(12.))
                     .child(
-                        muted("第 1 步：选择希望使用的 AI 接入方式")
+                        muted(crate::i18n::s().translation.wiz_step1)
                             .text_size(px(12.5)),
                     )
                     .child(row().gap(px(10.)).items_stretch().flex_wrap().children(cards))
@@ -2873,7 +2921,7 @@ impl WhiskyApp {
                             .border_1()
                             .border_color(rgba(card_border()))
                             .hover(|s| s.bg(rgba(bg)).border_color(rgba(border)))
-                            .tooltip(hover_tip(preset.tip))
+                            .tooltip(hover_tip(preset.display_tip()))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.translation_page.wizard_select_preset(preset_ref);
                                 if preset_ref.kind == "localBuiltIn" {
@@ -2906,11 +2954,11 @@ impl WhiskyApp {
                                                     .text_size(px(13.))
                                                     .font_weight(FontWeight::SEMIBOLD)
                                                     .text_color(rgb(text()))
-                                                    .child(preset.name),
+                                                    .child(preset.display_name()),
                                             )
                                             .child(
                                                 row().gap(px(5.)).child(pill_badge(
-                                                    preset.tag,
+                                                    preset.display_tag(),
                                                     bg,
                                                     fg,
                                                     None,
@@ -2935,7 +2983,7 @@ impl WhiskyApp {
                         row()
                             .gap(px(8.))
                             .child(category_pill(category))
-                            .child(muted("第 2 步：选择常用预设或自定义模板").text_size(px(12.))),
+                            .child(muted(crate::i18n::s().translation.wiz_step2).text_size(px(12.))),
                     )
                     .child(col().gap(px(8.)).children(rows))
                     .into_any_element()
@@ -2950,7 +2998,7 @@ impl WhiskyApp {
                 let wiz_name = Input::new(&self.translation_page.input(
                     "wiz-name",
                     &wizard.name,
-                    "显示名称",
+                    crate::i18n::s().translation.wiz_display_name,
                     window,
                     cx,
                 ));
@@ -2964,7 +3012,7 @@ impl WhiskyApp {
                 let wiz_model = Input::new(&self.translation_page.input(
                     "wiz-model",
                     &wizard.model_id,
-                    "留空或保存后在线发现",
+                    crate::i18n::s().translation.wiz_model_placeholder,
                     window,
                     cx,
                 ));
@@ -2972,9 +3020,9 @@ impl WhiskyApp {
                     "wiz-credential",
                     "",
                     if is_ollama {
-                        "可选：如本地无鉴权可留空"
+                        crate::i18n::s().translation.wiz_ollama_key_placeholder
                     } else {
-                        "输入 API 密钥（掩码保护）"
+                        crate::i18n::s().translation.wiz_api_key_placeholder
                     },
                     window,
                     cx,
@@ -2990,10 +3038,10 @@ impl WhiskyApp {
                             badge_text(),
                             None,
                         ))
-                        .child(muted("第 3 步：填写必要连接信息").text_size(px(12.))),
+                        .child(muted(crate::i18n::s().translation.wiz_step3).text_size(px(12.))),
                 );
 
-                fields = fields.child(labeled_stack("显示名称", wiz_name));
+                fields = fields.child(labeled_stack(crate::i18n::s().translation.wiz_display_name, wiz_name));
 
                 if is_local {
                     let active_local = wizard.model_id.clone();
@@ -3009,13 +3057,18 @@ impl WhiskyApp {
                                     (
                                         m.id.clone(),
                                         m.display_name.clone(),
-                                        format!(
-                                            "{} · {} 上下文",
-                                            format_bytes_human(
-                                                m.installed_size_bytes.unwrap_or(m.size_bytes)
-                                            ),
-                                            format_context_window(m.context_window)
-                                        ),
+                                        {
+                                            let sz = format_bytes_human(
+                                                m.installed_size_bytes.unwrap_or(m.size_bytes),
+                                            );
+                                            let ctx_label = format_context_window(m.context_window);
+                                            match crate::i18n::locale() {
+                                                crate::i18n::Locale::ZhHans => format!("{sz} · {ctx_label} 上下文"),
+                                                crate::i18n::Locale::Ja => format!("{sz} · {ctx_label} コンテキスト"),
+                                                crate::i18n::Locale::En => format!("{sz} · {ctx_label} ctx"),
+                                                crate::i18n::Locale::Ko => format!("{sz} · {ctx_label} 컨텍스트"),
+                                            }
+                                        },
                                         m.installed,
                                     )
                                 })
@@ -3026,13 +3079,13 @@ impl WhiskyApp {
                                 (
                                     "plamo-3-translate-2b-q4_k_m".into(),
                                     "PLaMo 3 Translate 2B (Q4_K_M)".into(),
-                                    "约 1.68 GB · 推荐主力".into(),
+                                    crate::i18n::s().translation.wiz_plamo_2b_note.into(),
                                     false,
                                 ),
                                 (
                                     "plamo-3-translate-0.8b-q4_k_m".into(),
                                     "PLaMo 3 Translate 0.8B (Q4_K_M)".into(),
-                                    "约 546 MB · 轻量极速".into(),
+                                    crate::i18n::s().translation.wiz_plamo_08b_note.into(),
                                     false,
                                 ),
                             ]
@@ -3094,7 +3147,7 @@ impl WhiskyApp {
                                 )
                                 .when(installed, |d| {
                                     d.child(pill_badge(
-                                        "已下载",
+                                        crate::i18n::s().translation.badge_downloaded,
                                         installed_bg(),
                                         installed_fg(),
                                         None,
@@ -3106,10 +3159,10 @@ impl WhiskyApp {
 
                     fields = fields
                         .child(labeled_stack_with_tip(
-                            "默认本地模型",
+                            crate::i18n::s().translation.wiz_default_local_model,
                             Some((
                                 "wiz-local-tip",
-                                "保存后可在主界面点击「下载模型」一键拉取 GGUF 权重与 llama.cpp 引擎。"
+                                crate::i18n::s().translation.wiz_local_model_note
                                     .into(),
                             )),
                             col().gap(px(6.)).children(local_cards),
@@ -3122,9 +3175,9 @@ impl WhiskyApp {
                             |d, status| {
                                 d.child(compact_switch_row(
                                     "wiz-local-mirror",
-                                    "使用国内镜像源 (hf-mirror.com)",
+                                    crate::i18n::s().translation.wiz_use_mirror,
                                     "wiz-mirror-tip",
-                                    "中国大陆网络建议开启，可显著提升模型下载速度。",
+                                    crate::i18n::s().translation.wiz_use_mirror_desc,
                                     status.use_china_mirror,
                                     cx.listener(|this, checked: &bool, _, cx| {
                                         this.translation_page
@@ -3136,19 +3189,19 @@ impl WhiskyApp {
                         );
                 } else {
                     fields = fields.child(labeled_stack_with_tip(
-                        "API 端点",
+                        crate::i18n::s().translation.api_endpoint,
                         Some((
                             "wiz-ep-tip",
-                            format!("默认地址：{}", default_endpoint(&kind)),
+                            match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("默认地址：{}", default_endpoint(&kind)), crate::i18n::Locale::Ja => format!("既定アドレス：{}", default_endpoint(&kind)), crate::i18n::Locale::En => format!("Default URL: {}", default_endpoint(&kind)), crate::i18n::Locale::Ko => format!("기본 주소: {}", default_endpoint(&kind)) },
                         )),
                         wiz_endpoint,
                     ));
                     if !is_deepl {
                         fields = fields.child(labeled_stack_with_tip(
-                            "模型 ID",
+                            crate::i18n::s().translation.model_id,
                             Some((
                                 "wiz-model-tip",
-                                "可直接填写模型名（如 deepseek-chat），或保存后点击「发现模型」在线挑选。"
+                                crate::i18n::s().translation.wiz_model_note
                                     .into(),
                             )),
                             wiz_model,
@@ -3156,13 +3209,13 @@ impl WhiskyApp {
                     }
                     fields = fields.child(labeled_stack_with_tip(
                         if is_ollama {
-                            "访问密钥（可选）"
+                            crate::i18n::s().translation.wiz_optional_key
                         } else {
-                            "API 密钥"
+                            crate::i18n::s().translation.api_key
                         },
                         Some((
                             "wiz-cred-tip",
-                            "密钥将使用系统安全的凭据存储加密/受限保存，不会在界面回显。".into(),
+                            crate::i18n::s().translation.wiz_key_security_note.into(),
                         )),
                         wiz_cred,
                     ));
@@ -3203,7 +3256,7 @@ impl WhiskyApp {
                         Button::new("wiz-back")
                             .ghost()
                             .icon(icon("arrow-left", 13.))
-                            .label("上一步")
+                            .label(crate::i18n::s().common.previous_step)
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.translation_page.wizard_back();
                                 cx.notify();
@@ -3217,7 +3270,7 @@ impl WhiskyApp {
                     .child(
                         Button::new("wiz-cancel")
                             .ghost()
-                            .label("取消")
+                            .label(crate::i18n::s().common.cancel)
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.translation_page
                                     .close_wizard(Some(window), Some(cx));
@@ -3228,8 +3281,8 @@ impl WhiskyApp {
                         d.child(
                             Button::new("wiz-full-editor")
                                 .outline()
-                                .label("完整配置")
-                                .tooltip("带着当前预设进入完整界面调整思考深度或默认语言")
+                                .label(crate::i18n::s().translation.wiz_full_config)
+                                .tooltip(crate::i18n::s().translation.wiz_full_config_tip)
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.translation_page
                                         .wizard_open_full_editor(window, cx);
@@ -3240,7 +3293,7 @@ impl WhiskyApp {
                             Button::new("wiz-save")
                                 .primary()
                                 .icon(icon("check", 13.))
-                                .label("保存并完成")
+                                .label(crate::i18n::s().translation.wiz_save_finish)
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.translation_page
                                         .wizard_save_provider(&this.bridge, window, cx);
@@ -3290,7 +3343,7 @@ impl WhiskyApp {
                                                     .text_size(px(16.))
                                                     .font_weight(FontWeight::BOLD)
                                                     .text_color(rgb(text()))
-                                                    .child("添加 AI 翻译提供商"),
+                                                    .child(crate::i18n::s().translation.wiz_modal_title),
                                             ),
                                     )
                                     .child(
@@ -3298,7 +3351,7 @@ impl WhiskyApp {
                                             .small()
                                             .ghost()
                                             .icon(icon("x", 14.))
-                                            .tooltip("关闭（Esc）")
+                                            .tooltip(crate::i18n::s().common.close_esc)
                                             .on_click(cx.listener(|this, _, window, cx| {
                                                 this.translation_page
                                                     .close_wizard(Some(window), Some(cx));
@@ -3337,7 +3390,7 @@ impl WhiskyApp {
         let query_input = Input::new(&self.translation_page.input(
             "cache-query",
             &query_default,
-            "搜索原文、译文、说话人、模型或游戏 ID…",
+            crate::i18n::s().translation.cache_search_placeholder,
             window,
             cx,
         ))
@@ -3365,20 +3418,20 @@ impl WhiskyApp {
             .gap(px(6.))
             .flex_wrap()
             .child(pill_badge(
-                format!("已缓存 {total_count} 条"),
+                match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("已缓存 {total_count} 条"), crate::i18n::Locale::Ja => format!("キャッシュ {total_count} 件"), crate::i18n::Locale::En => format!("{total_count} cached"), crate::i18n::Locale::Ko => format!("캐시 {total_count}개") },
                 badge_bg(),
                 badge_text(),
                 None,
             ))
             .child(pill_badge(
-                format!("占用 {}", format_cache_bytes(total_bytes)),
+                match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("占用 {}", format_cache_bytes(total_bytes)), crate::i18n::Locale::Ja => format!("使用量 {}", format_cache_bytes(total_bytes)), crate::i18n::Locale::En => format!("Size {}", format_cache_bytes(total_bytes)), crate::i18n::Locale::Ko => format!("사용량 {}", format_cache_bytes(total_bytes)) },
                 badge_bg(),
                 badge_text(),
                 None,
             ));
         if only_current {
             stats_row = stats_row.child(pill_badge(
-                format!("当前游戏 {game_count} 条"),
+                match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("当前游戏 {game_count} 条"), crate::i18n::Locale::Ja => format!("このゲーム {game_count} 件"), crate::i18n::Locale::En => format!("{game_count} for this game"), crate::i18n::Locale::Ko => format!("현재 게임 {game_count}개") },
                 accent_subtle_bg(),
                 accent_fg(),
                 Some(accent_subtle_border()),
@@ -3396,7 +3449,7 @@ impl WhiskyApp {
                 Button::new("cache-refresh")
                     .small()
                     .icon(icon("refresh-cw", 13.))
-                    .label("刷新")
+                    .label(crate::i18n::s().common.refresh)
                     .disabled(loading)
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.translation_page
@@ -3410,7 +3463,7 @@ impl WhiskyApp {
             toolbar = toolbar
                 .child(selectable_chip(
                     "cache-scope-current",
-                    "仅当前游戏",
+                    crate::i18n::s().translation.cache_current_game_only,
                     only_current,
                     cx.listener(move |this, _, _, cx| {
                         this.translation_page
@@ -3421,7 +3474,7 @@ impl WhiskyApp {
                 .child(
                     Button::new("cache-clear-current")
                         .small()
-                        .label("清空当前游戏")
+                        .label(crate::i18n::s().translation.cache_clear_game)
                         .disabled(clear_pending)
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.translation_page
@@ -3435,7 +3488,7 @@ impl WhiskyApp {
                 .small()
                 .danger()
                 .icon(icon("delete", 13.))
-                .label("清空全部")
+                .label(crate::i18n::s().translation.cache_clear_all)
                 .disabled(clear_pending)
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.translation_page.clear_cache(&this.bridge, None);
@@ -3456,11 +3509,11 @@ impl WhiskyApp {
                 .border_1()
                 .border_color(rgba(card_border()))
                 .child(muted(if loading {
-                    "正在读取缓存记录…"
+                    crate::i18n::s().translation.cache_loading
                 } else if !cache_query_value.trim().is_empty() {
-                    "未找到匹配的缓存句子。"
+                    crate::i18n::s().translation.cache_no_match
                 } else {
-                    "当前暂无句子翻译缓存。"
+                    crate::i18n::s().translation.cache_empty
                 }))
                 .into_any_element()
         } else {
@@ -3512,14 +3565,15 @@ fn provider_sidebar_card(
     let cat = provider_category(&provider.kind);
     let (cat_fg, cat_bg, cat_border) = cat.colors();
     let short_kind = provider_short_label(&provider.kind).to_owned();
+    let t = &crate::i18n::s().translation;
     let (dot_color, status_tip) = if provider.kind == "localBuiltIn" {
-        (installed_fg(), "内置本地模型（无需密钥）")
+        (installed_fg(), t.status_local_no_key)
     } else if provider.has_credential {
-        (installed_fg(), "密钥已安全保存")
+        (installed_fg(), t.status_key_saved)
     } else if provider.kind == "ollama" {
-        (cat_fg, "本地 Ollama 服务（免密钥）")
+        (cat_fg, t.status_ollama_no_key)
     } else {
-        (warning_fg(), "尚未设置 API 密钥")
+        (warning_fg(), t.status_key_unset)
     };
     let subtitle = match provider
         .model_id
@@ -3608,10 +3662,11 @@ fn provider_sidebar_card(
 }
 
 fn wizard_stepper(step: WizardStep) -> AnyElement {
+    let t = &crate::i18n::s().translation;
     let steps = [
-        (WizardStep::ChooseCategory, "1", "连接方式"),
-        (WizardStep::ChoosePreset, "2", "选择服务"),
-        (WizardStep::Configure, "3", "快速配置"),
+        (WizardStep::ChooseCategory, "1", t.wiz_nav_1),
+        (WizardStep::ChoosePreset, "2", t.wiz_nav_2),
+        (WizardStep::Configure, "3", t.wiz_nav_3),
     ];
     let current_idx = match step {
         WizardStep::ChooseCategory => 0,
@@ -3704,10 +3759,10 @@ fn language_preset_field(
         .input(key, value, placeholder, window, cx);
     let view = cx.entity().downgrade();
     let preset_btn = Button::new(format!("translation-lang-preset:{key}"))
-        .label("预设")
+        .label(crate::i18n::s().common.preset)
         .dropdown_caret(true)
         .dropdown_menu_with_anchor(Anchor::TopRight, move |mut menu, _, _| {
-            for (code, display) in LANGUAGE_PRESETS {
+            for (code, display) in language_presets() {
                 if !allow_auto && code == "auto" {
                     continue;
                 }
@@ -3985,23 +4040,23 @@ fn storage_mode_detail(mode: &str) -> &'static str {
     match mode {
         "localFile" => {
             if cfg!(target_os = "linux") {
-                "本地文件模式会以未加密明文将 API 密钥写入本机受限目录（0600 权限），不使用 Secret Service；仅建议可信个人设备使用。切换模式后请先点击「保存翻译设置」，再到提供商页面重新保存密钥。"
+                crate::i18n::s().translation.cred_note_local_linux
             } else {
-                "本地文件模式会以未加密明文将 API 密钥写入本机受限目录（0600 权限），可彻底避免钥匙串重复弹窗，但仅建议可信个人设备使用。切换模式后请先点击「保存翻译设置」，再到提供商页面重新保存密钥。"
+                crate::i18n::s().translation.cred_note_local_mac
             }
         }
         "sessionOnly" => {
             if cfg!(target_os = "linux") {
-                "仅本次运行模式将密钥保留在当前进程内存中，不写入系统密钥环或磁盘；退出 Maltoria 后密钥将自动清除。"
+                crate::i18n::s().translation.cred_note_session_linux
             } else {
-                "仅本次运行模式将密钥保留在当前进程内存中，不写入钥匙串或磁盘；退出 Maltoria 后密钥将自动清除。"
+                crate::i18n::s().translation.cred_note_session_mac
             }
         }
         _ => {
             if cfg!(target_os = "linux") {
-                "系统密钥环模式通过 Secret Service 加密保存凭证，需要安装 libsecret-tools 并运行已解锁的密钥环服务。"
+                crate::i18n::s().translation.cred_note_system_linux
             } else {
-                "macOS 钥匙串模式会加密保存凭证并启用内存缓存；若为本地 ad-hoc 签名构建，每次重新编译后系统钥匙串可能提示授权一次。"
+                crate::i18n::s().translation.cred_note_system_mac
             }
         }
     }
@@ -4020,10 +4075,11 @@ fn format_context_window(tokens: u64) -> String {
 }
 
 fn provenance_label(value: &str) -> &'static str {
+    let t = &crate::i18n::s().translation;
     match value {
-        "detected" => "已检测",
-        "manual" => "手动指定",
-        _ => "未知",
+        "detected" => t.source_detected,
+        "manual" => t.source_manual,
+        _ => crate::i18n::s().common.unknown,
     }
 }
 
@@ -4083,14 +4139,14 @@ fn cache_entry_row(
             d.child(pill_badge(lp, badge_bg(), badge_text(), None))
         })
         .child(pill_badge(
-            format!("命中 {} 次", entry.hit_count),
+            match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("命中 {} 次", entry.hit_count), crate::i18n::Locale::Ja => format!("ヒット {} 回", entry.hit_count), crate::i18n::Locale::En => format!("{} hits", entry.hit_count), crate::i18n::Locale::Ko => format!("적중 {}회", entry.hit_count) },
             installed_bg(),
             installed_fg(),
             None,
         ));
     if !compact && !entry.game_id.trim().is_empty() {
         badges = badges.child(pill_badge(
-            format!("游戏 {}", entry.game_id),
+            match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("游戏 {}", entry.game_id), crate::i18n::Locale::Ja => format!("ゲーム {}", entry.game_id), crate::i18n::Locale::En => format!("Game {}", entry.game_id), crate::i18n::Locale::Ko => format!("게임 {}", entry.game_id) },
             badge_bg(),
             badge_text(),
             None,
@@ -4114,7 +4170,7 @@ fn cache_entry_row(
                     Button::new(format!("cache-delete:{id}"))
                         .xsmall()
                         .ghost()
-                        .label("删除")
+                        .label(crate::i18n::s().common.delete)
                         .disabled(delete_pending)
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.translation_page

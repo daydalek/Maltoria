@@ -165,7 +165,7 @@ pub(crate) fn rows_with_options(
     if !resume.is_empty() {
         out.push(Row {
             key: RowKey::Resume,
-            title: "继续游玩".to_owned(),
+            title: crate::i18n::s().library.continue_playing_shelf.to_owned(),
             indices: resume,
         });
     }
@@ -210,7 +210,7 @@ pub(crate) fn rows_with_options(
         if !indices.is_empty() {
             out.push(Row {
                 key: RowKey::All,
-                title: "全部游戏".to_owned(),
+                title: crate::i18n::s().library.all_games.to_owned(),
                 indices,
             });
         }
@@ -243,7 +243,7 @@ pub(crate) fn rows_with_options(
     if !launchers.is_empty() {
         out.push(Row {
             key: RowKey::Launchers,
-            title: "启动器".to_owned(),
+            title: crate::i18n::s().library.launchers.to_owned(),
             indices: launchers,
         });
     }

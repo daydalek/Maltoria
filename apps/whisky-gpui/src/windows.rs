@@ -14,14 +14,16 @@ use crate::theme::{
     sidebar_gradient, text, toast_bg, toast_border, toolbar_bg,
 };
 use crate::{
-    AppearanceDark, AppearanceLight, AppearanceSystem, CloseWindow, DismissPreview, MinimizeWindow,
-    QuitPreview, ShowSettings, ToggleFullScreen, ZoomWindow,
+    AppearanceDark, AppearanceLight, AppearanceSystem, CloseWindow, DismissPreview, LanguageEn,
+    LanguageJa, LanguageKo, LanguageSystem, LanguageZhHans, MinimizeWindow, QuitPreview,
+    ShowSettings, ToggleFullScreen, ZoomWindow,
 };
 
 /// macOS-style two-pane Settings window (`⌘,`).
 pub(crate) struct SettingsWindow {
     app: Entity<WhiskyApp>,
     focus_handle: FocusHandle,
+    rendered_locale: crate::i18n::Locale,
     _subscription: Subscription,
 }
 
@@ -29,6 +31,7 @@ pub(crate) struct SettingsWindow {
 pub(crate) struct CaptureWindow {
     app: Entity<WhiskyApp>,
     focus_handle: FocusHandle,
+    rendered_locale: crate::i18n::Locale,
     _subscription: Subscription,
 }
 
@@ -69,7 +72,7 @@ pub(crate) fn open_settings_window_if_needed(weak: WeakEntity<WhiskyApp>, cx: &m
             #[cfg(target_os = "linux")]
             window_decorations: Some(WindowDecorations::Client),
             titlebar: Some(TitlebarOptions {
-                title: Some("Maltoria 设置".into()),
+                title: Some(crate::i18n::s().windows.settings_title.into()),
                 appears_transparent: true,
                 traffic_light_position: Some(point(px(15.), px(21.))),
             }),
@@ -93,6 +96,7 @@ pub(crate) fn open_settings_window_if_needed(weak: WeakEntity<WhiskyApp>, cx: &m
                 SettingsWindow {
                     app: app_for_build,
                     focus_handle,
+                    rendered_locale: crate::i18n::locale(),
                     _subscription,
                 }
             })
@@ -159,7 +163,7 @@ pub(crate) fn open_capture_window_if_needed(weak: WeakEntity<WhiskyApp>, cx: &mu
             #[cfg(target_os = "linux")]
             window_decorations: Some(WindowDecorations::Client),
             titlebar: Some(TitlebarOptions {
-                title: Some("游戏翻译".into()),
+                title: Some(crate::i18n::s().windows.capture_title.into()),
                 appears_transparent: true,
                 traffic_light_position: Some(point(px(15.), px(21.))),
             }),
@@ -183,6 +187,7 @@ pub(crate) fn open_capture_window_if_needed(weak: WeakEntity<WhiskyApp>, cx: &mu
                 CaptureWindow {
                     app: app_for_build,
                     focus_handle,
+                    rendered_locale: crate::i18n::locale(),
                     _subscription,
                 }
             })
@@ -249,6 +254,11 @@ fn attach_shared_window_actions<V: Render + 'static>(
     let app_sys = app.clone();
     let app_light = app.clone();
     let app_dark = app.clone();
+    let app_lang_sys = app.clone();
+    let app_lang_zh = app.clone();
+    let app_lang_ja = app.clone();
+    let app_lang_en = app.clone();
+    let app_lang_ko = app.clone();
     element
         .on_action(cx.listener(move |_, _: &QuitPreview, window, cx| {
             app_quit.update(cx, |this, cx| this.request_quit(window, cx));
@@ -261,6 +271,31 @@ fn attach_shared_window_actions<V: Render + 'static>(
         }))
         .on_action(cx.listener(move |_, _: &AppearanceDark, _, cx| {
             app_dark.update(cx, |this, cx| this.set_appearance(AppearanceMode::Dark, cx));
+        }))
+        .on_action(cx.listener(move |_, _: &LanguageSystem, _, cx| {
+            app_lang_sys.update(cx, |this, cx| {
+                this.set_language(crate::i18n::LanguageMode::System, cx);
+            });
+        }))
+        .on_action(cx.listener(move |_, _: &LanguageZhHans, _, cx| {
+            app_lang_zh.update(cx, |this, cx| {
+                this.set_language(crate::i18n::LanguageMode::ZhHans, cx);
+            });
+        }))
+        .on_action(cx.listener(move |_, _: &LanguageJa, _, cx| {
+            app_lang_ja.update(cx, |this, cx| {
+                this.set_language(crate::i18n::LanguageMode::Ja, cx);
+            });
+        }))
+        .on_action(cx.listener(move |_, _: &LanguageEn, _, cx| {
+            app_lang_en.update(cx, |this, cx| {
+                this.set_language(crate::i18n::LanguageMode::En, cx);
+            });
+        }))
+        .on_action(cx.listener(move |_, _: &LanguageKo, _, cx| {
+            app_lang_ko.update(cx, |this, cx| {
+                this.set_language(crate::i18n::LanguageMode::Ko, cx);
+            });
         }))
         .on_action(cx.listener(|_, _: &MinimizeWindow, window, _| {
             window.minimize_window();
@@ -300,6 +335,11 @@ impl Render for SettingsWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let appearance = self.app.read(cx).appearance;
         theme::sync_theme(appearance, Some(window), cx);
+        let current_locale = crate::i18n::locale();
+        if self.rendered_locale != current_locale {
+            self.rendered_locale = current_locale;
+            window.set_window_title(crate::i18n::s().windows.settings_title);
+        }
         let ww = f32::from(window.viewport_size().width);
         let wh = f32::from(window.viewport_size().height);
         let fullscreen = window.is_fullscreen() || window.is_simple_fullscreen();
@@ -448,7 +488,7 @@ impl Render for SettingsWindow {
                 .size_full()
                 .overflow_hidden()
                 .bg(rgb(theme::bg()))
-                .font_family(platform::UI_FONT)
+                .font_family(platform::ui_font())
                 .text_color(rgb(text()))
                 .text_size(px(13.)),
             &self.app,
@@ -494,7 +534,7 @@ impl Render for SettingsWindow {
         #[cfg(target_os = "linux")]
         {
             wrap_linux_client_titlebar(
-                "Maltoria 设置",
+                crate::i18n::s().windows.settings_title,
                 root,
                 window,
                 cx.listener(|this, _, window, cx| {
@@ -515,6 +555,11 @@ impl Render for CaptureWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let appearance = self.app.read(cx).appearance;
         theme::sync_theme(appearance, Some(window), cx);
+        let current_locale = crate::i18n::locale();
+        if self.rendered_locale != current_locale {
+            self.rendered_locale = current_locale;
+            window.set_window_title(crate::i18n::s().windows.capture_title);
+        }
         let fullscreen = window.is_fullscreen() || window.is_simple_fullscreen();
 
         let (content, needs_frame) = self.app.update(cx, |app, app_cx| {
@@ -540,7 +585,7 @@ impl Render for CaptureWindow {
                 .size_full()
                 .overflow_hidden()
                 .bg(rgb(theme::bg()))
-                .font_family(platform::UI_FONT)
+                .font_family(platform::ui_font())
                 .text_color(rgb(text()))
                 .text_size(px(13.)),
             &self.app,
@@ -564,7 +609,7 @@ impl Render for CaptureWindow {
         #[cfg(target_os = "linux")]
         {
             wrap_linux_client_titlebar(
-                "游戏翻译",
+                crate::i18n::s().windows.capture_title,
                 root,
                 window,
                 cx.listener(|this, _, window, cx| {
@@ -585,11 +630,12 @@ impl Render for CaptureWindow {
 pub(crate) fn capture_header_settings_button(
     cx: &mut Context<WhiskyApp>,
 ) -> Button {
+    let w = &crate::i18n::s().windows;
     Button::new("capture-provider-settings")
         .small()
         .icon(icon("settings-2", 13.))
-        .label("AI 提供商设置…")
-        .tooltip("在独立设置窗口中配置模型与翻译参数")
+        .label(w.capture_ai_settings_btn)
+        .tooltip(w.capture_ai_settings_tip)
         .on_click(cx.listener(|this, _, _, cx| this.open_translation_settings(cx)))
 }
 

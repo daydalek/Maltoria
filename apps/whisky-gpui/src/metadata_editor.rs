@@ -19,12 +19,38 @@ pub(crate) const PROVIDERS: &[(&str, &str)] = &[
     ("ymgal", "月幕"),
     ("nextmoe", "NextMoe"),
 ];
+#[cfg(test)]
 pub(crate) const CATEGORIES: &[(&str, &str)] = &[
     ("basic", "基本信息"),
     ("summary", "简介"),
     ("cover", "封面"),
     ("characters", "角色"),
 ];
+
+pub(crate) fn provider_label(id: &str) -> &str {
+    crate::onboarding::source_label(id)
+}
+
+pub(crate) fn category_label(id: &str) -> &str {
+    let m = &crate::i18n::s().metadata;
+    match id {
+        "basic" => m.cat_basic_short,
+        "summary" => m.cat_summary,
+        "cover" => m.cat_cover,
+        "characters" => m.cat_characters,
+        other => other,
+    }
+}
+
+pub(crate) fn categories() -> [(&'static str, &'static str); 4] {
+    let m = &crate::i18n::s().metadata;
+    [
+        ("basic", m.cat_basic_short),
+        ("summary", m.cat_summary),
+        ("cover", m.cat_cover),
+        ("characters", m.cat_characters),
+    ]
+}
 
 /// Accept only a provider's known work URL or stable ID, never search text or
 /// a URL whose host merely contains the provider's name.
@@ -138,7 +164,7 @@ impl MetadataEditor {
     pub(crate) fn accept_reply(&mut self, reply: &Value) -> Result<(), String> {
         let record = &reply["record"];
         if !record.is_object() || !record["defaultSource"].is_string() {
-            return Err("桥接服务返回了无效的资料配置；未覆盖草稿".into());
+            return Err(crate::i18n::s().metadata.err_invalid_reply.into());
         }
         self.capabilities = reply["capabilities"].clone();
         self.record = record.clone();
@@ -170,10 +196,11 @@ impl MetadataEditor {
 
     /// IDs, not translated/display titles, define the remote work.
     pub(crate) fn bind(&mut self, source: &str, snapshot: Value) -> Result<(), String> {
+        let m = &crate::i18n::s().metadata;
         let id = snapshot["sourceID"].as_str().filter(|id| !id.trim().is_empty())
-            .ok_or("此结果缺少平台 ID，无法安全关联")?.to_owned();
+            .ok_or(m.err_missing_platform_id)?.to_owned();
         if snapshot["source"].as_str() != Some(source) {
-            return Err("结果的平台与搜索来源不一致".into());
+            return Err(m.err_platform_mismatch.into());
         }
         // Search hits are summaries. Re-selecting the same work must not
         // replace hydrated details (especially characters) with that summary.
@@ -196,7 +223,7 @@ impl WhiskyApp {
         let value = page.editor.search_queries.get(&page.editor.search_source)
             .cloned().unwrap_or_else(|| page.title.clone());
         let input = cx.new(|cx| InputState::new(window, cx)
-            .placeholder("搜索名称，或粘贴作品 ID / 网址")
+            .placeholder(crate::i18n::s().metadata.search_placeholder)
             .default_value(value));
         page.input = Some(input.clone());
         input
@@ -220,7 +247,7 @@ impl WhiskyApp {
         let input = page.input.as_ref().map(|input| input.read(cx).value().to_string()).unwrap_or_default();
         let source = page.editor.search_source.clone();
         let Some(id) = platform_id(&source, &input) else {
-            page.error = Some("请输入所选平台的作品 ID 或作品页面网址；关联不会按标题猜测。".into());
+            page.error = Some(crate::i18n::s().metadata.err_invalid_id_or_url.into());
             cx.notify();
             return;
         };
@@ -231,7 +258,7 @@ impl WhiskyApp {
         }
         page.editor.record["bindings"][&source] = json!(id);
         page.error = None;
-        page.editor.message = Some("平台 ID 已加入草稿；保存后刷新以获取资料。".into());
+        page.editor.message = Some(crate::i18n::s().metadata.msg_id_staged.into());
         cx.notify();
     }
 
@@ -244,7 +271,7 @@ impl WhiskyApp {
         }
         let value = page.editor.record[field].as_str().unwrap_or("").to_owned();
         let input = cx.new(|cx| InputState::new(window, cx)
-            .placeholder("可留空；关闭手动编辑以恢复来源")
+            .placeholder(crate::i18n::s().metadata.manual_placeholder)
             .default_value(value));
         cx.observe(&input, |_, _, cx| cx.notify()).detach();
         page.editor.inputs.insert(field, input.clone());
@@ -306,7 +333,7 @@ impl WhiskyApp {
         let available = self.service_available("metadata.configuration.get");
         let Some(page) = self.game_info.as_mut() else { return; };
         if !available {
-            page.error = Some("当前服务不支持分来源资料编辑，请更新桥接服务。未修改现有资料。".into());
+            page.error = Some(crate::i18n::s().metadata.err_bridge_no_source_edit.into());
         } else {
             page.editor.busy = true;
             self.bridge.metadata_record(&page.container, &page.entry_id,
@@ -369,12 +396,13 @@ impl WhiskyApp {
                     page.editor.search_source = allowed.iter().find(|source| *source == preferred)
                         .or_else(|| allowed.first()).cloned().unwrap_or_else(|| preferred.into());
                 }
+                let m = &crate::i18n::s().metadata;
                 page.error = reply["errors"].as_object().filter(|errors| !errors.is_empty())
-                    .map(|errors| errors.iter().map(|(source, error)| format!("{source}: {}", error.as_str().unwrap_or("刷新失败")))
+                    .map(|errors| errors.iter().map(|(source, error)| format!("{source}: {}", error.as_str().unwrap_or(m.err_refresh_failed)))
                         .collect::<Vec<_>>().join("\n"));
                 page.editor.message = (operation != "get").then(|| if operation == "refresh" {
-                    "已按保存的平台 ID 刷新".into()
-                } else { "资料已保存".into() });
+                    m.msg_refreshed_by_id.into()
+                } else { m.msg_saved.into() });
             }
             Err(reason) => page.error = Some(reason),
         }

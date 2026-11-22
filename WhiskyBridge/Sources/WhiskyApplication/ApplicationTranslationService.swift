@@ -756,6 +756,36 @@ private struct TranslationCatalogSnapshot: Codable, Sendable {
     var profiles: [ProviderConfiguration] = []
     var settings = TranslationSettings()
     var remoteProvidersEnabled = true
+    var droppedUnreadableContent = false
+
+    private enum CodingKeys: String, CodingKey {
+        case version, profiles, settings, remoteProvidersEnabled
+    }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        version = try values.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        let entries = try values.decodeIfPresent(
+            [LossyValue<ProviderConfiguration>].self,
+            forKey: .profiles
+        ) ?? []
+        profiles = entries.compactMap(\.value)
+        let storedSettings = try? values.decode(TranslationSettings.self, forKey: .settings)
+        settings = storedSettings ?? TranslationSettings()
+        remoteProvidersEnabled = (try? values.decode(Bool.self, forKey: .remoteProvidersEnabled)) ?? true
+        droppedUnreadableContent = entries.contains { $0.value == nil }
+            || (values.contains(.settings) && storedSettings == nil)
+    }
+}
+
+private struct LossyValue<Value: Decodable>: Decodable {
+    let value: Value?
+
+    init(from decoder: Decoder) throws {
+        value = try? Value(from: decoder)
+    }
 }
 
 private actor TranslationApplicationCatalog {
@@ -799,12 +829,20 @@ private actor TranslationApplicationCatalog {
         }
         do {
             let data = try Data(contentsOf: file)
-            let state = try JSONDecoder().decode(TranslationCatalogSnapshot.self, from: data)
+            var state = try JSONDecoder().decode(TranslationCatalogSnapshot.self, from: data)
             guard state.version == 1, state.profiles.count <= 64,
                   Set(state.profiles.map(\.id)).count == state.profiles.count
             else { throw BridgeFailure("translation_storage_unavailable", "Saved translation profiles are invalid") }
-            try state.profiles.forEach { try $0.validate() }
-            try state.settings.validate()
+            let validProfiles = state.profiles.filter { (try? $0.validate()) != nil }
+            if validProfiles.count != state.profiles.count {
+                state.profiles = validProfiles
+                state.droppedUnreadableContent = true
+            }
+            if (try? state.settings.validate()) == nil {
+                state.settings = TranslationSettings()
+                state.droppedUnreadableContent = true
+            }
+            if state.droppedUnreadableContent { try? save(state) }
             current = state
             return state
         } catch let failure as BridgeFailure {

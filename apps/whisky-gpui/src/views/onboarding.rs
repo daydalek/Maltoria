@@ -8,7 +8,7 @@ use gpui_kit::{prelude::*, *};
 use serde_json::json;
 
 use crate::controls::{AutoFocusButton, col, muted, row};
-use crate::onboarding::{CATEGORIES, COMPLETED, Onboarding, SOURCES};
+use crate::onboarding::{CATEGORIES, COMPLETED, Onboarding, SOURCES, category_label, source_label};
 use crate::state::WhiskyApp;
 use crate::theme::{surface, surface_border};
 
@@ -57,11 +57,12 @@ impl WhiskyApp {
                     .unwrap_or("inherit")
             })
             .unwrap_or(&state.draft.default_source);
+        let strings = crate::i18n::s();
         let label = SOURCES
             .iter()
             .find(|(id, _)| *id == selected)
-            .map(|(_, label)| *label)
-            .unwrap_or("跟随默认");
+            .map(|(id, _)| source_label(id))
+            .unwrap_or(strings.onboarding.follow_default);
         let view = cx.entity().downgrade();
         Button::new(format!(
             "onboarding-source-{}",
@@ -70,11 +71,12 @@ impl WhiskyApp {
         .label(format!("{label}  ⌄"))
         .disabled(state.saving)
         .dropdown_menu(move |mut menu, _, _| {
+            let follow_default = crate::i18n::s().onboarding.follow_default;
             let choices = category
-                .map(|_| vec![("inherit", "跟随默认")])
+                .map(|_| vec![("inherit", follow_default)])
                 .unwrap_or_default()
                 .into_iter()
-                .chain(SOURCES);
+                .chain(SOURCES.iter().map(|(id, _)| (*id, source_label(id))));
             for (id, label) in choices {
                 // Only providers with a character endpoint may be selected.
                 if category == Some("characters") && !["inherit", "bangumi", "vndb", "nextmoe"].contains(&id) {
@@ -115,6 +117,7 @@ impl WhiskyApp {
         height: f32,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        let strings = crate::i18n::s();
         let state = self.onboarding.as_ref().expect("visible onboarding");
         let introduction = state.welcome && state.step == 0;
         let mut content = col().gap(px(14.));
@@ -124,10 +127,10 @@ impl WhiskyApp {
                     div()
                         .text_size(px(26.))
                         .font_weight(FontWeight::SEMIBOLD)
-                        .child("让游戏各就其位"),
+                        .child(strings.onboarding.welcome_title),
                 )
                 .child(
-                    muted("Maltoria 帮助你运行 Windows 游戏，并整理属于自己的游戏库。")
+                    muted(strings.onboarding.welcome_sub)
                         .line_height(relative(1.6)),
                 )
                 .child(
@@ -136,45 +139,48 @@ impl WhiskyApp {
                         .p(px(16.))
                         .rounded(px(12.))
                         .bg(rgba(crate::theme::card_bg()))
-                        .child("① 创建或导入容器")
-                        .child(muted("容器是游戏独立的 Windows 环境，运行时可稍后安装。"))
-                        .child("② 添加游戏，再选择启动程序")
-                        .child(muted("已有游戏不必重新下载；资料名称不会改变启动路径。"))
-                        .child("③ 选择资料来源")
-                        .child(muted("补充封面、简介与人物；不同平台的作品由你确认关联。")),
+                        .child(strings.onboarding.step1_title)
+                        .child(muted(strings.onboarding.step1_desc))
+                        .child(strings.onboarding.step2_title)
+                        .child(muted(strings.onboarding.step2_desc))
+                        .child(strings.onboarding.step3_title)
+                        .child(muted(strings.onboarding.step3_desc)),
                 )
-                .child(muted(
-                    "接下来只保存偏好，不会扫描目录、下载运行时或发起刮削。",
-                ));
+                .child(muted(strings.onboarding.welcome_note));
         } else {
             content = content
-                .child(div().text_size(px(24.)).font_weight(FontWeight::SEMIBOLD).child("选择资料来源"))
-                .child(muted("先选一个默认平台，需要时再单独调整。只影响新资料，不会重写已确认的作品。").line_height(relative(1.5)))
-                .child(row().justify_between().child("默认来源").child(self.onboarding_source_menu(None, cx)))
-                .child(muted("Bangumi：中文作品资料 · VNDB：视觉小说 · Steam：商店资料 · 月幕 / NextMoe：Galgame 资料").text_size(px(11.)))
+                .child(div().text_size(px(24.)).font_weight(FontWeight::SEMIBOLD).child(strings.onboarding.choose_sources_title))
+                .child(muted(strings.onboarding.choose_sources_desc).line_height(relative(1.5)))
+                .child(row().justify_between().child(strings.onboarding.default_source).child(self.onboarding_source_menu(None, cx)))
+                .child(muted(strings.onboarding.sources_legend).text_size(px(11.)))
                 .child(Button::new("onboarding-expand")
-                    .label(if state.expanded { "收起分类设置 −" } else { "按资料类型调整 ＋" })
+                    .label(if state.expanded {
+                        strings.onboarding.collapse_categories
+                    } else {
+                        strings.onboarding.expand_categories
+                    })
                     .ghost().disabled(state.saving)
                     .on_click(cx.listener(|this, _, _, cx| {
                         if let Some(state) = &mut this.onboarding { state.expanded = !state.expanded; }
                         cx.notify();
                     })));
             if state.expanded {
-                for (category, label, _) in CATEGORIES {
+                for (category, _, _) in CATEGORIES {
                     content = content.child(
                         row()
                             .justify_between()
-                            .child(label)
+                            .child(category_label(category))
                             .child(self.onboarding_source_menu(Some(category), cx)),
                     );
                 }
                 content = content.child(
-                    muted("人物仅支持 Bangumi / VNDB / NextMoe；跟随不支持人物的默认来源时，该项留空。")
+                    muted(strings.onboarding.characters_support_note)
                         .text_size(px(11.)),
                 );
             }
             let mut sources = row().gap(px(8.)).flex_wrap();
-            for (id, label) in SOURCES {
+            for (id, _) in SOURCES {
+                let label = source_label(id);
                 let selected = state
                     .draft
                     .enabled_sources
@@ -202,28 +208,26 @@ impl WhiskyApp {
                 );
             }
             content = content
-                .child(muted("允许搜索的平台").text_size(px(11.)))
+                .child(muted(strings.onboarding.allowed_platforms).text_size(px(11.)))
                 .child(sources)
                 .child(
                     muted(if state.draft.enabled_sources.is_empty() {
-                        "已暂停资料搜索。以后可在设置中启用；本地资料不受影响。"
+                        strings.onboarding.scraping_paused_note
                     } else {
-                        "搜索会向所选平台发送作品名。平台名称不同也没关系，可分别搜索并确认条目。"
+                        strings.onboarding.search_note
                     })
                     .text_size(px(11.))
                     .line_height(relative(1.5)),
                 );
         }
         if let Some(error) = &state.error {
-            content = content.child(muted(format!(
-                "未保存：{error}。请重试，或取消后稍后设置。"
-            )));
+            content = content.child(muted(crate::i18n::fmt::dialog_save_failed(error)));
         }
         let mut footer = row().gap(px(8.)).justify_end();
         if state.welcome {
             footer = footer.child(
                 Button::new("onboarding-skip")
-                    .label("暂不刮削")
+                    .label(strings.onboarding.skip_scraping)
                     .ghost()
                     .disabled(state.saving)
                     .on_click(cx.listener(|this, _, _, cx| this.save_onboarding(true, cx))),
@@ -231,7 +235,7 @@ impl WhiskyApp {
         } else {
             footer = footer.child(
                 Button::new("onboarding-cancel")
-                    .label("取消")
+                    .label(strings.common.cancel)
                     .ghost()
                     .disabled(state.saving)
                     .on_click(cx.listener(|this, _, window, cx| {
@@ -246,7 +250,7 @@ impl WhiskyApp {
                 AutoFocusButton::new(
                     "onboarding-next",
                     Button::new("onboarding-next")
-                        .label("选择资料来源")
+                        .label(strings.onboarding.next_choose_sources)
                         .primary()
                         .disabled(state.saving)
                         .on_click(cx.listener(|this, _, _, cx| {
@@ -262,7 +266,7 @@ impl WhiskyApp {
             if state.welcome {
                 footer = footer.child(
                     Button::new("onboarding-back")
-                        .label("上一步")
+                        .label(strings.common.previous_step)
                         .ghost()
                         .disabled(state.saving)
                         .on_click(cx.listener(|this, _, _, cx| {
@@ -278,11 +282,11 @@ impl WhiskyApp {
                     "onboarding-save",
                     Button::new("onboarding-save")
                         .label(if state.saving {
-                            "正在保存…"
+                            strings.common.saving
                         } else if state.welcome {
-                            "开始使用"
+                            strings.onboarding.start_using
                         } else {
-                            "保存"
+                            strings.common.save
                         })
                         .primary()
                         .disabled(state.saving)

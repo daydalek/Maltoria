@@ -11,7 +11,12 @@ use std::time::{Duration, Instant};
 
 use crate::model::{BottleVm, Game};
 
+#[cfg(test)]
 pub(crate) const UNKNOWN_STUDIO_LABEL: &str = "未知厂商";
+
+pub(crate) fn unknown_studio_label() -> &'static str {
+    crate::i18n::s().library.unknown_studio
+}
 pub(crate) const PULL_OPEN_THRESHOLD: f32 = 40.0;
 pub(crate) const PULL_CLOSE_THRESHOLD: f32 = 30.0;
 pub(crate) const PULL_GESTURE_PAUSE_MS: u64 = 260;
@@ -175,9 +180,10 @@ impl TagFilter {
     }
 
     pub(crate) fn display_label(&self) -> String {
+        let l = &crate::i18n::s().library;
         match self {
-            Self::All => "全部".to_owned(),
-            Self::Untagged => "未标记".to_owned(),
+            Self::All => l.filter_all.to_owned(),
+            Self::Untagged => l.untagged.to_owned(),
             Self::Tags(tags) => tags.join(" + "),
         }
     }
@@ -265,8 +271,8 @@ impl StudioFilter {
 
     pub(crate) fn display_label(&self) -> String {
         match self {
-            Self::All => "全部".to_owned(),
-            Self::Unknown => UNKNOWN_STUDIO_LABEL.to_owned(),
+            Self::All => crate::i18n::s().library.filter_all.to_owned(),
+            Self::Unknown => unknown_studio_label().to_owned(),
             Self::Studio(studio) => studio.clone(),
         }
     }
@@ -360,7 +366,7 @@ pub(crate) fn group_indices_by_studio(games: &[Game], indices: &[usize]) -> Vec<
     if !unknown.is_empty() {
         clusters.push(StudioCluster {
             key: String::new(),
-            label: UNKNOWN_STUDIO_LABEL.to_owned(),
+            label: unknown_studio_label().to_owned(),
             is_unknown: true,
             indices: unknown,
         });

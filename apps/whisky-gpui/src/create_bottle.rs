@@ -121,24 +121,25 @@ impl CreateBottleState {
 /// other control characters (tab survives), at most 128 UTF-8 bytes. On
 /// success the trimmed name is returned for the wire call.
 pub(crate) fn validate_name(name: &str) -> Result<&str, &'static str> {
+    let cb = &crate::i18n::s().create_bottle;
     let trimmed = name.trim();
     if trimmed.is_empty() {
-        return Err("容器名称不能为空");
+        return Err(cb.empty_name);
     }
     if trimmed.contains('/') {
-        return Err("容器名称不能包含路径分隔符 '/'");
+        return Err(cb.slash_in_name);
     }
     if trimmed.contains('\0') {
-        return Err("容器名称不能包含空字符 '\\0'");
+        return Err(cb.null_in_name);
     }
     if trimmed.contains('\r') || trimmed.contains('\n') {
-        return Err("容器名称不能包含换行符");
+        return Err(cb.newline_in_name);
     }
     if trimmed.chars().any(|c| c.is_control() && c != '\t') {
-        return Err("容器名称包含控制字符");
+        return Err(cb.control_in_name);
     }
     if trimmed.len() > 128 {
-        return Err("容器名称不能超过 128 字节");
+        return Err(cb.too_long_name);
     }
     Ok(trimmed)
 }
@@ -146,14 +147,15 @@ pub(crate) fn validate_name(name: &str) -> Result<&str, &'static str> {
 /// Progress line for the create sheet.
 pub(crate) fn progress_label(status: crate::scan::JobStatus, stage: Option<&str>) -> &'static str {
     use crate::scan::JobStatus;
+    let cb = &crate::i18n::s().create_bottle;
     match (status, stage) {
-        (JobStatus::Queued, _) => "排队中…",
-        (JobStatus::Running, Some("initializing")) => "正在初始化容器…",
-        (JobStatus::Running, _) => "正在创建容器…",
-        (JobStatus::Cancelling, _) => "正在取消…",
-        (JobStatus::Completed, _) => "创建完成",
-        (JobStatus::Failed, _) => "创建失败",
-        (JobStatus::Cancelled, _) => "已取消",
+        (JobStatus::Queued, _) => cb.queued,
+        (JobStatus::Running, Some("initializing")) => cb.initializing,
+        (JobStatus::Running, _) => cb.creating,
+        (JobStatus::Cancelling, _) => cb.cancelling,
+        (JobStatus::Completed, _) => cb.completed,
+        (JobStatus::Failed, _) => cb.failed,
+        (JobStatus::Cancelled, _) => cb.cancelled,
     }
 }
 

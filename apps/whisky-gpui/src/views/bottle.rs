@@ -26,6 +26,7 @@ impl WhiskyApp {
         } else {
             true
         };
+        let strings = crate::i18n::s();
         row()
             .flex_shrink_0()
             .justify_end()
@@ -34,10 +35,10 @@ impl WhiskyApp {
             .p(px(14.))
             .border_t_1()
             .border_color(rgba(theme::card_border()))
-            .child(self.action("bottle-c-drive", "打开 C: 盘", Command::OpenDrive, cx))
+            .child(self.action("bottle-c-drive", strings.bottle.open_c_drive, Command::OpenDrive, cx))
             .child(
                 Button::new("bottle-terminal")
-                    .label("终端")
+                    .label(strings.bottle.terminal)
                     .disabled(!terminal_enabled)
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.command(Command::BottleTool("terminal"), cx)
@@ -45,15 +46,15 @@ impl WhiskyApp {
             )
             .child(self.action(
                 "bottle-tricks",
-                "Winetricks…",
+                strings.bottle.winetricks_ellipsis,
                 Command::Sheet(PreviewSheet::Winetricks),
                 cx,
             ))
-            .child(self.action("bottle-run", "运行…", Command::BottleRun, cx))
+            .child(self.action("bottle-run", strings.bottle.run_ellipsis, Command::BottleRun, cx))
             .when(cfg!(target_os = "linux"), |bar| {
                 bar.child(self.action(
                     "bottle-diagnostics",
-                    "诊断…",
+                    strings.bottle.diagnostics_ellipsis,
                     Command::Sheet(PreviewSheet::Diagnostics),
                     cx,
                 ))
@@ -81,6 +82,7 @@ impl WhiskyApp {
                 self.bottle_home(window, cx)
             }
         };
+        let strings = crate::i18n::s();
         col()
             .size_full()
             .child(div().flex_1().min_h_0().child(body))
@@ -95,19 +97,19 @@ impl WhiskyApp {
                     .border_color(rgba(theme::card_border()))
                     .child(self.action(
                         "control",
-                        "控制面板",
+                        strings.bottle.control_panel,
                         Command::BottleTool("control"),
                         cx,
                     ))
                     .child(self.action(
                         "regedit",
-                        "注册表编辑器",
+                        strings.bottle.regedit,
                         Command::BottleTool("regedit"),
                         cx,
                     ))
                     .child(self.action(
                         "winecfg",
-                        "Wine 配置",
+                        strings.bottle.wine_config,
                         Command::BottleTool("winecfg"),
                         cx,
                     ))
@@ -190,11 +192,12 @@ impl WhiskyApp {
             })
             .collect();
         let pins_empty = pins.is_empty();
+        let strings = crate::i18n::s();
         let nav_items = [
-            ("app-window", "已安装的程序", "浏览、固定或屏蔽容器内的可执行文件", PreviewPage::Programs),
-            ("sliders-horizontal", "容器配置", "调整 Windows 版本、图形后端、超分与环境变量", PreviewPage::ConfigureBottle),
-            ("activity", "运行中的进程", "查看或结束当前容器内活跃的 Wine 进程", PreviewPage::Processes),
-            ("sparkles", "游戏配置", "匹配本地 GameDB 社区兼容性与推荐设置", PreviewPage::GameConfigs),
+            ("app-window", strings.bottle.installed_programs, strings.bottle.installed_programs_sub, PreviewPage::Programs),
+            ("sliders-horizontal", strings.bottle.configure_bottle, strings.bottle.configure_bottle_sub, PreviewPage::ConfigureBottle),
+            ("activity", strings.bottle.running_processes, strings.bottle.running_processes_sub, PreviewPage::Processes),
+            ("sparkles", strings.bottle.game_configs, strings.bottle.game_configs_sub, PreviewPage::GameConfigs),
         ];
         let mut links = col()
             .rounded(px(12.))
@@ -238,11 +241,12 @@ impl WhiskyApp {
             );
         }
 
+        let strings = crate::i18n::s();
         let summary_line = if self.demo {
-            "自动选择图形后端 · Windows 11 · Wine".to_owned()
+            strings.bottle.demo_summary.to_owned()
         } else {
             let bottle = self.selected_bottle.and_then(|idx| self.bottles.get(idx));
-            let mut parts = vec![format!("{total_games} 款游戏")];
+            let mut parts = vec![crate::i18n::fmt::games_count(total_games)];
             if let Some(bottle) = bottle {
                 if let Some(cfg) = self.config.as_ref().filter(|c| c.container == bottle.path && !c.loading) {
                     if let Some(win) = cfg.values.get("windowsVersion").and_then(|v| v.as_str()) {
@@ -275,13 +279,13 @@ impl WhiskyApp {
                     .child(
                         row()
                             .gap(px(8.))
-                            .child(div().font_weight(FontWeight::SEMIBOLD).child("容器内游戏"))
+                            .child(div().font_weight(FontWeight::SEMIBOLD).child(strings.bottle.games_in_bottle))
                             .child(muted(total_games.to_string()).text_size(px(11.))),
                     )
                     .when(total_games > 6, |d| {
                         d.child(
                             Button::new("bottle-view-all-games")
-                                .label(format!("在游戏库查看全部（{total_games}）"))
+                                .label(crate::i18n::fmt::view_all_games_in_library(total_games))
                                 .ghost()
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.preview.page = PreviewPage::Library;
@@ -310,21 +314,21 @@ impl WhiskyApp {
                                 .flex_1()
                                 .min_w_0()
                                 .gap(px(4.))
-                                .child(div().font_weight(FontWeight::MEDIUM).child("此容器还没有游戏"))
-                                .child(muted("可配置游戏目录自动扫描，或将已安装的 .exe 程序固定到此处。").text_size(px(11.))),
+                                .child(div().font_weight(FontWeight::MEDIUM).child(strings.library.bottle_empty_title))
+                                .child(muted(strings.bottle.empty_bottle_desc).text_size(px(11.))),
                         )
                         .child(
                             row()
                                 .gap(px(8.))
                                 .child(self.action(
                                     "bottle-empty-scan",
-                                    "扫描文件夹…",
+                                    strings.bottle.scan_folder_ellipsis,
                                     Command::Sheet(PreviewSheet::Scan),
                                     cx,
                                 ))
                                 .child(self.action(
                                     "bottle-empty-pin",
-                                    "添加程序…",
+                                    strings.bottle.add_program_ellipsis,
                                     Command::AddProgram,
                                     cx,
                                 )),
@@ -349,13 +353,14 @@ impl WhiskyApp {
             return self.demo_bottle_config(cx);
         }
         self.apply_pending_input_text(window, cx);
+        let strings = crate::i18n::s();
         let Some(container) = self.selected_container() else {
             return self.form(
                 "bottle-config-scroll",
                 vec![self.section(
                     "config-empty",
-                    "容器配置",
-                    vec![muted("请先在侧边栏选择一个容器。").into_any_element()],
+                    strings.bottle.configure_bottle,
+                    vec![muted(strings.bottle.select_bottle_first).into_any_element()],
                     cx,
                 )],
             );
@@ -388,7 +393,7 @@ impl WhiskyApp {
                 let has_coreml = page.capabilities.iter().any(|cap| cap == "gdi.coreml");
                 rows.push(self.config_row(&container, field, &value, enabled, has_coreml, window, cx));
             }
-            sections.push(self.section(group.spec.id, group.spec.title, rows, cx));
+            sections.push(self.section(group.spec.id, group.spec.display_title(), rows, cx));
         }
         if let Some(engine) = self.engine_section(&container, cx) {
             sections.insert(0, engine);
@@ -398,17 +403,18 @@ impl WhiskyApp {
     }
 
     fn config_loading(&self, cx: &Context<Self>) -> AnyElement {
+        let strings = crate::i18n::s();
         self.form(
             "bottle-config-scroll",
             vec![self.section(
                 "config-loading",
-                "容器配置",
+                strings.bottle.configure_bottle,
                 vec![
                     row()
                         .gap(px(8.))
                         .py(px(10.))
                         .child(Spinner::new().with_size(px(14.)))
-                        .child(muted("正在读取配置…"))
+                        .child(muted(strings.bottle.reading_config))
                         .into_any_element(),
                 ],
                 cx,
@@ -417,18 +423,19 @@ impl WhiskyApp {
     }
 
     fn config_error(&self, reason: &str, cx: &Context<Self>) -> AnyElement {
+        let strings = crate::i18n::s();
         self.form(
             "bottle-config-scroll",
             vec![self.section(
                 "config-error",
-                "容器配置",
+                strings.bottle.configure_bottle,
                 vec![
                     muted(reason.to_owned()).into_any_element(),
                     row()
                         .py(px(8.))
                         .child(
                             Button::new("config-retry")
-                                .label("重试")
+                                .label(strings.common.retry)
                                 .on_click(cx.listener(|this, _, _, cx| this.reload_config(cx))),
                         )
                         .into_any_element(),
@@ -450,9 +457,11 @@ impl WhiskyApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        let strings = crate::i18n::s();
+        let b = &strings.bottle;
         // Selected-engine policy: unavailable options stay visibly disabled
         // with the bridge's reason; `unverified` ones show an explicit
-        // "确认后尝试启用" action — the control itself stays off until the
+        // confirm action — the control itself stays off until the
         // approval lands (`engine_gate_check` queues the write behind it).
         let policy = self.engine_field_policy(container, &field.id).cloned();
         let gated = policy.as_ref().is_some_and(|policy| policy.disabled);
@@ -468,7 +477,7 @@ impl WhiskyApp {
             policy
                 .as_ref()
                 .and_then(|policy| policy.reason.clone())
-                .unwrap_or_else(|| "所选引擎不支持此选项".to_owned())
+                .unwrap_or_else(|| b.unsupported_by_engine.to_owned())
         });
         match &field.kind {
             config::FieldKind::Toggle => {
@@ -488,24 +497,22 @@ impl WhiskyApp {
                             .flex_1()
                             .min_w_0()
                             .gap(px(4.))
-                            .child(field.title.clone())
+                            .child(field.display_title().to_owned())
                             .when(field.id == "metalFXSpatial", |d| {
-                                d.child(muted(
-                                    "GDI / WineD3D OpenGL · Retina 超分；重启游戏后生效。",
-                                ))
+                                d.child(muted(b.metalfx_spatial_desc))
                             })
                             .when(field.id == "metalFX", |d| {
-                                d.child(muted("仅 D3DMetal 后端；仅对游戏内开启 DLSS 的标题生效。"))
+                                d.child(muted(b.metalfx_bridge_desc))
                             })
                             .when(!enabled && gate_reason.is_none(), |d| {
-                                d.child(muted("需要 Wine 主机适配器").line_height(relative(1.4)))
+                                d.child(muted(b.needs_wine_host).line_height(relative(1.4)))
                             })
                             .when_some(gate_reason.clone(), |d, reason| {
                                 d.child(muted(reason).line_height(relative(1.4))).when(
                                     confirmable,
                                     |d| {
                                         d.child(
-                                            muted("启用将需要确认，且引擎更换后需重新确认。")
+                                            muted(b.confirm_required_note)
                                                 .line_height(relative(1.4)),
                                         )
                                     },
@@ -515,7 +522,7 @@ impl WhiskyApp {
                             // as an inactive preference, not a live setting.
                             .when(gated && checked_now, |d| {
                                 d.child(
-                                    muted("已保存的偏好在当前引擎下未生效。")
+                                    muted(b.saved_pref_inactive)
                                         .line_height(relative(1.4)),
                                 )
                             }),
@@ -543,7 +550,7 @@ impl WhiskyApp {
                                 let field_id = field.id.clone();
                                 d.child(
                                     Button::new(format!("config-confirm:{}", field.id))
-                                        .label("确认后尝试启用")
+                                        .label(b.confirm_and_try_enable)
                                         .on_click(cx.listener(move |this, _, _, cx| {
                                             this.request_feature_confirm(
                                                 &container,
@@ -593,56 +600,55 @@ impl WhiskyApp {
                 let selected_gated = policy_for(selected.as_str())
                     .is_some_and(|policy| policy.disabled);
                 if selected_gated {
-                    title = format!("{title}（未生效）");
+                    title = crate::i18n::fmt::value_inactive(&title);
                 }
                 let disabled_reasons: Vec<String> = options
                     .iter()
                     .filter_map(|option| {
                         let policy = policy_for(&option.id)?;
                         policy.disabled.then(|| {
-                            format!(
-                                "{}：{}",
-                                option.title,
+                            crate::i18n::fmt::engine_unsupported_reason(
+                                option.display_title(&field.id),
                                 policy
                                     .reason
-                                    .clone()
-                                    .unwrap_or_else(|| "所选引擎不支持".to_owned())
+                                    .as_deref()
+                                    .unwrap_or(b.unsupported_by_engine),
                             )
                         })
                     })
                     .collect();
                 let options: Vec<(String, String)> = options
                     .iter()
-                    .map(|option| (option.id.clone(), option.title.clone()))
+                    .map(|option| (option.id.clone(), option.display_title(&field.id).to_owned()))
                     .collect();
                 let view = cx.entity().downgrade();
                 row()
                     .py(px(10.))
                     .gap(px(16.))
                     .child(
-                        col().flex_1().min_w_0().gap(px(4.)).child(field.title.clone())
+                        col().flex_1().min_w_0().gap(px(4.)).child(field.display_title().to_owned())
                             .when(field.id == "asfTimestampBase", |d| {
-                                d.child(muted("Fixes video playback sync/stutter for ASF/WMV opening movies."))
+                                d.child(muted(b.asf_timestamp_desc))
                             })
                             .when(field.id == "gdiUpscaler", |d| {
-                                d.child(muted("GDI / WineD3D OpenGL · Retina 超分；重启游戏后生效。"))
+                                d.child(muted(b.gdi_upscaler_desc))
                                     .when(value.as_str() == Some("adaptive"), |d| {
-                                        d.child(muted("局部变化即时显示；静止约 200 毫秒后异步补充细节。"))
+                                        d.child(muted(b.gdi_adaptive_desc))
                                     })
                                     .when(value.as_str() == Some("realcugan"), |d| {
-                                        d.child(muted("保留静态细节；文字与光标变化即时显示。"))
+                                        d.child(muted(b.gdi_realcugan_desc))
                                     })
                                     .when(value.as_str() == Some("adaptive-realesrgan"), |d| {
-                                        d.child(muted("局部变化即时显示；静止约 200 毫秒后异步补充 AnimeVideo-v3 细节。"))
+                                        d.child(muted(b.gdi_adaptive_realesrgan_desc))
                                     })
                                     .when(value.as_str() == Some("adaptive-anime4k"), |d| {
-                                        d.child(muted("局部变化由 Anime4K 即时超分；静止约 200 毫秒后异步补充 Real-CUGAN 细节。"))
+                                        d.child(muted(b.gdi_adaptive_anime4k_desc))
                                     })
                                     .when(value.as_str() == Some("adaptive-anime4k-realesrgan"), |d| {
-                                        d.child(muted("局部变化由 Anime4K 即时超分；静止约 200 毫秒后异步补充 AnimeVideo-v3 细节。"))
+                                        d.child(muted(b.gdi_adaptive_anime4k_realesrgan_desc))
                                     })
                                     .when(value.as_str() == Some("realesrgan"), |d| {
-                                        d.child(muted("以 AnimeVideo-v3 保留静态细节；文字与光标变化即时显示。"))
+                                        d.child(muted(b.gdi_realesrgan_desc))
                                     })
                                     .when(
                                         !has_coreml
@@ -656,19 +662,19 @@ impl WhiskyApp {
                                                     | Some("adaptive-anime4k-realesrgan")
                                             ),
                                         |d| {
-                                            d.child(muted("当前运行时缺少 Core ML 模型：神经网络超分只能在 CPU 上运行（每帧数秒），画面需静止较长时间才会切换。"))
+                                            d.child(muted(b.gdi_no_coreml_warn))
                                         },
                                     )
                             })
                             .when(field.id == "gdiUpscalerCache", |d| {
-                                d.child(muted("会话内容缓存：跨场景与分辨率变化复用推理结果，重启游戏生效。"))
-                                    .child(muted("持久化默认每个游戏 256 MiB 内存 + 4 GiB 磁盘，LRU 淘汰。"))
-                                    .child(muted("仅作用于 CoreML 神经后端（Real-CUGAN／AnimeVideo-v3），MetalFX／Anime4K 不受影响。"))
+                                d.child(muted(b.gdi_cache_desc1))
+                                    .child(muted(b.gdi_cache_desc2))
+                                    .child(muted(b.gdi_cache_desc3))
                             })
                             .when_some(gate_reason.clone(), |d, reason| {
                                 d.child(muted(reason).line_height(relative(1.4)))
                                     .when(confirmable, |d| {
-                                        d.child(muted("启用将需要确认，且引擎更换后需重新确认。").line_height(relative(1.4)))
+                                        d.child(muted(b.confirm_required_note).line_height(relative(1.4)))
                                     })
                             })
                             .children(
@@ -702,7 +708,7 @@ impl WhiskyApp {
                                                 && policy.state == "unverified"
                                         });
                                     let option_title = if choice_confirmable {
-                                        format!("{option_title}（需确认）")
+                                        crate::i18n::fmt::value_requires_confirm(option_title)
                                     } else {
                                         option_title.clone()
                                     };
@@ -741,15 +747,15 @@ impl WhiskyApp {
                     .child(
                         row()
                             .gap(px(8.))
-                            .child(div().flex_1().child(field.title.clone()))
+                            .child(div().flex_1().child(field.display_title().to_owned()))
                             .when_some(hint, |d, hint| d.child(muted(hint))),
                     )
                     // Clearing a gated saved value (empty write) always
                     // passes the engine gate — keep the field editable.
                     .child(Input::new(&input).disabled(!outer_enabled))
                     .when(field.id == "gdiUpscalerExcludedRegions", |d| {
-                        d.child(muted("原图左上角起算：x,y,宽,高；多个矩形用英文分号分隔，留空为全部超分。"))
-                            .child(muted("例如 1280×720 画面的底部文字区：0,520,1280,200。区域内普通缩放；重启游戏生效。"))
+                        d.child(muted(b.gdi_excluded_desc1))
+                            .child(muted(b.gdi_excluded_desc2))
                     })
                     .into_any_element()
             }
@@ -769,8 +775,8 @@ impl WhiskyApp {
             return input.clone();
         }
         let placeholder = match field.kind {
-            config::FieldKind::Number { .. } => "整数".to_owned(),
-            _ => field.title.clone(),
+            config::FieldKind::Number { .. } => crate::i18n::s().bottle.integer_placeholder.to_owned(),
+            _ => field.display_title().to_owned(),
         };
         let entity = cx.new(|cx| {
             InputState::new(window, cx)
@@ -796,15 +802,16 @@ impl WhiskyApp {
         for field in std::mem::take(&mut self.preview.config_resets) {
             self.preview.config_inputs.remove(&field);
         }
+        let strings = crate::i18n::s();
         if let Some((key, value)) = self.env_fill.take() {
             let key_input = cx.new(|cx| {
                 InputState::new(window, cx)
-                    .placeholder("变量名")
+                    .placeholder(strings.bottle.env_key_placeholder)
                     .default_value(key)
             });
             let value_input = cx.new(|cx| {
                 InputState::new(window, cx)
-                    .placeholder("变量值")
+                    .placeholder(strings.bottle.env_value_placeholder)
                     .default_value(value)
             });
             self.preview.inputs.insert("env-key", key_input);
@@ -815,10 +822,11 @@ impl WhiskyApp {
     /// Container environment. The rows and the add form reuse the run-settings
     /// sheet's layout; each save is one `environment.set` call.
     fn environment_section(&self, container: &str, cx: &Context<Self>) -> AnyElement {
+        let strings = crate::i18n::s();
         let values = self.environments.get(container).cloned().unwrap_or_default();
         let mut rows: Vec<AnyElement> = Vec::new();
         if values.is_empty() {
-            rows.push(muted("暂无环境变量").into_any_element());
+            rows.push(muted(strings.bottle.env_empty).into_any_element());
         }
         for (key, value) in config::environment_rows(&values) {
             let edit_key = key.to_owned();
@@ -832,7 +840,7 @@ impl WhiskyApp {
                     .child(muted(value.to_owned()).flex_1().truncate())
                     .child(
                         Button::new(format!("env-edit:{key}"))
-                            .label("编辑")
+                            .label(strings.common.edit)
                             .ghost()
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.begin_environment_edit(&edit_key, &edit_value, cx);
@@ -840,7 +848,7 @@ impl WhiskyApp {
                     )
                     .child(
                         Button::new(format!("env-remove:{key}"))
-                            .label("移除")
+                            .label(strings.common.remove)
                             .ghost()
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.remove_environment(&remove_key, cx);
@@ -865,7 +873,7 @@ impl WhiskyApp {
                 )
                 .child(
                     Button::new("env-save")
-                        .label("保存变量")
+                        .label(strings.bottle.env_save)
                         .on_click(cx.listener(|this, _, _, cx| {
                             let key = this.preview.inputs["env-key"].read(cx).value().to_string();
                             let value =
@@ -878,7 +886,7 @@ impl WhiskyApp {
         if let Some(reason) = self.environment_error.get(container) {
             rows.push(muted(reason.clone()).into_any_element());
         }
-        self.section("environment", "环境变量", rows, cx)
+        self.section("environment", strings.bottle.env_section, rows, cx)
     }
 
     fn demo_bottle_config(&self, cx: &Context<Self>) -> AnyElement {
@@ -892,113 +900,113 @@ impl WhiskyApp {
                     vec![
                         self.choice(
                             "windows",
-                            "Windows 版本",
+                            crate::i18n::config::field_title("config.field.windowsVersion", "windowsVersion", "Windows"),
                             &["Windows 11", "Windows 10", "Windows 7", "Windows XP"],
                             cx,
                         ),
-                        self.field("build", "内部版本号"),
-                        self.choice("retina", "Retina 模式", &["关闭", "开启"], cx),
-                        self.choice("sync", "增强同步", &["MSync", "ESync", "关闭"], cx),
-                        self.field("dpi", "屏幕分辨率（DPI）"),
+                        self.field("build", crate::i18n::tr("内部版本号", "ビルド番号", "Build Version", "빌드 버전")),
+                        self.choice("retina", crate::i18n::tr("Retina 模式", "Retina モード", "Retina Mode", "Retina 모드"), &[crate::i18n::s().common.off, crate::i18n::s().common.on], cx),
+                        self.choice("sync", crate::i18n::config::field_title("config.field.enhancedSync", "enhancedSync", "Sync"), &["MSync", "ESync", crate::i18n::s().common.off], cx),
+                        self.field("dpi", crate::i18n::tr("屏幕分辨率（DPI）", "画面解像度 (DPI)", "Screen Resolution (DPI)", "화면 해상도 (DPI)")),
                     ],
                     #[cfg(target_os = "linux")]
                     vec![
                         self.choice(
                             "windows",
-                            "Windows 版本",
+                            crate::i18n::config::field_title("config.field.windowsVersion", "windowsVersion", "Windows"),
                             &["Windows 11", "Windows 10", "Windows 7", "Windows XP"],
                             cx,
                         ),
-                        self.field("build", "内部版本号"),
-                        self.choice("sync", "增强同步", &["FSync", "ESync", "关闭"], cx),
-                        self.field("dpi", "屏幕分辨率（DPI）"),
+                        self.field("build", crate::i18n::tr("内部版本号", "ビルド番号", "Build Version", "빌드 버전")),
+                        self.choice("sync", crate::i18n::config::field_title("config.field.enhancedSync", "enhancedSync", "Sync"), &["FSync", "ESync", crate::i18n::s().common.off], cx),
+                        self.field("dpi", crate::i18n::tr("屏幕分辨率（DPI）", "画面解像度 (DPI)", "Screen Resolution (DPI)", "화면 해상도 (DPI)")),
                     ],
                     cx,
                 ),
                 self.section(
                     "launcher",
-                    "启动器兼容性",
+                    crate::i18n::config::section_title("launcher"),
                     #[cfg(not(target_os = "linux"))]
                     vec![
                         self.toggle(
                             "launcher-mode",
-                            "启动器兼容模式",
-                            "为常见游戏启动器使用兼容设置。",
+                            crate::i18n::config::field_title("config.field.launcherCompatibilityMode", "launcherCompatibilityMode", "Launcher"),
+                            crate::i18n::tr("为常见游戏启动器使用兼容设置。", "一般的なゲームランチャー向けの互換設定を使用します。", "Use compatibility settings for common game launchers.", "일반 게임 런처에 호환 설정을 사용합니다."),
                             cx,
                         ),
-                        self.choice("launcher-type", "检测模式", &["自动", "手动"], cx),
-                        self.toggle("gpu-spoof", "GPU 伪装", "", cx),
+                        self.choice("launcher-type", crate::i18n::config::field_title("config.field.launcherMode", "launcherMode", "Mode"), &[crate::i18n::s().common.auto, crate::i18n::tr("手动", "手動", "Manual", "수동")], cx),
+                        self.toggle("gpu-spoof", crate::i18n::config::field_title("config.field.gpuSpoofing", "gpuSpoofing", "GPU"), "", cx),
                     ],
                     #[cfg(target_os = "linux")]
                     vec![
                         self.toggle(
                             "launcher-mode",
-                            "启动器兼容模式",
-                            "为常见游戏启动器使用兼容设置。",
+                            crate::i18n::config::field_title("config.field.launcherCompatibilityMode", "launcherCompatibilityMode", "Launcher"),
+                            crate::i18n::tr("为常见游戏启动器使用兼容设置。", "一般的なゲームランチャー向けの互換設定を使用します。", "Use compatibility settings for common game launchers.", "일반 게임 런처에 호환 설정을 사용합니다."),
                             cx,
                         ),
-                        self.toggle("gpu-spoof", "GPU 伪装", "", cx),
+                        self.toggle("gpu-spoof", crate::i18n::config::field_title("config.field.gpuSpoofing", "gpuSpoofing", "GPU"), "", cx),
                     ],
                     cx,
                 ),
                 self.section(
                     "input",
-                    "输入与控制器",
+                    crate::i18n::config::section_title("input"),
                     vec![
-                        self.toggle("controller", "控制器兼容性", "", cx),
-                        self.toggle("hid", "禁用 HIDAPI", "", cx),
-                        self.toggle("background-input", "允许后台输入", "", cx),
+                        self.toggle("controller", crate::i18n::config::field_title("config.field.controllerCompatibilityMode", "controllerCompatibilityMode", "Controller"), "", cx),
+                        self.toggle("hid", crate::i18n::config::field_title("config.field.disableHIDAPI", "disableHIDAPI", "HIDAPI"), "", cx),
+                        self.toggle("background-input", crate::i18n::config::field_title("config.field.allowBackgroundEvents", "allowBackgroundEvents", "Background"), "", cx),
                     ],
                     cx,
                 ),
                 self.section(
                     "graphics",
-                    "图形",
+                    crate::i18n::config::section_title("graphics"),
                     #[cfg(not(target_os = "linux"))]
                     vec![
-                        self.choice("graphics-mode", "设置模式", &["简单", "高级"], cx),
+                        self.choice("graphics-mode", crate::i18n::tr("设置模式", "設定モード", "Mode", "설정 모드"), &[crate::i18n::tr("简单", "簡易", "Simple", "간단히"), crate::i18n::tr("高级", "詳細", "Advanced", "고급")], cx),
                         self.choice(
                             "backend",
-                            "图形后端",
-                            &["推荐（自动）", "D3DMetal", "DXVK", "WineD3D"],
+                            crate::i18n::config::field_title("config.field.graphicsBackend", "graphicsBackend", "Backend"),
+                            &[crate::i18n::s().program_settings.gfx_recommended, "D3DMetal", "DXVK", "WineD3D"],
                             cx,
                         ),
-                        self.toggle("metalfx", "DLSS→MetalFX 桥（仅 D3DMetal）", "", cx),
+                        self.toggle("metalfx", crate::i18n::config::field_title("config.field.metalFX", "metalFX", "MetalFX"), "", cx),
                         self.choice(
                             "gdi-upscaler",
-                            "游戏超分算法",
+                            crate::i18n::config::field_title("config.field.gdiUpscaler", "gdiUpscaler", "Upscaler"),
                             &[
-                                "关闭",
+                                crate::i18n::s().common.off,
                                 "MetalFX Spatial",
                                 "Anime4K",
                                 "Real-CUGAN",
-                                "动态 MetalFX／静态 Real-CUGAN",
+                                crate::i18n::config::option_title("config.option.gdiUpscaler.adaptive", "adaptive", "Adaptive"),
                                 "AnimeVideo-v3",
-                                "动态 MetalFX／静态 AnimeVideo-v3",
+                                crate::i18n::config::option_title("config.option.gdiUpscaler.adaptive-realesrgan", "adaptive-realesrgan", "Adaptive"),
                             ],
                             cx,
                         ),
                         self.toggle("metal4", "Metal 4", "", cx),
-                        self.toggle("framegen", "帧生成", "", cx),
+                        self.toggle("framegen", crate::i18n::config::field_title("config.field.frameGeneration", "frameGeneration", "FrameGen"), "", cx),
                         self.action(
                             "graphics-detail",
-                            "高级图形设置…",
+                            crate::i18n::tr("高级图形设置…", "詳細グラフィックス設定…", "Advanced Graphics…", "고급 그래픽 설정…"),
                             Command::Sheet(PreviewSheet::Graphics),
                             cx,
                         ),
                     ],
                     #[cfg(target_os = "linux")]
                     vec![
-                        self.choice("graphics-mode", "设置模式", &["简单", "高级"], cx),
+                        self.choice("graphics-mode", crate::i18n::tr("设置模式", "設定モード", "Mode", "설정 모드"), &[crate::i18n::tr("简单", "簡易", "Simple", "간단히"), crate::i18n::tr("高级", "詳細", "Advanced", "고급")], cx),
                         self.choice(
                             "backend",
-                            "图形后端",
-                            &["推荐（自动）", "DXVK", "WineD3D"],
+                            crate::i18n::config::field_title("config.field.graphicsBackend", "graphicsBackend", "Backend"),
+                            &[crate::i18n::s().program_settings.gfx_recommended, "DXVK", "WineD3D"],
                             cx,
                         ),
                         self.action(
                             "graphics-detail",
-                            "高级图形设置…",
+                            crate::i18n::tr("高级图形设置…", "詳細グラフィックス設定…", "Advanced Graphics…", "고급 그래픽 설정…"),
                             Command::Sheet(PreviewSheet::Graphics),
                             cx,
                         ),
@@ -1007,38 +1015,44 @@ impl WhiskyApp {
                 ),
                 self.section(
                     "audio",
-                    "音频",
+                    crate::i18n::config::section_title("audio"),
                     #[cfg(not(target_os = "linux"))]
                     vec![
-                        self.info("默认输出设备", "系统默认输出 · 48,000 Hz · 立体声"),
-                        self.choice("audio-mode", "设置模式", &["简单", "高级"], cx),
+                        self.info(
+                            crate::i18n::tr("默认输出设备", "既定の出力デバイス", "Default Output Device", "기본 출력 장치"),
+                            crate::i18n::tr("系统默认输出 · 48,000 Hz · 立体声", "システム既定 · 48,000 Hz · ステレオ", "System Default · 48,000 Hz · Stereo", "시스템 기본값 · 48,000 Hz · 스테레오"),
+                        ),
+                        self.choice("audio-mode", crate::i18n::tr("设置模式", "設定モード", "Mode", "설정 모드"), &[crate::i18n::tr("简单", "簡易", "Simple", "간단히"), crate::i18n::tr("高级", "詳細", "Advanced", "고급")], cx),
                         self.choice(
                             "audio-driver",
-                            "音频驱动",
-                            &["自动", "CoreAudio", "禁用"],
+                            crate::i18n::config::field_title("config.field.audioDriver", "audioDriver", "Audio Driver"),
+                            &[crate::i18n::s().common.auto, "CoreAudio", crate::i18n::s().program_settings.dll_disabled],
                             cx,
                         ),
                         self.action(
                             "audio-test",
-                            "测试音频",
+                            crate::i18n::tr("测试音频", "オーディオテスト", "Test Audio", "오디오 테스트"),
                             Command::Sheet(PreviewSheet::Audio),
                             cx,
                         ),
                         self.action(
                             "audio-diagnosis",
-                            "音频故障排查…",
+                            crate::i18n::tr("音频故障排查…", "オーディオ診断…", "Audio Troubleshooting…", "오디오 문제 해결…"),
                             Command::Sheet(PreviewSheet::Audio),
                             cx,
                         ),
                     ],
                     #[cfg(target_os = "linux")]
                     vec![
-                        self.info("默认输出设备", "系统默认输出 · 48,000 Hz · 立体声"),
-                        self.choice("audio-mode", "设置模式", &["简单", "高级"], cx),
+                        self.info(
+                            crate::i18n::tr("默认输出设备", "既定の出力デバイス", "Default Output Device", "기본 출력 장치"),
+                            crate::i18n::tr("系统默认输出 · 48,000 Hz · 立体声", "システム既定 · 48,000 Hz · ステレオ", "System Default · 48,000 Hz · Stereo", "시스템 기본값 · 48,000 Hz · 스테레오"),
+                        ),
+                        self.choice("audio-mode", crate::i18n::tr("设置模式", "設定モード", "Mode", "설정 모드"), &[crate::i18n::tr("简单", "簡易", "Simple", "간단히"), crate::i18n::tr("高级", "詳細", "Advanced", "고급")], cx),
                         self.choice(
                             "audio-driver",
-                            "音频驱动",
-                            &["自动", "PulseAudio", "ALSA", "禁用"],
+                            crate::i18n::config::field_title("config.field.audioDriver", "audioDriver", "Audio Driver"),
+                            &[crate::i18n::s().common.auto, "PulseAudio", "ALSA", crate::i18n::s().program_settings.dll_disabled],
                             cx,
                         ),
                     ],
@@ -1046,40 +1060,50 @@ impl WhiskyApp {
                 ),
                 self.section(
                     "resolution",
-                    "分辨率",
+                    crate::i18n::config::section_title("display"),
                     vec![
-                        self.toggle("virtual-desktop", "虚拟桌面", "下次启动时生效。", cx),
-                        self.choice(
-                            "desktop-size",
-                            "桌面大小",
-                            &["匹配显示器", "1920 × 1080", "1280 × 720", "自定义"],
+                        self.toggle(
+                            "virtual-desktop",
+                            crate::i18n::config::field_title("config.field.virtualDesktopEnabled", "virtualDesktopEnabled", "Virtual Desktop"),
+                            crate::i18n::tr("下次启动时生效。", "次回起動時から適用されます。", "Takes effect on next launch.", "다음 실행부터 적용됩니다."),
                             cx,
                         ),
-                        self.field("desktop-width", "宽度"),
-                        self.field("desktop-height", "高度"),
+                        self.choice(
+                            "desktop-size",
+                            crate::i18n::config::field_title("config.field.resolutionPreset", "resolutionPreset", "Resolution"),
+                            &[
+                                crate::i18n::config::option_title("config.option.resolutionPreset.matchDisplay", "matchDisplay", "Match Display"),
+                                "1920 × 1080",
+                                "1280 × 720",
+                                crate::i18n::s().common.custom,
+                            ],
+                            cx,
+                        ),
+                        self.field("desktop-width", crate::i18n::config::field_title("config.field.customResolutionWidth", "customResolutionWidth", "Width")),
+                        self.field("desktop-height", crate::i18n::config::field_title("config.field.customResolutionHeight", "customResolutionHeight", "Height")),
                     ],
                     cx,
                 ),
                 self.section(
                     "performance",
-                    "性能",
+                    crate::i18n::config::section_title("performance"),
                     #[cfg(not(target_os = "linux"))]
                     vec![
                         self.toggle(
                             "shader",
-                            "着色器缓存",
-                            "缓存编译后的着色器，减少重复编译。",
+                            crate::i18n::config::field_title("config.field.shaderCacheEnabled", "shaderCacheEnabled", "Shader Cache"),
+                            crate::i18n::tr("缓存编译后的着色器，减少重复编译。", "コンパイル済みシェーダーをキャッシュして再コンパイルを減らします。", "Cache compiled shaders to reduce recompilation.", "컴파일된 셰이더를 캐시하여 재컴파일을 줄입니다."),
                             cx,
                         ),
                         self.toggle(
                             "appnap",
-                            "禁用 App Nap",
-                            "游戏运行期间防止应用被系统暂停。",
+                            crate::i18n::config::field_title("config.field.disableAppNap", "disableAppNap", "Disable App Nap"),
+                            crate::i18n::tr("游戏运行期间防止应用被系统暂停。", "ゲーム実行中にシステムによるアプリの一時停止を防ぎます。", "Prevent macOS from throttling while a game is running.", "게임 실행 중 시스템이 앱을 일시 중단하지 않도록 방지합니다."),
                             cx,
                         ),
                         self.action(
                             "vcredist",
-                            "安装 Visual C++ 运行库…",
+                            crate::i18n::tr("安装 Visual C++ 运行库…", "Visual C++ ランタイムを導入…", "Install Visual C++ Runtime…", "Visual C++ 런타임 설치…"),
                             Command::Sheet(PreviewSheet::Winetricks),
                             cx,
                         ),
@@ -1088,13 +1112,13 @@ impl WhiskyApp {
                     vec![
                         self.toggle(
                             "shader",
-                            "着色器缓存",
-                            "缓存编译后的着色器，减少重复编译。",
+                            crate::i18n::config::field_title("config.field.shaderCacheEnabled", "shaderCacheEnabled", "Shader Cache"),
+                            crate::i18n::tr("缓存编译后的着色器，减少重复编译。", "コンパイル済みシェーダーをキャッシュして再コンパイルを減らします。", "Cache compiled shaders to reduce recompilation.", "컴파일된 셰이더를 캐시하여 재컴파일을 줄입니다."),
                             cx,
                         ),
                         self.action(
                             "vcredist",
-                            "安装 Visual C++ 运行库…",
+                            crate::i18n::tr("安装 Visual C++ 运行库…", "Visual C++ ランタイムを導入…", "Install Visual C++ Runtime…", "Visual C++ 런타임 설치…"),
                             Command::Sheet(PreviewSheet::Winetricks),
                             cx,
                         ),
@@ -1103,12 +1127,12 @@ impl WhiskyApp {
                 ),
                 self.section(
                     "dll",
-                    "DLL 覆盖",
+                    crate::i18n::s().dialogs.sheet_dll,
                     vec![
-                        self.info("d3dcompiler_47", "原生优先，内建后备"),
+                        self.info("d3dcompiler_47", crate::i18n::tr("原生优先，内建后备", "ネイティブ優先、ビルトイン代替", "Native then Builtin", "네이티브 우선, 내장 대체")),
                         self.action(
                             "dll-edit",
-                            "编辑 DLL 覆盖…",
+                            crate::i18n::tr("编辑 DLL 覆盖…", "DLL オーバーライドを編集…", "Edit DLL Overrides…", "DLL 재정의 편집…"),
                             Command::Sheet(PreviewSheet::Dll),
                             cx,
                         ),
@@ -1117,12 +1141,12 @@ impl WhiskyApp {
                 ),
                 self.section(
                     "dependencies",
-                    "依赖组件",
+                    crate::i18n::tr("依赖组件", "依存コンポーネント", "Dependencies", "종속 구성 요소"),
                     vec![
-                        self.info("Visual C++ 2015–2022", "已安装"),
+                        self.info("Visual C++ 2015–2022", crate::i18n::s().common.installed),
                         self.action(
                             "deps",
-                            "管理组件…",
+                            crate::i18n::tr("管理组件…", "コンポーネントを管理…", "Manage Components…", "구성 요소 관리…"),
                             Command::Sheet(PreviewSheet::Winetricks),
                             cx,
                         ),
@@ -1131,39 +1155,39 @@ impl WhiskyApp {
                 ),
                 self.section(
                     "diagnostics",
-                    "诊断",
+                    crate::i18n::tr("诊断", "診断", "Diagnostics", "진단"),
                     #[cfg(not(target_os = "linux"))]
                     vec![
                         self.action(
                             "guided",
-                            "开始引导式故障排查…",
+                            crate::i18n::tr("开始引导式故障排查…", "ガイド付き診断を開始…", "Start Guided Troubleshooting…", "안내형 문제 해결 시작…"),
                             Command::Sheet(PreviewSheet::Diagnostics),
                             cx,
                         ),
-                        self.action("export", "导出诊断报告…", Command::ExportDiagnostics, cx),
-                        self.action("repair", "修复容器…", Command::BottleRepair, cx),
+                        self.action("export", crate::i18n::tr("导出诊断报告…", "診断レポートをエクスポート…", "Export Diagnostics…", "진단 보고서 내보내기…"), Command::ExportDiagnostics, cx),
+                        self.action("repair", crate::i18n::tr("修复容器…", "コンテナを修復…", "Repair Bottle…", "컨테이너 복구…"), Command::BottleRepair, cx),
                     ],
                     #[cfg(target_os = "linux")]
                     vec![
-                        self.action("export", "导出诊断报告…", Command::ExportDiagnostics, cx),
+                        self.action("export", crate::i18n::tr("导出诊断报告…", "診断レポートをエクスポート…", "Export Diagnostics…", "진단 보고서 내보내기…"), Command::ExportDiagnostics, cx),
                     ],
                     cx,
                 ),
                 self.section(
                     "cleanup",
-                    "存储与清理",
+                    crate::i18n::tr("存储与清理", "ストレージと整理", "Storage & Cleanup", "저장 공간 및 정리"),
                     #[cfg(not(target_os = "linux"))]
                     vec![
-                        self.info("容器大小", "2.4 GB"),
+                        self.info(crate::i18n::tr("容器大小", "コンテナサイズ", "Bottle Size", "컨테이너 크기"), "2.4 GB"),
                         self.action(
                             "cache-clean",
-                            "清理着色器缓存…",
+                            crate::i18n::tr("清理着色器缓存…", "シェーダーキャッシュを削除…", "Clean Shader Cache…", "셰이더 캐시 지우기…"),
                             Command::CleanShaderCache,
                             cx,
                         ),
                     ],
                     #[cfg(target_os = "linux")]
-                    vec![self.info("容器大小", "2.4 GB")],
+                    vec![self.info(crate::i18n::tr("容器大小", "コンテナサイズ", "Bottle Size", "컨테이너 크기"), "2.4 GB")],
                     cx,
                 ),
             ],
@@ -1180,8 +1204,8 @@ impl WhiskyApp {
                 "programs-scroll",
                 vec![self.section(
                     "program-list",
-                    "程序",
-                    vec![muted("请先在侧边栏选择一个容器。").into_any_element()],
+                    crate::i18n::s().bottle.programs_title,
+                    vec![muted(crate::i18n::s().bottle.select_bottle_first).into_any_element()],
                     cx,
                 )],
             );
@@ -1191,24 +1215,24 @@ impl WhiskyApp {
             .as_ref()
             .filter(|page| page.container == container);
         let Some(page) = page else {
-            return self.programs_status("正在读取程序…", cx);
+            return self.programs_status(crate::i18n::s().bottle.reading_programs, cx);
         };
         if page.loading {
-            return self.programs_status("正在读取程序…", cx);
+            return self.programs_status(crate::i18n::s().bottle.reading_programs, cx);
         }
         if let Some(reason) = &page.error {
             return self.form(
                 "programs-scroll",
                 vec![self.section(
                     "program-list",
-                    "程序",
+                    crate::i18n::s().bottle.programs_title,
                     vec![
                         muted(reason.clone()).into_any_element(),
                         row()
                             .py(px(8.))
                             .child(
                                 Button::new("programs-retry")
-                                    .label("重试")
+                                    .label(crate::i18n::s().common.retry)
                                     .on_click(cx.listener(|this, _, _, cx| this.reload_programs(cx))),
                             )
                             .into_any_element(),
@@ -1220,10 +1244,15 @@ impl WhiskyApp {
         let mut rows: Vec<AnyElement> = vec![row()
             .justify_end()
             .py(px(8.))
-            .child(self.action("add-program", "添加程序…", Command::AddProgram, cx))
+            .child(self.action(
+                "add-program",
+                crate::i18n::s().library.add_program_btn,
+                Command::AddProgram,
+                cx,
+            ))
             .into_any_element()];
         if page.table.is_empty() {
-            rows.push(muted(crate::programs::EMPTY_PROGRAMS).into_any_element());
+            rows.push(muted(crate::programs::empty_programs()).into_any_element());
         }
         for program in page.table.ordered() {
             let path = program.path.clone();
@@ -1270,7 +1299,7 @@ impl WhiskyApp {
                                                 .bg(rgba(theme::accent_subtle_bg()))
                                                 .text_size(px(10.))
                                                 .text_color(rgb(theme::accent_fg()))
-                                                .child("已固定"),
+                                                .child(crate::i18n::s().bottle.pinned_badge),
                                         )
                                     })
                                     .when(blocked, |d| {
@@ -1282,7 +1311,7 @@ impl WhiskyApp {
                                                 .bg(rgba(theme::badge_bg()))
                                                 .text_size(px(10.))
                                                 .text_color(rgb(theme::muted_color()))
-                                                .child("已屏蔽"),
+                                                .child(crate::i18n::s().bottle.blocked_badge),
                                         )
                                     }),
                             )
@@ -1290,7 +1319,11 @@ impl WhiskyApp {
                     )
                     .child(
                         Button::new(format!("program-pin:{path}"))
-                            .label(if pinned { "取消固定" } else { "固定" })
+                            .label(if pinned {
+                                crate::i18n::s().bottle.unpin
+                            } else {
+                                crate::i18n::s().bottle.pin
+                            })
                             .ghost()
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.toggle_program_pin(&pin_path, cx);
@@ -1298,7 +1331,11 @@ impl WhiskyApp {
                     )
                     .child(
                         Button::new(format!("program-block:{path}"))
-                            .label(if blocked { "取消屏蔽" } else { "屏蔽" })
+                            .label(if blocked {
+                                crate::i18n::s().bottle.unblock
+                            } else {
+                                crate::i18n::s().bottle.block
+                            })
                             .ghost()
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.toggle_program_block(&block_path, cx);
@@ -1307,7 +1344,7 @@ impl WhiskyApp {
                     .when(launchable, |d| {
                         d.child(
                             Button::new(format!("program-play:{path}"))
-                                .label("运行")
+                                .label(crate::i18n::s().common.run)
                                 .ghost()
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     this.play_program(&play_path, cx);
@@ -1319,7 +1356,7 @@ impl WhiskyApp {
         }
         self.form(
             "programs-scroll",
-            vec![self.section("program-list", "程序", rows, cx)],
+            vec![self.section("program-list", crate::i18n::s().bottle.programs_title, rows, cx)],
         )
     }
 
@@ -1328,7 +1365,7 @@ impl WhiskyApp {
             "programs-scroll",
             vec![self.section(
                 "program-list",
-                "程序",
+                crate::i18n::s().bottle.programs_title,
                 vec![
                     row()
                         .gap(px(8.))
@@ -1391,7 +1428,7 @@ impl WhiskyApp {
             .collect();
         self.form(
             "programs-scroll",
-            vec![self.section("program-list", "程序", rows, cx)],
+            vec![self.section("program-list", crate::i18n::s().bottle.programs_title, rows, cx)],
         )
     }
     /// Running processes. The demo keeps its static design snapshot; a live
@@ -1407,8 +1444,8 @@ impl WhiskyApp {
                 "processes-scroll",
                 vec![self.section(
                     "process-list",
-                    "运行中的进程",
-                    vec![muted("请先在侧边栏选择一个容器。").into_any_element()],
+                    crate::i18n::s().bottle.running_processes,
+                    vec![muted(crate::i18n::s().bottle.select_bottle_first).into_any_element()],
                     cx,
                 )],
             );
@@ -1424,8 +1461,8 @@ impl WhiskyApp {
                 .py(px(8.))
                 .border_b_1()
                 .border_color(rgba(theme::divider()))
-                .child(muted("进程名称").flex_1().font_weight(FontWeight::SEMIBOLD).text_size(px(11.)))
-                .child(muted("PID / 内存").text_size(px(11.)).font_weight(FontWeight::SEMIBOLD))
+                .child(muted(crate::i18n::s().bottle.process_name).flex_1().font_weight(FontWeight::SEMIBOLD).text_size(px(11.)))
+                .child(muted(crate::i18n::s().bottle.pid_memory).text_size(px(11.)).font_weight(FontWeight::SEMIBOLD))
                 .into_any_element(),
         ];
         match page {
@@ -1437,7 +1474,7 @@ impl WhiskyApp {
                     if page.loading {
                         rows.push(self.process_status_row());
                     } else {
-                        rows.push(muted("当前容器没有运行中的 Wine 进程。").py(px(14.)).into_any_element());
+                        rows.push(muted(crate::i18n::s().bottle.no_running_processes).py(px(14.)).into_any_element());
                     }
                 }
                 for process in page.table.rows() {
@@ -1456,7 +1493,7 @@ impl WhiskyApp {
                             .child(muted(value).font_family("monospace").text_size(px(11.)))
                             .child(
                                 Button::new(format!("process-kill:{pid}"))
-                                    .label("结束")
+                                    .label(crate::i18n::s().bottle.kill_process)
                                     .ghost()
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         this.kill_process(pid, cx);
@@ -1475,12 +1512,12 @@ impl WhiskyApp {
                 .pb(px(4.))
                 .child(
                     Button::new("refresh-processes")
-                        .label("刷新")
+                        .label(crate::i18n::s().common.refresh)
                         .on_click(cx.listener(|this, _, _, cx| this.refresh_processes(cx))),
                 )
                 .child(
                     Button::new("stop-processes")
-                        .label("停止所有进程")
+                        .label(crate::i18n::s().bottle.stop_all_processes)
                         .danger()
                         .disabled(!has_processes)
                         .on_click(cx.listener(|this, _, _, cx| {
@@ -1491,7 +1528,7 @@ impl WhiskyApp {
         );
         self.form(
             "processes-scroll",
-            vec![self.section("process-list", "运行中的进程", rows, cx)],
+            vec![self.section("process-list", crate::i18n::s().bottle.running_processes, rows, cx)],
         )
     }
 
@@ -1500,7 +1537,7 @@ impl WhiskyApp {
             .gap(px(8.))
             .py(px(10.))
             .child(Spinner::new().with_size(px(14.)))
-            .child(muted("正在读取进程…"))
+            .child(muted(crate::i18n::s().bottle.reading_processes))
             .into_any_element()
     }
 
@@ -1509,26 +1546,31 @@ impl WhiskyApp {
             "processes-scroll",
             vec![self.section(
                 "process-list",
-                "运行中的进程",
+                crate::i18n::s().bottle.running_processes,
                 vec![
                     row()
                         .gap(px(18.))
                         .py(px(8.))
                         .border_b_1()
                         .border_color(rgba(theme::divider()))
-                        .child(muted("进程名称").flex_1().font_weight(FontWeight::SEMIBOLD).text_size(px(11.)))
-                        .child(muted("PID / 内存").text_size(px(11.)).font_weight(FontWeight::SEMIBOLD))
+                        .child(muted(crate::i18n::s().bottle.process_name).flex_1().font_weight(FontWeight::SEMIBOLD).text_size(px(11.)))
+                        .child(muted(crate::i18n::s().bottle.pid_memory).text_size(px(11.)).font_weight(FontWeight::SEMIBOLD))
                         .into_any_element(),
-                    muted("当前容器没有运行中的 Wine 进程。").py(px(14.)).into_any_element(),
+                    muted(crate::i18n::s().bottle.no_running_processes).py(px(14.)).into_any_element(),
                     row()
                         .justify_end()
                         .gap(px(8.))
                         .pt(px(10.))
                         .pb(px(4.))
-                        .child(self.action("refresh-processes", "刷新", Command::RefreshProcesses, cx))
+                        .child(self.action(
+                            "refresh-processes",
+                            crate::i18n::s().common.refresh,
+                            Command::RefreshProcesses,
+                            cx,
+                        ))
                         .child(
                             Button::new("stop-processes")
-                                .label("停止所有进程")
+                                .label(crate::i18n::s().bottle.stop_all_processes)
                                 .danger()
                                 .disabled(true)
                                 .on_click(cx.listener(|this, _, _, cx| {
@@ -1549,13 +1591,11 @@ impl WhiskyApp {
             .enumerate()
             .filter(|(_, game)| slot == 0 || game.bottle == slot)
             .collect();
-        let mut rows: Vec<AnyElement> = vec![muted(
-            "本地 GameDB 会按可执行文件名与 Steam App ID 匹配社区验证的配置；打开游戏资料页可预览并应用推荐设置。",
-        )
+        let mut rows: Vec<AnyElement> = vec![muted(crate::i18n::s().bottle.gamedb_desc)
         .text_size(px(11.))
         .into_any_element()];
         if games.is_empty() {
-            rows.push(muted("当前容器还没有可匹配的游戏。").into_any_element());
+            rows.push(muted(crate::i18n::s().bottle.gamedb_empty).into_any_element());
         }
         for (index, game) in games {
             rows.push(
@@ -1585,7 +1625,7 @@ impl WhiskyApp {
                     )
                     .child(
                         Button::new(("game-info", index))
-                            .label("资料与配置…")
+                            .label(crate::i18n::s().bottle.info_and_config_ellipsis)
                             .ghost()
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.command(Command::GameInfo(index), cx);
@@ -1600,7 +1640,7 @@ impl WhiskyApp {
                 .py(px(8.))
                 .child(self.action(
                     "sync-metadata",
-                    "扫描并同步游戏信息",
+                    crate::i18n::s().library.sync_metadata,
                     Command::SyncMetadata,
                     cx,
                 ))
@@ -1608,7 +1648,7 @@ impl WhiskyApp {
         );
         self.form(
             "game-configs-scroll",
-            vec![self.section("game-rules", "游戏配置", rows, cx)],
+            vec![self.section("game-rules", crate::i18n::s().bottle.game_configs, rows, cx)],
         )
     }
 }
@@ -1637,11 +1677,11 @@ impl WhiskyApp {
         let engines = self.wine_engines.clone();
 
         let mut rows = vec![self.info(
-            "当前引擎",
+            crate::i18n::s().bottle.current_engine,
             if engine.is_some_and(|engine| engine.available) || engine.is_none() {
                 title.clone()
             } else {
-                format!("{title} · 不可用")
+                crate::i18n::fmt::engine_unavailable_item(&title)
             },
         )];
         if let Some(reason) = unavailable_reason {
@@ -1652,12 +1692,12 @@ impl WhiskyApp {
                 .py(px(6.))
                 .child(
                     Button::new("engine-select")
-                        .label("更换引擎  ⌄")
+                        .label(crate::i18n::s().bottle.change_engine)
                         .disabled(!has_engines)
                         .dropdown_menu(move |mut menu, _, _| {
                             if engines.is_empty() {
                                 menu = menu.item(
-                                    PopupMenuItem::new("（仅受管运行时）").disabled(true),
+                                    PopupMenuItem::new(crate::i18n::s().bottle.managed_only_item).disabled(true),
                                 );
                             }
                             for engine in &engines {
@@ -1667,7 +1707,7 @@ impl WhiskyApp {
                                 let label = if engine.available {
                                     engine.name.clone()
                                 } else {
-                                    format!("{} · 不可用", engine.name)
+                                    crate::i18n::fmt::engine_unavailable_item(&engine.name)
                                 };
                                 menu = menu.item(
                                     PopupMenuItem::new(label)
@@ -1689,12 +1729,12 @@ impl WhiskyApp {
         );
         rows.push(
             #[cfg(not(target_os = "linux"))]
-            muted("引擎更换不会迁移容器前缀；请先停止容器内所有进程。外部引擎只读使用，更新与 GPTK 部署仅作用于受管运行时。")
+            muted(crate::i18n::s().bottle.engine_note_mac)
                 .text_size(px(11.))
                 .line_height(relative(1.4))
                 .into_any_element(),
             #[cfg(target_os = "linux")]
-            muted("引擎更换不会迁移容器前缀；请先停止容器内所有进程。外部引擎只读使用，运行时更新仅作用于受管运行时。")
+            muted(crate::i18n::s().bottle.engine_note_linux)
                 .text_size(px(11.))
                 .line_height(relative(1.4))
                 .into_any_element(),
@@ -1713,9 +1753,9 @@ impl WhiskyApp {
             if !interesting.is_empty() {
                 for feature in interesting {
                     let state_label = match feature.state.as_str() {
-                        "unverified" if feature.enabled => "已确认",
-                        "unverified" => "未验证",
-                        _ => "不可用",
+                        "unverified" if feature.enabled => crate::i18n::s().bottle.feature_confirmed,
+                        "unverified" => crate::i18n::s().bottle.feature_unverified,
+                        _ => crate::i18n::s().bottle.feature_unavailable,
                     };
                     let reason = feature.reason.clone().unwrap_or_default();
                     let mut line = col().gap(px(2.)).py(px(4.)).child(
@@ -1723,14 +1763,14 @@ impl WhiskyApp {
                             .gap(px(10.))
                             .child(div().flex_1().min_w_0().child(format!(
                                 "{} · {state_label}",
-                                engine_feature_label(&feature.id)
+                                crate::i18n::config::engine_feature_label(&feature.id)
                             )))
                             .when(feature.enabled, |d| {
                                 let container = container_features.clone();
                                 let feature_id = feature.id.clone();
                                 d.child(
                                     Button::new(format!("engine-revoke:{}", feature.id))
-                                        .label("撤销确认")
+                                        .label(crate::i18n::s().bottle.revoke_confirmation)
                                         .on_click(cx.listener(move |this, _, _, cx| {
                                             this.revoke_engine_feature(&container, &feature_id);
                                             cx.notify();
@@ -1746,26 +1786,6 @@ impl WhiskyApp {
                 }
             }
         }
-        Some(self.section("wine-engine", "Wine 引擎", rows, cx))
-    }
-}
-
-/// Display label for a `wine.engines` feature id.
-fn engine_feature_label(id: &str) -> &str {
-    match id {
-        "dxvk" => "DXVK",
-        "dxmt" => "DXMT",
-        "d3dMetal" => "D3DMetal",
-        "esync" => "ESync",
-        "msync" => "MSync",
-        "avx" => "AVX",
-        "gdiUpscaling" => "GDI 超分",
-        "gdiCoreML" => "GDI CoreML",
-        "metal" => "Metal 选项",
-        "metalFX" => "MetalFX 桥",
-        "frameGeneration" => "帧生成",
-        "shadowImportedHostMemory" => "32 位 Vulkan 内存导入",
-        "dxvkAsync" => "DXVK Async",
-        _ => id,
+        Some(self.section("wine-engine", crate::i18n::s().bottle.wine_engine_section, rows, cx))
     }
 }

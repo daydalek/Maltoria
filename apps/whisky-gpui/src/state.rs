@@ -41,7 +41,9 @@ use crate::winetricks::{InstallJob, WinetricksState};
 
 /// Toast copy for the demo-only menu actions, which still do not mutate
 /// anything. Runtime failures reuse the same toast with the helper's reason.
-pub(crate) const DEMO_NOTICE: &str = "外观演示 · 未启动游戏，也未修改容器";
+pub(crate) fn demo_notice() -> &'static str {
+    crate::i18n::s().library.demo_notice
+}
 
 /// How long preference writes are coalesced before reaching the bridge.
 const PREFERENCE_DEBOUNCE: Duration = Duration::from_millis(300);
@@ -95,13 +97,14 @@ impl SettingsSection {
     }
 
     pub(crate) fn label(self) -> &'static str {
+        let s = &crate::i18n::s().settings;
         match self {
-            Self::General => "通用",
-            Self::Library => "游戏库",
-            Self::Translation => "AI 翻译",
-            Self::Metadata => "资料来源",
-            Self::Runtime => "运行时与引擎",
-            Self::Network => "网络与更新",
+            Self::General => s.section_general,
+            Self::Library => s.section_library,
+            Self::Translation => s.section_translation,
+            Self::Metadata => s.section_metadata,
+            Self::Runtime => s.section_runtime,
+            Self::Network => s.section_network,
         }
     }
 
@@ -621,19 +624,7 @@ impl PreviewState {
     }
     pub(crate) fn new(window: &mut Window, cx: &mut Context<WhiskyApp>) -> Self {
         let mut inputs = BTreeMap::new();
-        for (key, placeholder) in [
-            ("arguments", "启动参数，例如 -windowed"),
-            ("env-key", "变量名"),
-            ("env-value", "变量值"),
-            ("scan-path", "~/Games"),
-            ("bottle-name", ""),
-            ("dll-name", "例如 d3dcompiler_47"),
-            ("build", "26100"),
-            ("dpi", "96"),
-            ("desktop-width", "1920"),
-            ("desktop-height", "1080"),
-            ("dependency-search", "搜索组件…"),
-        ] {
+        for (key, placeholder) in WhiskyApp::preview_input_specs() {
             inputs.insert(
                 key,
                 cx.new(|cx| InputState::new(window, cx).placeholder(placeholder)),
@@ -673,6 +664,7 @@ impl PreviewState {
             .into(),
             choices: [
                 ("appearance", crate::ui_state::load_appearance().wire().into()),
+                ("language", crate::ui_state::load_language().wire().into()),
                 ("create-windows", "Windows 11".into()),
                 ("terminal", preferences::DEFAULT_PREFERRED_TERMINAL.into()),
                 ("cover-fill", preferences::DEFAULT_COVER_FILL_STYLE.into()),
@@ -1003,6 +995,8 @@ pub(crate) struct WhiskyApp {
     pub(crate) detail_character: Option<String>,
     pub(crate) detail_tags_expanded: bool,
     pub(crate) appearance: crate::theme::AppearanceMode,
+    pub(crate) language: crate::i18n::LanguageMode,
+    pub(crate) rendered_locale: crate::i18n::Locale,
     /// The message on the existing toast; `None` hides it. Runtime and entry
     /// failures reuse the toast instead of introducing another surface.
     pub(crate) notice: Option<SharedString>,
@@ -1066,7 +1060,13 @@ impl WhiskyApp {
     ) -> Self {
         let focus_handle = cx.focus_handle();
         window.focus(&focus_handle, cx);
-        let search = cx.new(|cx| InputState::new(window, cx).placeholder("搜索游戏…"));
+        let language = crate::ui_state::load_language();
+        #[cfg(not(test))]
+        crate::i18n::init(language);
+        let rendered_locale = crate::i18n::locale();
+        let search = cx.new(|cx| {
+            InputState::new(window, cx).placeholder(crate::i18n::s().library.search_placeholder)
+        });
         let subscription = cx.observe(&search, |_, _, cx| cx.notify());
         let mut preview = PreviewState::new(window, cx);
         let library_ui = crate::ui_state::load_library_ui_prefs();
@@ -1294,6 +1294,8 @@ impl WhiskyApp {
             detail_character: None,
             detail_tags_expanded: false,
             appearance,
+            language,
+            rendered_locale,
             notice: None,
             runtime: RuntimeTable::default(),
             active_backends: HashMap::new(),
@@ -1427,7 +1429,7 @@ impl WhiskyApp {
                 let reason = match &status {
                     BridgeStatus::Failed { reason, .. } => Some(reason.clone()),
                     BridgeStatus::Stopped => {
-                        Some("桥接服务未运行。".to_owned())
+                        Some(crate::i18n::s().state.bridge_not_running.to_owned())
                     }
                     _ => None,
                 };
@@ -1456,6 +1458,7 @@ impl WhiskyApp {
                     return;
                 }
                 if unavailable && !self.demo {
+                    let st = &crate::i18n::s().state;
                     self.catalogue_ready = false;
                     self.external_opens.extend(self.desktop_resolutions.drain().map(|(_, file)| file));
                     self.host_terminals = None;
@@ -1464,10 +1467,10 @@ impl WhiskyApp {
                     self.desktop_error = None;
                     self.desktop_installing = false;
                     if let Some(page) = self.game_info.as_mut().filter(|page| page.matches.is_none()) {
-                        page.config_error = Some("桥接连接恢复后可重新读取 GameDB".into());
+                        page.config_error = Some(st.bridge_reconnect_gamedb.into());
                     }
                     if let Some(state) = self.import_bottles.as_mut() {
-                        state.failed(state.request, "桥接连接已中断，请恢复连接后重新扫描".into());
+                        state.failed(state.request, st.bridge_disconnected_rescan.into());
                     }
                     self.pending.clear();
                     self.configured.clear();
@@ -1577,7 +1580,17 @@ impl WhiskyApp {
                 match result {
                     Ok(status) => {
                         if install {
-                            self.show_notice(if status.cache_updated == Some(false) { "桌面入口已安装，打开方式缓存等待刷新" } else if status.updated { "桌面入口和打开方式已更新" } else { "桌面入口和打开方式已添加" }, cx);
+                            let st = &crate::i18n::s().state;
+                            self.show_notice(
+                                if status.cache_updated == Some(false) {
+                                    st.desktop_installed_cache_pending
+                                } else if status.updated {
+                                    st.desktop_updated
+                                } else {
+                                    st.desktop_added
+                                },
+                                cx,
+                            );
                         }
                         self.desktop_status = Some(status);
                         self.desktop_error = None;
@@ -1640,7 +1653,7 @@ impl WhiskyApp {
                 } else if let Some(path) = path {
                     self.default_bottle_location = Some(path.clone());
                     self.persist(preferences::DEFAULT_BOTTLE_LOCATION, json!(path), cx);
-                    self.show_notice("已更新默认容器位置", cx);
+                    self.show_notice(crate::i18n::s().state.default_bottle_location_updated, cx);
                 }
             }
             BridgeEvent::FolderChooseFailed { reason } => {
@@ -1727,9 +1740,12 @@ impl WhiskyApp {
                     let _ = container;
                     // The badge keeps the effective backend alone; the toast
                     // spells out a fallback when one was taken.
+                    let strings = crate::i18n::s();
                     self.active_backends.insert(
                         entry_id.clone(),
-                        backend.clone().unwrap_or_else(|| "按启动配置".to_owned()),
+                        backend
+                            .clone()
+                            .unwrap_or_else(|| strings.runtime.by_launch_config.to_owned()),
                     );
                     let backend_label = backend_label(backend, backend_from);
                     let title = self
@@ -1737,8 +1753,11 @@ impl WhiskyApp {
                         .iter()
                         .find(|e| e.id == entry_id)
                         .map(|e| e.title.as_str())
-                        .unwrap_or("游戏");
-                    self.show_notice(format!("正在启动 {title} · 图形后端：{backend_label}"), cx);
+                        .unwrap_or(strings.state.fallback_game);
+                    self.show_notice(
+                        crate::i18n::fmt::notice_launching_with_backend(title, &backend_label),
+                        cx,
+                    );
                 }
             }
             BridgeEvent::ProgramRunStarted {
@@ -1748,7 +1767,10 @@ impl WhiskyApp {
             } => {
                 if !self.demo {
                     let backend_label = backend_label(backend, backend_from);
-                    self.show_notice(format!("正在启动 {name} · 图形后端：{backend_label}"), cx);
+                    self.show_notice(
+                        crate::i18n::fmt::notice_launching_with_backend(&name, &backend_label),
+                        cx,
+                    );
                 }
             }
             BridgeEvent::ClipboardPrompt(prompt) => {
@@ -1886,7 +1908,7 @@ impl WhiskyApp {
                             state.saving = false;
                             state.error = Some(error);
                         } else {
-                            self.show_notice(&format!("资料来源未保存：{error}"), cx);
+                            self.show_notice(&crate::i18n::fmt::notice_metadata_unsaved(&error), cx);
                             self.bridge.load_preferences();
                         }
                     }
@@ -1990,7 +2012,7 @@ impl WhiskyApp {
                     self.rebuild_entries();
                     if updated > 0 {
                         self.show_notice(
-                            format!("已将标签「{old_tag}」重命名为「{new_tag}」"),
+                            crate::i18n::fmt::notice_tag_renamed(&old_tag, &new_tag),
                             cx,
                         );
                     }
@@ -2001,7 +2023,7 @@ impl WhiskyApp {
                     self.apply_local_tag_delete(&tag);
                     self.rebuild_entries();
                     if updated > 0 {
-                        self.show_notice(format!("已删除标签「{tag}」"), cx);
+                        self.show_notice(crate::i18n::fmt::notice_tag_deleted(&tag), cx);
                     }
                 }
             }
@@ -2192,7 +2214,7 @@ impl WhiskyApp {
                                 kind: EngineDialogKind::Feature {
                                     feature: next_feature.clone(),
                                     apply: pending.apply,
-                                    reason: "此选项还有一个未验证的特性".to_owned(),
+                                    reason: crate::i18n::s().state.engine_another_unverified.to_owned(),
                                     fingerprint,
                                 },
                                 container: pending.container,
@@ -2204,7 +2226,7 @@ impl WhiskyApp {
                     // nothing can make the write valid; drop it.
                     Some(PendingVerdict::Blocked) => {
                         self.pending_engine_action = None;
-                        self.show_notice("所选引擎缺少必需的组件".to_owned(), cx);
+                        self.show_notice(crate::i18n::s().state.engine_missing_component.to_owned(), cx);
                     }
                     None => {}
                 }
@@ -2283,7 +2305,7 @@ impl WhiskyApp {
             }
             BridgeEvent::ScanRootMoved { source, target } => {
                 if !self.demo {
-                    self.show_notice("已将扫描文件夹移动到另一个容器", cx);
+                    self.show_notice(crate::i18n::s().state.scan_root_moved, cx);
                     self.folders_reload_after_write.remove(&source);
                     self.folders_reload_after_write.remove(&target);
                     self.refresh_library(cx);
@@ -2414,7 +2436,7 @@ impl WhiskyApp {
                             matches!(page.table.finish_kill(pid, killed), KillOutcome::Restored(_))
                         });
                     if restored {
-                        self.show_notice("未能结束该进程", cx);
+                        self.show_notice(crate::i18n::s().state.kill_process_failed, cx);
                     }
                 }
             }
@@ -2527,7 +2549,7 @@ impl WhiskyApp {
                                 name,
                                 containers,
                             } => {
-                                self.show_notice(format!("已成功创建容器 {name}"), cx);
+                                self.show_notice(crate::i18n::fmt::notice_bottle_created(&name), cx);
 
                                 // Update the bottle catalogue
                                 let previous = self
@@ -2642,7 +2664,7 @@ impl WhiskyApp {
                                     .map(crate::winetricks::FailureDto::label)
                                     .unwrap_or_default();
                                 self.show_notice(
-                                    format!("{} 个组件安装失败：{reason}", failed.len()),
+                                    crate::i18n::fmt::notice_winetricks_failed(failed.len(), &reason),
                                     cx,
                                 );
                             }
@@ -2675,7 +2697,7 @@ impl WhiskyApp {
                     self.program_settings.apply_settings(settings);
                     self.preview.program_inputs.clear();
                     if let Some((next_index, next_exe)) = pending_switch {
-                        self.show_notice(format!("已保存 {saved_name} 的程序设置"), cx);
+                        self.show_notice(crate::i18n::fmt::notice_program_saved(&saved_name), cx);
                         self.run_settings_target_exe = Some(next_exe);
                         self.open_program_settings(next_index, cx);
                     } else {
@@ -2684,9 +2706,9 @@ impl WhiskyApp {
                             self.preview.sheet = None;
                             self.preview.sheet_history.clear();
                             self.preview_sheet_return_captured_gen = 0;
-                            self.show_notice("程序设置已保存", cx);
+                            self.show_notice(crate::i18n::s().state.program_settings_saved, cx);
                         } else if was_saving {
-                            self.show_notice(format!("已保存 {saved_name} 的程序设置"), cx);
+                            self.show_notice(crate::i18n::fmt::notice_program_saved(&saved_name), cx);
                         }
                     }
                 }
@@ -2733,7 +2755,7 @@ impl WhiskyApp {
                 if self.program_target_matches(&container, &executable) {
                     self.program_settings.shortcut_path = Some(path);
                     self.program_settings.shortcut_error = None;
-                    self.show_notice("快捷方式已创建", cx);
+                    self.show_notice(crate::i18n::s().state.shortcut_created, cx);
                 }
             }
             BridgeEvent::ProgramShortcutFailed {
@@ -2747,7 +2769,7 @@ impl WhiskyApp {
                 }
             }
             BridgeEvent::ProgramRunFailed { name, reason } => {
-                self.show_notice(format!("启动 {name} 失败：{reason}"), cx);
+                self.show_notice(crate::i18n::fmt::notice_launch_failed(&name, &reason), cx);
             }
             BridgeEvent::EntryMoved {
                 source_container,
@@ -2766,7 +2788,7 @@ impl WhiskyApp {
                     // (`retry_library` forgets the same way).
                     self.configured.forget(&source_container);
                     self.configured.forget(&target_container);
-                    self.show_notice("已移动条目，正在刷新游戏库", cx);
+                    self.show_notice(crate::i18n::s().state.entry_moved_refreshing, cx);
                     self.refresh_library(cx);
                 }
             }
@@ -2809,23 +2831,21 @@ impl WhiskyApp {
                             {
                                 self.select_after_refresh = path.clone();
                             }
+                            let st = &crate::i18n::s().state;
                             let message = match operation {
-                                BottleOperation::Rename => name.map_or_else(
-                                    || "容器已重命名".to_owned(),
-                                    |name| format!("容器已重命名为 {name}"),
-                                ),
-                                BottleOperation::Remove => "已移除容器".to_owned(),
-                                BottleOperation::Move => "已移动容器".to_owned(),
-                                BottleOperation::Duplicate => name.map_or_else(
-                                    || "已复制容器".to_owned(),
-                                    |name| format!("已复制容器 {name}"),
-                                ),
-                                BottleOperation::Export => path.map_or_else(
-                                    || "容器已导出".to_owned(),
-                                    |path| format!("容器已导出到 {path}"),
-                                ),
-                                BottleOperation::Repair => "容器修复完成".to_owned(),
-                                BottleOperation::CleanCache => "着色器缓存已清理".to_owned(),
+                                BottleOperation::Rename => {
+                                    crate::i18n::fmt::notice_bottle_renamed(name.as_deref())
+                                }
+                                BottleOperation::Remove => st.bottle_removed.to_owned(),
+                                BottleOperation::Move => st.bottle_moved.to_owned(),
+                                BottleOperation::Duplicate => {
+                                    crate::i18n::fmt::notice_bottle_duplicated(name.as_deref())
+                                }
+                                BottleOperation::Export => {
+                                    crate::i18n::fmt::notice_bottle_exported(path.as_deref())
+                                }
+                                BottleOperation::Repair => st.bottle_repaired.to_owned(),
+                                BottleOperation::CleanCache => st.shader_cache_cleaned.to_owned(),
                             };
                             self.show_notice(message, cx);
                         }
@@ -2848,7 +2868,7 @@ impl WhiskyApp {
                         if let Some(path) = path {
                             self.gptk_importing = true;
                             self.gptk_error = None;
-                            self.show_notice("正在导入 Game Porting Toolkit 负载…", cx);
+                            self.show_notice(crate::i18n::s().state.importing_gptk, cx);
                             self.bridge.import_gptk(&path); }
                         cx.notify();
                         return;
@@ -2861,7 +2881,7 @@ impl WhiskyApp {
                                     .file_name()
                                     .map(|name| name.to_string_lossy().into_owned())
                                     .unwrap_or_else(|| path.clone());
-                                self.show_notice(format!("正在启动 {name}"), cx);
+                                self.show_notice(crate::i18n::fmt::notice_launching(&name), cx);
                                 self.bridge.run_program(&container, &path, &name);
                             }
                         }
@@ -2892,7 +2912,7 @@ impl WhiskyApp {
                                 let name = std::path::Path::new(&path)
                                     .file_stem()
                                     .map(|name| name.to_string_lossy().into_owned())
-                                    .unwrap_or_else(|| "程序".to_owned());
+                                    .unwrap_or_else(|| crate::i18n::s().state.fallback_program.to_owned());
                                 self.bridge
                                     .set_program_pinned(&container, &path, &name, true);
                             }
@@ -2926,14 +2946,15 @@ impl WhiskyApp {
             }
             BridgeEvent::BottleToolOpened { container, tool } => {
                 if !self.demo && self.selected_container().as_deref() == Some(container.as_str()) {
+                    let b = &crate::i18n::s().bottle;
                     let label = match tool.as_str() {
-                        "winecfg" => "Wine 配置",
-                        "regedit" => "注册表编辑器",
-                        "control" => "控制面板",
-                        "terminal" => "终端",
-                        _ => "Wine 工具",
+                        "winecfg" => b.wine_config,
+                        "regedit" => b.regedit,
+                        "control" => b.control_panel,
+                        "terminal" => b.terminal,
+                        _ => b.wine_tool,
                     };
-                    self.show_notice(format!("已打开 {label}"), cx);
+                    self.show_notice(crate::i18n::fmt::notice_opened_tool(label), cx);
                 }
             }
             BridgeEvent::Diagnostics {
@@ -2967,7 +2988,7 @@ impl WhiskyApp {
                         }
                         DiagnosticUpdate::Exported { path } => {
                             self.diagnostics_pending = false;
-                            self.show_notice(format!("诊断报告已导出到 {path}"), cx);
+                            self.show_notice(crate::i18n::fmt::notice_diagnostics_exported(&path), cx);
                         }
                         DiagnosticUpdate::Checks { results } => {
                             self.checks_pending = false;
@@ -2979,11 +3000,11 @@ impl WhiskyApp {
                             self.diagnostic_checks = Some(results);
                             if failures > 0 {
                                 self.show_notice(
-                                    format!("自动检查完成：{failures} 项需要关注"),
+                                    crate::i18n::fmt::notice_checks_with_failures(failures),
                                     cx,
                                 );
                             } else {
-                                self.show_notice("自动检查完成：未发现明显问题", cx);
+                                self.show_notice(crate::i18n::s().state.checks_clean, cx);
                             }
                         }
                         DiagnosticUpdate::Audio { result } => {
@@ -3082,7 +3103,7 @@ impl WhiskyApp {
                                     page.error = None;
                                 }
                                 self.bridge.load_entries(&container);
-                                self.show_notice("游戏资料已更新", cx);
+                                self.show_notice(crate::i18n::s().state.metadata_updated, cx);
                             }
                         }
                         MetadataUpdate::Matches {
@@ -3112,15 +3133,12 @@ impl WhiskyApp {
                                 page.container == container && page.entry_id == entry_id
                             }) {
                                 page.applying = false;
-                                page.config_message = Some(if pending_verbs.is_empty() {
-                                    format!("已应用 {} 项推荐设置。", changes.len())
-                                } else {
-                                    format!(
-                                        "已应用 {} 项推荐设置；仍需安装组件：{}",
-                                        changes.len(),
-                                        pending_verbs.join(", ")
-                                    )
-                                });
+                                let missing = (!pending_verbs.is_empty())
+                                    .then(|| pending_verbs.join(", "));
+                                page.config_message = Some(crate::i18n::fmt::notice_gamedb_applied(
+                                    changes.len(),
+                                    missing.as_deref(),
+                                ));
                                 self.bridge.load_entries(&container);
                                 if self
                                     .config
@@ -3129,7 +3147,7 @@ impl WhiskyApp {
                                 {
                                     self.bridge.load_configuration(&container);
                                 }
-                                self.show_notice("已应用 GameDB 推荐配置", cx);
+                                self.show_notice(crate::i18n::s().state.gamedb_applied, cx);
                             }
                         }
                         MetadataUpdate::EntrySynced { container, entry } => {
@@ -3165,11 +3183,10 @@ impl WhiskyApp {
                         } => {
                             if !automatic {
                                 self.bridge.load_entries(&container);
-                                let message = if failed > 0 {
-                                    format!("游戏信息同步完成：匹配 {matched} 个，失败 {failed} 个")
-                                } else {
-                                    format!("游戏信息同步完成：匹配 {matched} 个")
-                                };
+                                let message = crate::i18n::fmt::notice_sync_done(
+                                    matched as usize,
+                                    failed as usize,
+                                );
                                 self.show_notice(message, cx);
                             }
                             // Automatic runs already patched every matched
@@ -3273,10 +3290,7 @@ impl WhiskyApp {
                                 rosetta_installed,
                                 apple_silicon,
                             });
-                            let message = version.map_or_else(
-                                || "Wine 运行时安装完成".to_owned(),
-                                |version| format!("Wine 运行时 {version} 安装完成"),
-                            );
+                            let message = crate::i18n::fmt::notice_wine_installed(version.as_deref());
                             self.show_notice(message, cx);
                             self.bridge.reload_library();
                         }
@@ -3288,15 +3302,10 @@ impl WhiskyApp {
                             if let Some(status) = self.setup_status.as_mut() {
                                 status.rosetta_installed = true;
                             }
-                            self.show_notice("Rosetta 2 安装完成", cx);
+                            self.show_notice(crate::i18n::s().state.rosetta_installed, cx);
                         }
                         SetupUpdate::WineUpdate { local, remote } => {
-                            self.show_notice(
-                                format!(
-                                    "发现新版 Wine {remote}（当前 {local}），可在设置中更新运行时"
-                                ),
-                                cx,
-                            );
+                            self.show_notice(crate::i18n::fmt::notice_wine_update_available(&remote, &local), cx);
                         }
                         SetupUpdate::Failed { reason } => {
                             self.setup_installing = false;
@@ -3314,22 +3323,22 @@ impl WhiskyApp {
                 self.gptk_status = Some(status);
                 self.gptk_importing = false;
                 self.gptk_error = None;
-                self.show_notice("Game Porting Toolkit 负载导入成功", cx);
+                self.show_notice(crate::i18n::s().state.gptk_import_succeeded, cx);
             }
             BridgeEvent::GptkImportFailed { reason } => {
                 self.gptk_importing = false;
                 self.gptk_error = Some(reason.clone());
-                self.show_notice(format!("导入失败：{reason}"), cx);
+                self.show_notice(crate::i18n::fmt::notice_import_failed(&reason), cx);
             }
             BridgeEvent::GptkRemoveSucceeded(status) => {
                 self.gptk_status = Some(status);
                 self.gptk_importing = false;
                 self.gptk_error = None;
-                self.show_notice("已移除 Game Porting Toolkit 负载", cx);
+                self.show_notice(crate::i18n::s().state.gptk_removed, cx);
             }
             BridgeEvent::GptkRemoveFailed { reason } => {
                 self.gptk_importing = false;
-                self.show_notice(format!("移除失败：{reason}"), cx);
+                self.show_notice(crate::i18n::fmt::notice_remove_failed(&reason), cx);
             }
         }
         self.loading = self.compute_loading();
@@ -3464,7 +3473,7 @@ impl WhiskyApp {
                                 }
                             } else {
                                 self.failures
-                                    .insert(index, "此容器当前不可用。".to_owned());
+                                    .insert(index, crate::i18n::s().state.bottle_currently_unavailable.to_owned());
                             }
                         }
                         None => {
@@ -3490,7 +3499,7 @@ impl WhiskyApp {
         for index in 0..self.bottles.len() {
             if !self.bottles[index].available {
                 self.failures
-                    .insert(index, "此容器当前不可用。".to_owned());
+                    .insert(index, crate::i18n::s().state.bottle_currently_unavailable.to_owned());
                 continue;
             }
             let path = self.bottles[index].path.clone();
@@ -3560,7 +3569,7 @@ impl WhiskyApp {
         self.selected_bottle
             .and_then(|index| self.bottles.get(index))
             .map(|bottle| bottle.name.as_str())
-            .unwrap_or("容器")
+            .unwrap_or(crate::i18n::s().state.fallback_bottle)
     }
 
     pub(crate) fn bottle_name_at(&self, slot: usize) -> &str {
@@ -3749,7 +3758,7 @@ impl WhiskyApp {
 
     pub(crate) fn command(&mut self, command: Command, cx: &mut Context<Self>) {
         if !self.command_available(command) {
-            self.show_notice("当前平台尚未提供此功能。", cx);
+            self.show_notice(crate::i18n::s().state.feature_unavailable_platform, cx);
             return;
         }
         match command {
@@ -3767,15 +3776,15 @@ impl WhiskyApp {
             Command::Sort(i) => self.set_sort(i, cx),
             Command::Hide(i) => {
                 if self.demo {
-                    self.show_notice(DEMO_NOTICE, cx);
+                    self.show_notice(demo_notice(), cx);
                 } else {
                     self.toggle_hidden(i, cx);
                 }
             }
-            Command::Notice => self.show_notice(DEMO_NOTICE, cx),
+            Command::Notice => self.show_notice(demo_notice(), cx),
             Command::Runtime(i) => {
                 if self.demo {
-                    self.show_notice(DEMO_NOTICE, cx);
+                    self.show_notice(demo_notice(), cx);
                 } else {
                     let action = self.primary_action(i).action;
                     self.perform_runtime_action(i, action, cx);
@@ -3783,7 +3792,7 @@ impl WhiskyApp {
             }
             Command::Executable(i) => {
                 if self.demo {
-                    self.show_notice(DEMO_NOTICE, cx);
+                    self.show_notice(demo_notice(), cx);
                 } else {
                     self.open_executable_picker(i, false, cx);
                 }
@@ -3791,18 +3800,18 @@ impl WhiskyApp {
             Command::LauncherAutoStart(i) => self.toggle_launcher_autostart(i, cx),
             Command::OpenGameDirectory(i) => {
                 if self.demo {
-                    self.show_notice(DEMO_NOTICE, cx);
+                    self.show_notice(demo_notice(), cx);
                 } else if let Some(game) = self.game(i)
                     && let Some(path) = game.game_directory()
                 {
                     self.bridge.open(&game.container, &path.to_string_lossy());
                 } else {
-                    self.show_notice("游戏目录不可用，请刷新游戏库后重试。", cx);
+                    self.show_notice(crate::i18n::s().state.game_dir_unavailable, cx);
                 }
             }
             Command::Reveal(i) => {
                 if self.demo {
-                    self.show_notice(DEMO_NOTICE, cx);
+                    self.show_notice(demo_notice(), cx);
                 } else if let Some(game) = self.game(i)
                     && let Some(path) = game.executable.as_ref()
                 {
@@ -3812,21 +3821,21 @@ impl WhiskyApp {
             }
             Command::Shortcut => {
                 if self.demo {
-                    self.show_notice(DEMO_NOTICE, cx);
+                    self.show_notice(demo_notice(), cx);
                 } else {
                     self.create_program_shortcut(cx);
                 }
             }
             Command::Move(i) => {
                 if self.demo {
-                    self.show_notice(DEMO_NOTICE, cx);
+                    self.show_notice(demo_notice(), cx);
                 } else {
                     self.open_preview_sheet(PreviewSheet::MoveEntry(i), cx);
                 }
             }
             Command::OpenDrive => {
                 if self.demo {
-                    self.show_notice(DEMO_NOTICE, cx);
+                    self.show_notice(demo_notice(), cx);
                 } else if let Some(bottle) = self.selected_bottle.and_then(|i| self.bottles.get(i)) {
                     let drive = std::path::Path::new(&bottle.path).join("drive_c");
                     self.bridge.open(&bottle.path, &drive.to_string_lossy());
@@ -3834,14 +3843,14 @@ impl WhiskyApp {
             }
             Command::RefreshLibrary => {
                 if self.demo {
-                    self.show_notice(DEMO_NOTICE, cx);
+                    self.show_notice(demo_notice(), cx);
                 } else {
                     self.refresh_library(cx);
                 }
             }
             Command::StopAllProcesses => {
                 if self.demo {
-                    self.show_notice(DEMO_NOTICE, cx);
+                    self.show_notice(demo_notice(), cx);
                 } else {
                     self.stop_all_processes(cx);
                 }
@@ -3871,7 +3880,7 @@ impl WhiskyApp {
             Command::RunBottleChecks => self.run_bottle_checks(cx),
             Command::RefreshProcesses => {
                 if self.demo {
-                    self.show_notice(DEMO_NOTICE, cx);
+                    self.show_notice(demo_notice(), cx);
                 } else {
                     self.refresh_processes(cx);
                 }
@@ -3888,20 +3897,20 @@ impl WhiskyApp {
             Command::GameDbApply(i) => self.apply_game_db_match(i, cx),
             Command::SyncMetadata => {
                 if self.demo {
-                    self.show_notice(DEMO_NOTICE, cx);
+                    self.show_notice(demo_notice(), cx);
                 } else if self.offline() {
-                    self.show_notice("离线模式已开启，无法同步游戏信息", cx);
+                    self.show_notice(crate::i18n::s().state.offline_sync_blocked, cx);
                 } else if let Some(container) = self.scan_container() {
-                    self.show_notice("正在扫描并同步游戏信息…", cx);
+                    self.show_notice(crate::i18n::s().state.scanning_and_syncing, cx);
                     let sources = self.metadata_sources();
                     if sources.is_empty() {
-                        self.show_notice("请至少启用一个刮削源", cx);
+                        self.show_notice(crate::i18n::s().state.enable_one_metadata_source, cx);
                     } else {
                         self.bridge.sync_metadata(&container, sources, false,
                             self.preview.toggles.get("scrape-characters").copied().unwrap_or(true));
                     }
                 } else {
-                    self.show_notice("请先在侧边栏选择一个容器", cx);
+                    self.show_notice(crate::i18n::s().state.select_bottle_sidebar_first, cx);
                 }
             }
             Command::EditTags(i) => self.open_game_tags_sheet(i, cx),
@@ -3926,7 +3935,7 @@ impl WhiskyApp {
                 page.table.apply(Vec::new());
             }
             self.bridge.kill_all_processes(&container);
-            self.show_notice("已请求停止所有进程", cx);
+            self.show_notice(crate::i18n::s().state.stop_all_requested, cx);
         }
     }
 
@@ -3937,7 +3946,7 @@ impl WhiskyApp {
             return;
         }
         if !matches!(self.bridge_status, BridgeStatus::Connected { .. }) {
-            self.quit_error = Some("桥接连接不可用，现有 Windows 程序可能继续运行。".into());
+            self.quit_error = Some(crate::i18n::s().state.bridge_quit_unavailable.into());
             self.bridge_dialog = true;
             cx.notify();
             return;
@@ -3965,7 +3974,7 @@ impl WhiskyApp {
             let _ = this.update(cx, |this, cx| {
                 if this.quitting && this.quit_generation == generation {
                     this.quitting = false;
-                    this.quit_error = Some("退出清理等待超时，请检查进程状态后重试。".into());
+                    this.quit_error = Some(crate::i18n::s().state.quit_cleanup_timeout.into());
                     this.bridge_dialog = true;
                     cx.notify();
                 }
@@ -4016,15 +4025,16 @@ impl WhiskyApp {
     }
 
     pub(crate) fn back_destination_label(&self) -> String {
+        let strings = crate::i18n::s();
         match self.preview.history.last().copied().unwrap_or(PreviewPage::Bottle) {
-            PreviewPage::Library => "游戏库".into(),
-            PreviewPage::Statistics => "游玩统计".into(),
-            PreviewPage::Launchers => "启动器".into(),
+            PreviewPage::Library => strings.library.title.into(),
+            PreviewPage::Statistics => strings.library.statistics.into(),
+            PreviewPage::Launchers => strings.library.launchers.into(),
             PreviewPage::Bottle => self.bottle_name().to_owned(),
-            PreviewPage::ConfigureBottle => "容器配置".into(),
-            PreviewPage::Programs => "已安装的程序".into(),
-            PreviewPage::Processes => "运行中的进程".into(),
-            PreviewPage::GameConfigs => "游戏配置".into(),
+            PreviewPage::ConfigureBottle => strings.bottle.configure_bottle.into(),
+            PreviewPage::Programs => strings.bottle.installed_programs.into(),
+            PreviewPage::Processes => strings.bottle.running_processes.into(),
+            PreviewPage::GameConfigs => strings.bottle.game_configs.into(),
         }
     }
 
@@ -4414,7 +4424,7 @@ impl WhiskyApp {
     #[cfg(not(target_os = "linux"))]
     pub(crate) fn choose_gptk_image(&mut self, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         self.bridge
@@ -4424,7 +4434,7 @@ impl WhiskyApp {
     #[cfg(not(target_os = "linux"))]
     pub(crate) fn remove_gptk(&mut self, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         self.gptk_importing = true;
@@ -4434,7 +4444,7 @@ impl WhiskyApp {
 
     pub(crate) fn choose_bottle_location(&mut self, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let current = self.default_bottle_location.clone().unwrap_or_default();
@@ -4451,7 +4461,7 @@ impl WhiskyApp {
     /// external engine. Detection and rejection happen helper-side.
     pub(crate) fn choose_wine_engine_directory(&mut self, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         self.engine_folder_pending = true;
@@ -4462,7 +4472,7 @@ impl WhiskyApp {
     /// never deleted.
     pub(crate) fn remove_wine_engine(&mut self, id: &str, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         self.bridge.remove_wine_engine(id);
@@ -4479,7 +4489,7 @@ impl WhiskyApp {
         cx: &mut Context<Self>,
     ) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let current = self
@@ -4683,7 +4693,7 @@ impl WhiskyApp {
                             field: field.to_owned(),
                             value: next.clone(),
                         },
-                        reason: reason.unwrap_or_else(|| "该引擎未验证此特性".to_owned()),
+                        reason: reason.unwrap_or_else(|| crate::i18n::s().state.engine_unverified_default.to_owned()),
                         fingerprint: selection.engine.fingerprint.clone().unwrap_or_default(),
                     },
                     container: container.to_owned(),
@@ -4696,7 +4706,7 @@ impl WhiskyApp {
         // Unavailable or not confirmable — refuse the write entirely. The
         // control is already disabled; this guards direct calls.
         self.show_notice(
-            reason.unwrap_or_else(|| "所选引擎不支持此选项".to_owned()),
+            reason.unwrap_or_else(|| crate::i18n::s().bottle.unsupported_by_engine.to_owned()),
             cx,
         );
         true
@@ -4791,7 +4801,7 @@ impl WhiskyApp {
                                 .clone()
                                 .unwrap_or_default(),
                         },
-                        reason: reason.unwrap_or_else(|| "该引擎未验证此特性".to_owned()),
+                        reason: reason.unwrap_or_else(|| crate::i18n::s().state.engine_unverified_default.to_owned()),
                         fingerprint: selection.engine.fingerprint.clone().unwrap_or_default(),
                     },
                     container,
@@ -4802,7 +4812,7 @@ impl WhiskyApp {
             }
         }
         self.show_notice(
-            reason.unwrap_or_else(|| "所选引擎不支持此选项".to_owned()),
+            reason.unwrap_or_else(|| crate::i18n::s().bottle.unsupported_by_engine.to_owned()),
             cx,
         );
         true
@@ -4825,7 +4835,7 @@ impl WhiskyApp {
         let reason = self
             .engine_field_policy(container, field)
             .and_then(|policy| policy.reason.clone())
-            .unwrap_or_else(|| "该引擎未验证此特性".to_owned());
+            .unwrap_or_else(|| crate::i18n::s().state.engine_unverified_default.to_owned());
         self.engine_dialog = Some(EngineDialogState {
             kind: EngineDialogKind::Feature {
                 feature: feature.to_owned(),
@@ -4859,7 +4869,7 @@ impl WhiskyApp {
         let reason = self
             .engine_field_policy(container, field)
             .and_then(|policy| policy.reason.clone())
-            .unwrap_or_else(|| "该引擎未验证此特性".to_owned());
+            .unwrap_or_else(|| crate::i18n::s().state.engine_unverified_default.to_owned());
         self.engine_dialog = Some(EngineDialogState {
             kind: EngineDialogKind::Feature {
                 feature: feature.to_owned(),
@@ -5085,6 +5095,23 @@ impl WhiskyApp {
         }
     }
 
+    pub(crate) fn preview_input_specs() -> [(&'static str, &'static str); 11] {
+        let strings = crate::i18n::s();
+        [
+            ("arguments", strings.program_settings.args_placeholder),
+            ("env-key", strings.bottle.env_key_placeholder),
+            ("env-value", strings.bottle.env_value_placeholder),
+            ("scan-path", "~/Games"),
+            ("bottle-name", ""),
+            ("dll-name", strings.state.input_dll_example),
+            ("build", "26100"),
+            ("dpi", "96"),
+            ("desktop-width", "1920"),
+            ("desktop-height", "1080"),
+            ("dependency-search", strings.common.searching),
+        ]
+    }
+
     pub(crate) fn set_appearance(
         &mut self,
         mode: crate::theme::AppearanceMode,
@@ -5101,7 +5128,94 @@ impl WhiskyApp {
     pub(crate) fn cycle_appearance(&mut self, cx: &mut Context<Self>) {
         let next = self.appearance.next();
         self.set_appearance(next, cx);
-        self.show_notice(format!("已切换外观：{}", next.label()), cx);
+        self.show_notice(crate::i18n::fmt::appearance_toggled(next.label()), cx);
+    }
+
+    pub(crate) fn set_language(
+        &mut self,
+        mode: crate::i18n::LanguageMode,
+        cx: &mut Context<Self>,
+    ) {
+        self.language = mode;
+        self.preview.choices.insert("language", mode.wire().into());
+        crate::ui_state::save_language(mode);
+        let _ = crate::i18n::set_language(mode);
+        #[cfg(not(test))]
+        crate::install_menus(cx);
+        self.show_notice(crate::i18n::fmt::language_changed(mode.label()), cx);
+        cx.notify();
+    }
+
+    /// Rebuilds static `InputState` instances when the resolved locale changes so
+    /// placeholders match the active language without losing user input.
+    pub(crate) fn sync_localized_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let current = crate::i18n::locale();
+        if self.rendered_locale == current {
+            return;
+        }
+        self.rendered_locale = current;
+        let strings = crate::i18n::s();
+        let search_value = self.search.read(cx).value().to_string();
+        let search = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(strings.library.search_placeholder)
+                .default_value(search_value)
+        });
+        let search_sub = cx.observe(&search, |_, _, cx| cx.notify());
+        self.search = search;
+        if !self._subscriptions.is_empty() {
+            self._subscriptions[0] = search_sub;
+        }
+
+        let tag_val = self.tag_input.read(cx).value().to_string();
+        let (tag_input, tag_sub) = Self::new_tag_input(tag_val, window, cx);
+        self.tag_input = tag_input;
+        self.tag_input_subscription = tag_sub;
+
+        let mgr_val = self.tag_manager_input.read(cx).value().to_string();
+        let (tag_manager_input, mgr_sub) = Self::new_tag_manager_input(mgr_val, window, cx);
+        self.tag_manager_input = tag_manager_input;
+        self.tag_manager_input_subscription = mgr_sub;
+
+        for (key, placeholder) in Self::preview_input_specs() {
+            let value = self
+                .preview
+                .inputs
+                .get(key)
+                .map(|input| input.read(cx).value().to_string())
+                .unwrap_or_default();
+            let entity = cx.new(|cx| {
+                InputState::new(window, cx)
+                    .placeholder(placeholder)
+                    .default_value(value)
+            });
+            if key == "dependency-search" && self._subscriptions.len() > 1 {
+                self._subscriptions[1] = cx.observe(&entity, |_, _, cx| cx.notify());
+            }
+            self.preview.inputs.insert(key, entity);
+        }
+        self.preview.config_inputs.clear();
+        self.preview.program_inputs.clear();
+        if let Some(page) = self.game_info.as_mut()
+            && let Some(existing) = page.input.take()
+        {
+            let value = existing.read(cx).value().to_string();
+            page.input = Some(cx.new(|cx| {
+                InputState::new(window, cx)
+                    .placeholder(strings.state.input_game_name_search)
+                    .default_value(value)
+            }));
+        }
+        if let Some(dialog) = self.bottle_dialog.as_mut()
+            && let Some(existing) = dialog.input.take()
+        {
+            let value = existing.read(cx).value().to_string();
+            dialog.input = Some(cx.new(|cx| {
+                InputState::new(window, cx)
+                    .placeholder(strings.dialogs.bottle_name_placeholder)
+                    .default_value(value)
+            }));
+        }
     }
 
     /// Select one option from a settings dropdown. Only keys the SwiftUI app
@@ -5111,6 +5225,10 @@ impl WhiskyApp {
         match key {
             "appearance" => {
                 self.set_appearance(crate::theme::AppearanceMode::from_wire(value), cx);
+                return;
+            }
+            "language" => {
+                self.set_language(crate::i18n::LanguageMode::from_wire(value), cx);
                 return;
             }
             "terminal" => self.persist(preferences::PREFERRED_TERMINAL, json!(value), cx),
@@ -5260,18 +5378,15 @@ impl WhiskyApp {
             return;
         }
         if !crate::upscale::supported() {
-            self.show_notice("当前平台不支持封面超分", cx);
+            self.show_notice(crate::i18n::s().state.cover_upscale_unsupported, cx);
             return;
         }
         if !crate::upscale::ready() {
-            self.show_notice(
-                "未找到 realcugan-ncnn-vulkan 或 models-se 模型；安装或设置 WHISKY_REALCUGAN_HELPER、WHISKY_REALCUGAN_MODELS 后重启应用",
-                cx,
-            );
+            self.show_notice(crate::i18n::s().state.cover_upscale_missing_helper, cx);
             return;
         }
         if self.cover_upscale == crate::upscale::Factor::Off {
-            self.show_notice("先在下面把封面超分设为 2× 或 4×", cx);
+            self.show_notice(crate::i18n::s().state.cover_upscale_pick_factor_first, cx);
             return;
         }
         let mut unique = std::collections::BTreeSet::new();
@@ -5281,7 +5396,7 @@ impl WhiskyApp {
             }
         }
         if unique.is_empty() {
-            self.show_notice("游戏库里还没有封面", cx);
+            self.show_notice(crate::i18n::s().state.cover_upscale_no_covers, cx);
             return;
         }
         let covers: Vec<_> = unique.into_iter().collect();
@@ -5353,7 +5468,7 @@ impl WhiskyApp {
                 // what makes the shelf switch over without a restart.
                 this.cover_derivatives.borrow_mut().clear();
                 let failed = total.saturating_sub(succeeded);
-                this.show_notice(format!("封面超分完成：成功 {succeeded} 张，未生成 {failed} 张"), cx);
+                this.show_notice(crate::i18n::fmt::cover_batch_done(succeeded, failed), cx);
             })
             .ok();
         });
@@ -5740,7 +5855,7 @@ impl WhiskyApp {
         cx: &mut Context<Self>,
     ) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(bottle) = self.bottles.get(index) else {
@@ -5780,7 +5895,7 @@ impl WhiskyApp {
             .unwrap_or_default();
         let entity = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("容器名称")
+                .placeholder(crate::i18n::s().dialogs.bottle_name_placeholder)
                 .default_value(initial)
         });
         if let Some(dialog) = self.bottle_dialog.as_mut() {
@@ -5810,7 +5925,7 @@ impl WhiskyApp {
         let name = name.trim().to_owned();
         if name.is_empty() {
             self.bottle_dialog = Some(dialog);
-            self.show_notice("容器名称不能为空", cx);
+            self.show_notice(crate::i18n::s().state.bottle_name_empty, cx);
             return;
         }
         let operation = match dialog.kind {
@@ -5846,7 +5961,7 @@ impl WhiskyApp {
 
     pub(crate) fn start_move_bottle(&mut self, index: usize, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(bottle) = self.bottles.get(index) else {
@@ -5866,7 +5981,7 @@ impl WhiskyApp {
 
     pub(crate) fn start_export_bottle(&mut self, index: usize, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(bottle) = self.bottles.get(index) else {
@@ -5892,7 +6007,7 @@ impl WhiskyApp {
 
     pub(crate) fn reveal_bottle(&mut self, index: usize, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(container) = self.bottles.get(index).map(|bottle| bottle.path.clone()) else {
@@ -5906,7 +6021,7 @@ impl WhiskyApp {
     /// starts the chosen Windows file in the selected bottle.
     pub(crate) fn start_bottle_run(&mut self, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(container) = self.selected_container() else {
@@ -5929,7 +6044,7 @@ impl WhiskyApp {
     /// Pin an arbitrary Windows file the installed-programs scan did not find.
     pub(crate) fn start_pin_program(&mut self, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(container) = self.selected_container() else {
@@ -5951,7 +6066,7 @@ impl WhiskyApp {
 
     pub(crate) fn open_bottle_tool(&mut self, tool: &'static str, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(container) = self.selected_container() else {
@@ -5964,7 +6079,7 @@ impl WhiskyApp {
     /// Collect the stability report shown in the Diagnostics sheet.
     pub(crate) fn load_diagnostics(&mut self, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(container) = self.selected_container() else {
@@ -5980,7 +6095,7 @@ impl WhiskyApp {
     /// Choose a file, then have the helper write the stability report there.
     pub(crate) fn export_diagnostics(&mut self, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(container) = self.selected_container() else {
@@ -6014,7 +6129,7 @@ impl WhiskyApp {
     /// GameDB availability) for the selected bottle.
     pub(crate) fn run_bottle_checks(&mut self, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(container) = self.selected_container() else {
@@ -6030,7 +6145,7 @@ impl WhiskyApp {
     /// Play the Wine audio probe tone in the selected bottle.
     pub(crate) fn test_audio(&mut self, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(container) = self.selected_container() else {
@@ -6056,15 +6171,15 @@ impl WhiskyApp {
 
     pub(crate) fn install_wine_runtime(&mut self, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         if !self.service_available("setup.install") {
-            self.show_notice("运行时安装服务接入后可操作", cx);
+            self.show_notice(crate::i18n::s().state.runtime_install_unavailable, cx);
             return;
         }
         if self.offline() {
-            self.show_notice("离线模式已开启，无法下载 Wine 运行时", cx);
+            self.show_notice(crate::i18n::s().state.offline_wine_download_blocked, cx);
             return;
         }
         self.setup_dialog = true;
@@ -6078,11 +6193,11 @@ impl WhiskyApp {
 
     pub(crate) fn install_rosetta(&mut self, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         if self.offline() {
-            self.show_notice("离线模式已开启，无法安装 Rosetta 2", cx);
+            self.show_notice(crate::i18n::s().state.offline_rosetta_blocked, cx);
             return;
         }
         self.setup_dialog = true;
@@ -6104,7 +6219,7 @@ impl WhiskyApp {
     /// Open the metadata/cover/GameDB sheet for one library card.
     pub(crate) fn open_game_info(&mut self, index: usize, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(game) = self.game(index) else {
@@ -6161,7 +6276,7 @@ impl WhiskyApp {
             .unwrap_or_default();
         let entity = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("搜索游戏名称…")
+                .placeholder(crate::i18n::s().state.input_game_name_search)
                 .default_value(title)
         });
         if let Some(page) = self.game_info.as_mut() {
@@ -6175,15 +6290,15 @@ impl WhiskyApp {
             return;
         }
         if !self.service_available("metadata.search") || self.metadata_sources().is_empty() {
-            self.show_notice("搜索不可用；请在设置中启用资料来源并确认桥接服务支持搜索", cx);
+            self.show_notice(crate::i18n::s().state.search_unavailable_config, cx);
             return;
         }
         if !self.game_info.as_ref().is_some_and(|page| self.metadata_sources().contains(&page.editor.search_source)) {
-            self.show_notice("此平台未获准搜索；请在设置中启用，或选择其他平台", cx);
+            self.show_notice(crate::i18n::s().state.search_platform_not_allowed, cx);
             return;
         }
         if self.offline() {
-            self.show_notice("离线模式已开启，无法搜索游戏信息", cx);
+            self.show_notice(crate::i18n::s().state.offline_search_blocked, cx);
             return;
         }
         let Some(page) = self.game_info.as_mut() else {
@@ -6199,7 +6314,7 @@ impl WhiskyApp {
             .unwrap_or_else(|| page.title.clone());
         let query = query.trim().to_owned();
         if query.is_empty() {
-            self.show_notice("请输入要搜索的游戏名称", cx);
+            self.show_notice(crate::i18n::s().state.search_enter_game_name, cx);
             return;
         }
         page.editor.search_request += 1;
@@ -6240,7 +6355,7 @@ impl WhiskyApp {
         let provider = page.groups[source].source.clone();
         page.error = page.editor.bind(&provider, raw).err();
         if page.error.is_none() {
-            page.editor.message = Some("已加入草稿；保存后生效".into());
+            page.editor.message = Some(crate::i18n::s().state.staged_to_draft_save_to_apply.into());
         }
         cx.notify();
     }
@@ -6258,7 +6373,7 @@ impl WhiskyApp {
 
     pub(crate) fn refresh_game_characters(&mut self, cx: &mut Context<Self>) {
         if self.offline() {
-            self.show_notice("离线模式已开启，无法获取人物资料", cx);
+            self.show_notice(crate::i18n::s().state.offline_characters_blocked, cx);
             return;
         }
         let Some(page) = self.game_info.as_ref().filter(|page| !page.applying) else { return };
@@ -6320,7 +6435,7 @@ impl WhiskyApp {
         let available = self.service_available("gameConfig.apply");
         if let Some(matched) = self.game_info.as_ref().and_then(|page| page.matches.as_ref()).and_then(|rows| rows.get(index)) {
             if !matched.apply_available(available) {
-                let reason = if matched.availability_reason.is_empty() { "当前会话提供 GameDB 配置参考".into() }
+                let reason = if matched.availability_reason.is_empty() { crate::i18n::s().state.gamedb_session_reference.into() }
                              else { matched.availability_reason.clone() };
                 self.show_notice(reason, cx);
                 return;
@@ -6339,7 +6454,7 @@ impl WhiskyApp {
             .unwrap_or_default()
             .to_owned();
         if game_id.is_empty() {
-            self.show_notice("GameDB 条目无效", cx);
+            self.show_notice(crate::i18n::s().state.gamedb_entry_invalid, cx);
             return;
         }
         let variant_id = matched.variant_id.clone();
@@ -6358,7 +6473,7 @@ impl WhiskyApp {
         cx: &mut Context<Self>,
     ) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(container) = self.selected_container() else {
@@ -6490,7 +6605,7 @@ impl WhiskyApp {
     pub(crate) fn toggle_launcher_autostart(&mut self, index: usize, cx: &mut Context<Self>) {
         let Some(game) = self.game(index) else { return };
         if self.demo || game.container.is_empty() {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let (container, entry_id, identity, enabled) = (
@@ -6604,22 +6719,22 @@ impl WhiskyApp {
     /// optimistic queued row also stops the button from sending twice.
     pub(crate) fn start_winetricks_install(&mut self, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         if self.winetricks.job.as_ref().is_some_and(InstallJob::running) {
             return;
         }
         if self.offline() {
-            self.show_notice("离线模式已开启，无法安装组件", cx);
+            self.show_notice(crate::i18n::s().state.offline_winetricks_blocked, cx);
             return;
         }
         let Some(container) = self.selected_container() else {
-            self.show_notice("请先选择一个容器", cx);
+            self.show_notice(crate::i18n::s().state.select_bottle_first, cx);
             return;
         };
         let Some(verb) = self.winetricks.selected.clone() else {
-            self.show_notice("请先选择一个组件", cx);
+            self.show_notice(crate::i18n::s().state.select_component_first, cx);
             return;
         };
         let mut job = InstallJob::new(&container);
@@ -6648,7 +6763,7 @@ impl WhiskyApp {
             self.move_entry = None;
             self.preview.sheet = None;
             self.preview.sheet_history.clear();
-            self.show_notice("Steam 条目不能移动到其他容器", cx);
+            self.show_notice(crate::i18n::s().state.steam_cannot_move, cx);
             return;
         }
         self.move_entry = Some(MoveEntryState {
@@ -6688,11 +6803,11 @@ impl WhiskyApp {
     pub(crate) fn receive_external_file(&mut self, file: crate::desktop_open::ExternalOpen, cx: &mut Context<Self>) {
         if !self.demo && !self.catalogue_ready {
             if self.external_opens.len() + self.desktop_resolutions.len() < 64 { self.external_opens.push_back(file); }
-            else { self.show_notice("待打开文件已达到 64 项，请等待当前请求处理", cx); }
+            else { self.show_notice(crate::i18n::s().state.pending_files_limit, cx); }
             return;
         }
         if let Some(id) = &file.container_id {
-            if self.external_opens.len() + self.desktop_resolutions.len() >= 64 { self.show_notice("待解析快捷方式已达到 64 项", cx); return; }
+            if self.external_opens.len() + self.desktop_resolutions.len() >= 64 { self.show_notice(crate::i18n::s().state.pending_shortcuts_limit, cx); return; }
             self.desktop_resolution_generation = self.desktop_resolution_generation.wrapping_add(1);
             let request = self.desktop_resolution_generation;
             self.bridge.resolve_desktop_open(request, id, &file.path.to_string_lossy());
@@ -6711,15 +6826,15 @@ impl WhiskyApp {
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_else(|| path.to_string_lossy().into_owned());
         if !runnable.contains(&extension.as_str()) || !path.is_file() {
-            self.show_notice(format!("无法运行 {name}：请选择 Windows 程序或安装包"), cx);
+            self.show_notice(crate::i18n::fmt::notice_cannot_run_file(&name), cx);
             return;
         }
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         if self.bottles.is_empty() {
-            self.show_notice("请先创建一个容器", cx);
+            self.show_notice(crate::i18n::s().state.create_bottle_first, cx);
             return;
         }
         if let Some(container) = file.container {
@@ -6730,7 +6845,7 @@ impl WhiskyApp {
                 self.select_bottle(Some(index), cx);
                 self.run_file_in(index, &path.to_string_lossy(), &name, cx);
             } else {
-                self.show_notice("快捷方式指向的容器已移动或移除，请重新创建快捷方式", cx);
+                self.show_notice(crate::i18n::s().state.shortcut_bottle_missing, cx);
             }
             return;
         }
@@ -6761,11 +6876,11 @@ impl WhiskyApp {
             return;
         };
         if !bottle.available {
-            self.show_notice("所选容器不可用", cx);
+            self.show_notice(crate::i18n::s().state.selected_bottle_unavailable, cx);
             return;
         }
         let container = bottle.path.clone();
-        self.show_notice(format!("正在启动 {name}"), cx);
+        self.show_notice(crate::i18n::fmt::notice_launching(&name), cx);
         self.bridge.run_program(&container, path, name);
     }
 
@@ -6789,7 +6904,7 @@ impl WhiskyApp {
             self.program_settings.title = game.title;
             self.program_settings.loading = false;
             self.program_settings.error =
-                Some("该条目没有可用的 .exe，无法编辑程序设置。".to_owned());
+                Some(crate::i18n::s().state.no_exe_cannot_edit_program_settings.to_owned());
             cx.notify();
             return;
         }
@@ -6959,8 +7074,13 @@ impl WhiskyApp {
                     this.program_settings.cache_pending = false;
                     this.program_settings.cache_bytes = Some(bytes);
                     match cleared {
-                        Ok(()) => this.show_notice("磁盘缓存已清除", cx),
-                        Err(error) => this.show_notice(format!("清除缓存失败：{error}"), cx),
+                        Ok(()) => this.show_notice(crate::i18n::s().state.disk_cache_cleared, cx),
+                        Err(error) => {
+                            this.show_notice(
+                                crate::i18n::fmt::notice_clear_cache_failed(&error.to_string()),
+                                cx,
+                            )
+                        }
                     }
                     cx.notify();
                 }
@@ -7041,10 +7161,10 @@ impl WhiskyApp {
                 });
             let (Ok(width), Ok(height)) = (width.trim().parse::<i64>(), height.trim().parse::<i64>())
             else {
-                return Err("自定义分辨率必须是整数".to_owned());
+                return Err(crate::i18n::s().state.custom_res_integer.to_owned());
             };
             if !(200..=16_384).contains(&width) || !(200..=16_384).contains(&height) {
-                return Err("自定义分辨率超出范围".to_owned());
+                return Err(crate::i18n::s().state.custom_res_range.to_owned());
             }
             if let Some(overrides) = settings.overrides.as_mut() {
                 overrides.custom_resolution_width = Some(width);
@@ -7080,10 +7200,10 @@ impl WhiskyApp {
                 continue;
             }
             if key.contains('=') || key.contains('\0') {
-                return Err("环境变量名不能包含 = 或 NUL".to_owned());
+                return Err(crate::i18n::s().state.env_name_invalid_chars.to_owned());
             }
             if environment.insert(key.clone(), value).is_some() {
-                return Err(format!("环境变量 {key} 重复"));
+                return Err(crate::i18n::fmt::duplicate_env_key(&key));
             }
         }
         Ok((container, executable, settings, arguments, environment))
@@ -7166,7 +7286,7 @@ impl WhiskyApp {
         let destination = crate::program_settings::expand_home(destination.trim());
         if !destination.starts_with('/') {
             self.program_settings.shortcut_error =
-                Some("快捷方式目标必须是绝对路径。".to_owned());
+                Some(crate::i18n::s().state.shortcut_target_absolute.to_owned());
             cx.notify();
             return;
         }
@@ -7390,7 +7510,7 @@ impl WhiskyApp {
             || name.contains('=')
             || name.contains(',')
         {
-            self.show_notice("DLL 名称不能为空，且不能包含空格、= 或 ,", cx);
+            self.show_notice(crate::i18n::s().state.dll_name_invalid, cx);
             return;
         }
         let Some(settings) = self.program_settings.settings.as_mut() else {
@@ -7702,7 +7822,7 @@ impl WhiskyApp {
     /// Native multi-select folder picker, starting inside the bottle's C drive.
     pub(crate) fn choose_scan_roots(&mut self, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(container) = self.scan_container() else {
@@ -7718,7 +7838,7 @@ impl WhiskyApp {
     /// unlike a scan root whose children become the games.
     pub(crate) fn choose_assign_folders(&mut self, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(container) = self.scan_container() else {
@@ -7736,11 +7856,11 @@ impl WhiskyApp {
     pub(crate) fn add_scan_root(&mut self, path: &str, cx: &mut Context<Self>) {
         let path = path.trim();
         if path.is_empty() {
-            self.show_notice("请输入文件夹路径", cx);
+            self.show_notice(crate::i18n::s().state.enter_folder_path, cx);
             return;
         }
         if !path.starts_with('/') {
-            self.show_notice("请输入绝对路径", cx);
+            self.show_notice(crate::i18n::s().state.enter_absolute_path, cx);
             return;
         }
         self.edit_folder(FolderEdit::AddRoot(path.to_owned()), cx);
@@ -7754,7 +7874,7 @@ impl WhiskyApp {
         cx: &mut Context<Self>,
     ) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(source) = self.scan_container() else {
@@ -7783,7 +7903,7 @@ impl WhiskyApp {
 
     pub(crate) fn start_scan(&mut self, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(container) = self.scan_container() else {
@@ -7791,7 +7911,7 @@ impl WhiskyApp {
         };
         if let Some(active) = self.scan.as_ref().filter(|scan| scan.running()) {
             if active.container != container {
-                self.show_notice("另一个容器的扫描正在进行", cx);
+                self.show_notice(crate::i18n::s().state.other_bottle_scan_running, cx);
             }
             return;
         }
@@ -7889,7 +8009,7 @@ impl WhiskyApp {
     /// The "刷新" row: re-read now; the poll loop continues afterwards.
     pub(crate) fn refresh_processes(&mut self, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(container) = self.selected_container() else {
@@ -7957,7 +8077,7 @@ impl WhiskyApp {
     /// refreshed list settles it; a rejection rolls the flag back.
     pub(crate) fn toggle_program_pin(&mut self, path: &str, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(container) = self.selected_container() else {
@@ -7986,7 +8106,7 @@ impl WhiskyApp {
     /// Flip a program's block state; same optimistic contract as the pin.
     pub(crate) fn toggle_program_block(&mut self, path: &str, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(container) = self.selected_container() else {
@@ -8035,7 +8155,7 @@ impl WhiskyApp {
     /// `executable` override.
     pub(crate) fn play_program(&mut self, path: &str, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(container) = self.selected_container() else {
@@ -8065,14 +8185,14 @@ impl WhiskyApp {
                     .unwrap_or_else(|| path.to_owned())
             });
         if let Some(entry_id) = entry_id {
-            self.show_notice(format!("正在启动 {program_name}"), cx);
+            self.show_notice(crate::i18n::fmt::notice_launching(&program_name), cx);
             self.runtime.set_state(&entry_id, RuntimeState::Preparing);
             self.bridge.launch(&container, &entry_id, Some(path));
         } else if let Some(program) = program.filter(|p| p.available && !p.blocked) {
-            self.show_notice(format!("正在启动 {}", program.name), cx);
+            self.show_notice(crate::i18n::fmt::notice_launching(&program.name), cx);
             self.bridge.run_program(&container, &program.path, &program.name);
         } else {
-            self.show_notice("该程序不可用或已被屏蔽", cx);
+            self.show_notice(crate::i18n::s().state.program_unavailable_or_blocked, cx);
             return;
         }
         cx.notify();
@@ -8109,7 +8229,7 @@ impl WhiskyApp {
             )
         });
         let Some((container, entry_id, title, Some(folder))) = details else {
-            self.show_notice("该条目没有可指定的程序", cx);
+            self.show_notice(crate::i18n::s().state.entry_no_selectable_program, cx);
             return;
         };
         if container.is_empty() {
@@ -8148,15 +8268,15 @@ impl WhiskyApp {
             return;
         };
         if self.demo || game.container.is_empty() {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         if !game.supports_multi_executable() {
-            self.show_notice("该条目不支持配置多个 .exe 入口", cx);
+            self.show_notice(crate::i18n::s().state.entry_no_multi_exe, cx);
             return;
         }
         let Some(folder) = game.game_directory() else {
-            self.show_notice("游戏目录不可用，请刷新游戏库后重试。", cx);
+            self.show_notice(crate::i18n::s().state.game_dir_unavailable, cx);
             return;
         };
         let mut selected = game.launch_executables.clone();
@@ -8225,7 +8345,7 @@ impl WhiskyApp {
                         .map(|n| n.to_string_lossy().into_owned())
                         .unwrap_or_else(|| path.to_owned())
                 });
-            self.show_notice(format!("正在启动 {title}"), cx);
+            self.show_notice(crate::i18n::fmt::notice_launching(&title), cx);
             self.active_executables
                 .insert(picker.entry_id.clone(), path.to_owned());
             self.runtime
@@ -8243,7 +8363,7 @@ impl WhiskyApp {
     /// settles the removal or rolls it back with the reason on the toast.
     pub(crate) fn kill_process(&mut self, pid: i64, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(container) = self.selected_container() else {
@@ -8310,7 +8430,7 @@ impl WhiskyApp {
                 return PrimaryAction::unavailable();
             }
             return PrimaryAction {
-                label: "启动",
+                label: crate::i18n::s().runtime.launch,
                 action: Some(RuntimeAction::Launch),
                 enabled: true,
                 busy: false,
@@ -8360,7 +8480,7 @@ impl WhiskyApp {
                     .game(index)
                     .map(|g| g.title.clone())
                     .unwrap_or_default();
-                self.show_notice(format!("正在启动 {title}"), cx);
+                self.show_notice(crate::i18n::fmt::notice_launching(&title), cx);
                 self.runtime.set_state(&entry_id, RuntimeState::Preparing);
                 self.bridge.launch(&container, &entry_id, None);
                 if !cfg!(target_os = "linux") && self.capture.panel_open
@@ -8400,7 +8520,7 @@ impl WhiskyApp {
         let next = library_view::next_rating(previous, star);
         let (container, entry_id) = (game.container.clone(), game.id.clone());
         if self.demo || container.is_empty() {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         self.rating_edits.begin(&entry_key(&container, &entry_id), previous);
@@ -8418,7 +8538,7 @@ impl WhiskyApp {
         let (container, entry_id, previous) =
             (game.container.clone(), game.id.clone(), game.hidden);
         if self.demo || container.is_empty() {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let next = !previous;
@@ -8657,11 +8777,12 @@ impl WhiskyApp {
         cx.notify();
     }
     pub(crate) fn preview_title(&self) -> SharedString {
+        let strings = crate::i18n::s();
         if self.inline_settings_active() {
             return if self.translation_page.active {
-                "游戏翻译".into()
+                strings.capture.title.into()
             } else {
-                "设置".into()
+                strings.menus.settings.into()
             };
         }
         match self.preview.page {
@@ -8672,23 +8793,27 @@ impl WhiskyApp {
                 {
                     let mut parts = Vec::new();
                     if self.studio_filter.is_active() {
-                        parts.push(format!("厂商：{}", self.studio_filter.display_label()));
+                        parts.push(crate::i18n::fmt::title_studio(
+                            &self.studio_filter.display_label(),
+                        ));
                     }
                     if self.tag_filter.is_active() {
-                        parts.push(format!("标签：{}", self.tag_filter.display_label()));
+                        parts.push(crate::i18n::fmt::title_tag(
+                            &self.tag_filter.display_label(),
+                        ));
                     }
-                    format!("游戏库 · {}", parts.join(" · ")).into()
+                    format!("{} · {}", strings.library.title, parts.join(" · ")).into()
                 } else {
-                    "游戏库".into()
+                    strings.library.title.into()
                 }
             }
-            PreviewPage::Statistics => "游玩统计".into(),
-            PreviewPage::Launchers => "启动器".into(),
+            PreviewPage::Statistics => strings.library.statistics.into(),
+            PreviewPage::Launchers => strings.library.launchers.into(),
             PreviewPage::Bottle => self.bottle_name().to_owned().into(),
-            PreviewPage::ConfigureBottle => "容器配置".into(),
-            PreviewPage::Programs => "已安装的程序".into(),
-            PreviewPage::Processes => "运行中的进程".into(),
-            PreviewPage::GameConfigs => "游戏配置".into(),
+            PreviewPage::ConfigureBottle => strings.bottle.configure_bottle.into(),
+            PreviewPage::Programs => strings.bottle.installed_programs.into(),
+            PreviewPage::Processes => strings.bottle.running_processes.into(),
+            PreviewPage::GameConfigs => strings.bottle.game_configs.into(),
         }
     }
     /// Enabled scraper sources, in provider order. Defaults to all of them.
@@ -8790,7 +8915,7 @@ impl WhiskyApp {
     ) -> (Entity<InputState>, Subscription) {
         let input = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("添加标签，回车确认…")
+                .placeholder(crate::i18n::s().library.tag_input_placeholder)
                 .default_value(value)
         });
         let sub = cx.subscribe(&input, |this, _, event: &InputEvent, cx| {
@@ -8810,7 +8935,7 @@ impl WhiskyApp {
     ) -> (Entity<InputState>, Subscription) {
         let input = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("输入新的标签名称…")
+                .placeholder(crate::i18n::s().library.tag_rename_placeholder)
                 .default_value(value)
         });
         let sub = cx.subscribe(&input, |this, _, event: &InputEvent, cx| {
@@ -9204,7 +9329,7 @@ impl WhiskyApp {
         self.tag_bar_hint_scheduled = true;
         self.save_library_ui_prefs();
         if !self.has_filter_bar_content() {
-            self.show_notice("当前游戏库暂无标签或厂商信息", cx);
+            self.show_notice(crate::i18n::s().state.no_tags_or_studios, cx);
             cx.notify();
             return;
         }
@@ -9267,7 +9392,7 @@ impl WhiskyApp {
             return;
         };
         if self.demo || game.container.is_empty() {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let normalized = library_view::normalize_tags(tags);
@@ -9359,7 +9484,7 @@ impl WhiskyApp {
 
     pub(crate) fn open_game_tags_sheet(&mut self, index: usize, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         if self.game(index).is_some() {
@@ -9369,7 +9494,7 @@ impl WhiskyApp {
 
     pub(crate) fn open_manage_tags_sheet(&mut self, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         self.open_preview_sheet(PreviewSheet::ManageTags, cx);
@@ -9425,14 +9550,14 @@ impl WhiskyApp {
         cx: &mut Context<Self>,
     ) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(old_clean) = library_view::normalize_tag(old_tag) else {
             return;
         };
         let Some(new_clean) = library_view::normalize_tag(new_tag) else {
-            self.show_notice("标签名不能为空", cx);
+            self.show_notice(crate::i18n::s().state.tag_name_empty, cx);
             return;
         };
         self.tag_manager_rename_target = None;
@@ -9448,7 +9573,7 @@ impl WhiskyApp {
 
     pub(crate) fn delete_library_tag(&mut self, tag: &str, cx: &mut Context<Self>) {
         if self.demo {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         let Some(clean) = library_view::normalize_tag(tag) else {
@@ -9555,11 +9680,11 @@ impl WhiskyApp {
             return;
         };
         if self.demo || game.container.is_empty() {
-            self.show_notice(DEMO_NOTICE, cx);
+            self.show_notice(demo_notice(), cx);
             return;
         }
         if !game.supports_multi_executable() {
-            self.show_notice("Steam 条目或缺少目录的游戏不支持多 exe 入口", cx);
+            self.show_notice(crate::i18n::s().state.multi_exe_unsupported, cx);
             return;
         }
         let key = entry_key(&game.container, &game.id);
@@ -9663,7 +9788,7 @@ impl WhiskyApp {
             .cloned()
             .collect();
         if selected.is_empty() {
-            self.show_notice("请至少勾选一个 .exe 启动入口", cx);
+            self.show_notice(crate::i18n::s().state.select_one_exe_entry, cx);
             return;
         }
         let picker = self.executable_picker.take().unwrap();
@@ -9925,7 +10050,7 @@ impl WhiskyApp {
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_else(|| executable.to_owned());
-        self.show_notice(format!("正在启动 {title} · {exe_name}"), cx);
+        self.show_notice(crate::i18n::fmt::notice_launching_entry(&title, &exe_name), cx);
         self.active_executables
             .insert(entry_id.to_owned(), executable.to_owned());
         self.runtime.set_state(entry_id, RuntimeState::Preparing);
@@ -9958,9 +10083,9 @@ fn entry_key(container: &str, entry_id: &str) -> String {
 /// applied — and `backend_from` names the one that could not run.
 fn backend_label(backend: Option<String>, backend_from: Option<String>) -> String {
     match (backend, backend_from) {
-        (Some(effective), Some(from)) => format!("{effective}（{from} 不可用，已回退）"),
+        (Some(effective), Some(from)) => crate::i18n::fmt::engine_fallback(&effective, &from),
         (Some(effective), None) => effective,
-        (None, _) => "按启动配置".to_owned(),
+        (None, _) => crate::i18n::s().runtime.by_launch_config.to_owned(),
     }
 }
 

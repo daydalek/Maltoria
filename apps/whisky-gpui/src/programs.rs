@@ -12,7 +12,9 @@ use crate::bridge::dto::ProgramDto;
 use crate::runtime::PendingEdits;
 
 /// Empty-state copy for the Programs page.
-pub(crate) const EMPTY_PROGRAMS: &str = "暂无程序";
+pub(crate) fn empty_programs() -> &'static str {
+    crate::i18n::s().bottle.empty_programs
+}
 
 #[derive(Debug, Default)]
 pub(crate) struct ProgramTable {
@@ -189,7 +191,7 @@ mod tests {
     fn an_empty_program_list_is_the_empty_state() {
         let mut table = ProgramTable::default();
         assert!(table.is_empty());
-        assert_eq!(EMPTY_PROGRAMS, "暂无程序");
+        assert_eq!(empty_programs(), "暂无程序");
         table.apply(vec![]);
         assert!(table.is_empty());
         table.apply(vec![program("/a/sample.exe", "Sample", true, false)]);

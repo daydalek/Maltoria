@@ -5,7 +5,7 @@ use gpui_kit::component::{
 use gpui_kit::{prelude::*, *};
 
 use crate::controls::*;
-use crate::preferences::{VISIBLE_MODES, picker_mode};
+use crate::preferences::{picker_mode, visible_modes};
 use crate::state::WhiskyApp;
 use crate::theme::*;
 
@@ -185,22 +185,24 @@ fn layout_preview(mode: usize, selected: bool) -> AnyElement {
 
 impl WhiskyApp {
     pub(crate) fn library_mode_menu(&self, cx: &Context<Self>) -> AnyElement {
-        // Hidden timeline variants report their parent entry (staggered → 列表).
+        let strings = crate::i18n::s();
+        let modes = visible_modes();
+        // Hidden timeline variants report their parent entry.
         let picked = picker_mode(self.mode);
-        let current = VISIBLE_MODES
+        let current = modes
             .iter()
             .find(|(index, ..)| *index == picked)
             .map(|(_, _, label, _)| *label)
-            .unwrap_or(VISIBLE_MODES[0].2);
+            .unwrap_or(modes[0].2);
         let view = cx.entity().downgrade();
         let mode = picked;
         Button::new("library-view-menu")
             .label(format!("{current}  ⌄"))
             .rounded_full()
             .h(px(34.))
-            .tooltip("切换游戏库界面")
+            .tooltip(strings.settings.view_picker_menu_tip)
             .dropdown_menu(move |mut menu, _, _| {
-                for &(index, _, label, _) in &VISIBLE_MODES {
+                for &(index, _, label, _) in &visible_modes() {
                     let view = view.clone();
                     menu = menu.item(PopupMenuItem::new(label).checked(mode == index).on_click(
                         move |_, _, cx| {
@@ -211,7 +213,7 @@ impl WhiskyApp {
                     ));
                 }
                 menu.item(PopupMenuItem::separator()).item(
-                    PopupMenuItem::new("界面偏好设置…").on_click({
+                    PopupMenuItem::new(crate::i18n::s().settings.view_picker_prefs).on_click({
                         let view = view.clone();
                         move |_, _, cx| {
                             let _ = view.update(cx, |this, cx| {
@@ -225,8 +227,10 @@ impl WhiskyApp {
     }
 
     pub(crate) fn library_mode_cards(&self, cx: &Context<Self>) -> AnyElement {
+        let strings = crate::i18n::s();
+        let modes = visible_modes();
         let mut rows = col().w_full().flex_shrink_0().gap(px(12.));
-        for pair in VISIBLE_MODES.chunks(2) {
+        for pair in modes.chunks(2) {
             let mut strip = row().w_full().gap(px(12.));
             for &(index, name, label, description) in pair {
                 let selected = picker_mode(self.mode) == index;
@@ -288,8 +292,8 @@ impl WhiskyApp {
             .child(
                 col()
                     .gap(px(3.))
-                    .child(div().font_weight(FontWeight::SEMIBOLD).child("游戏库界面"))
-                    .child(muted("选择适合你的浏览方式，也可从游戏库右上角快速切换。")),
+                    .child(div().font_weight(FontWeight::SEMIBOLD).child(strings.settings.view_picker_heading))
+                    .child(muted(strings.settings.view_picker_sub)),
             )
             .child(rows)
             .into_any_element()

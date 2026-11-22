@@ -68,14 +68,15 @@ impl RuntimeState {
 
     /// Short phase label mirroring Swift's `phaseLabel`, used by the card badge.
     pub(crate) fn phase_label(self) -> &'static str {
+        let r = &crate::i18n::s().runtime;
         match self {
-            Self::CheckingLaunch => "启动检查…",
-            Self::Preparing => "正在准备…",
-            Self::Launching => "正在启动…",
-            Self::StartingSteam => "正在启动 Steam",
-            Self::WaitingForSteam => "等待 Steam…",
-            Self::Running => "运行中",
-            Self::Idle | Self::Unknown => "正在启动…",
+            Self::CheckingLaunch => r.checking_launch,
+            Self::Preparing => r.preparing,
+            Self::Launching => r.launching,
+            Self::StartingSteam => r.starting_steam,
+            Self::WaitingForSteam => r.waiting_for_steam,
+            Self::Running => r.running,
+            Self::Idle | Self::Unknown => r.launching,
         }
     }
 }
@@ -107,9 +108,9 @@ pub(crate) struct PrimaryAction {
 impl PrimaryAction {
     /// Neutral, disabled "启动": used before a container is configured and for
     /// states this build does not understand. Never panics, never guesses.
-    pub(crate) const fn unavailable() -> Self {
+    pub(crate) fn unavailable() -> Self {
         Self {
-            label: "启动",
+            label: crate::i18n::s().runtime.launch,
             action: None,
             enabled: false,
             busy: false,
@@ -127,15 +128,17 @@ pub(crate) fn primary_action_for(state: RuntimeState, capabilities: i64) -> Prim
     let can_launch = capabilities & CAP_LAUNCH != 0;
     let can_cancel = capabilities & CAP_CANCEL != 0;
     let can_stop = capabilities & CAP_STOP != 0;
+    let r = &crate::i18n::s().runtime;
+    let c = &crate::i18n::s().common;
     match state {
         RuntimeState::Idle => PrimaryAction {
-            label: "启动",
+            label: r.launch,
             action: can_launch.then_some(RuntimeAction::Launch),
             enabled: can_launch,
             busy: false,
         },
         RuntimeState::CheckingLaunch => PrimaryAction {
-            label: "正在启动…",
+            label: r.launching,
             action: None,
             enabled: false,
             busy: true,
@@ -143,14 +146,14 @@ pub(crate) fn primary_action_for(state: RuntimeState, capabilities: i64) -> Prim
         RuntimeState::Preparing | RuntimeState::Launching => {
             if can_cancel {
                 PrimaryAction {
-                    label: "取消",
+                    label: c.cancel,
                     action: Some(RuntimeAction::Cancel),
                     enabled: true,
                     busy: false,
                 }
             } else {
                 PrimaryAction {
-                    label: "正在启动…",
+                    label: r.launching,
                     action: None,
                     enabled: false,
                     busy: true,
@@ -161,7 +164,7 @@ pub(crate) fn primary_action_for(state: RuntimeState, capabilities: i64) -> Prim
         // running entry reads as "运行中" rather than offering a control
         // the helper rejects.
         RuntimeState::Running if !can_stop => PrimaryAction {
-            label: "运行中",
+            label: r.running,
             action: None,
             enabled: false,
             busy: false,
@@ -169,14 +172,14 @@ pub(crate) fn primary_action_for(state: RuntimeState, capabilities: i64) -> Prim
         RuntimeState::Running | RuntimeState::StartingSteam | RuntimeState::WaitingForSteam => {
             if can_stop {
                 PrimaryAction {
-                    label: "停止",
+                    label: r.stop,
                     action: Some(RuntimeAction::Stop),
                     enabled: true,
                     busy: false,
                 }
             } else {
                 PrimaryAction {
-                    label: "正在启动…",
+                    label: r.launching,
                     action: None,
                     enabled: false,
                     busy: true,

@@ -172,6 +172,45 @@ private actor SpyKeychainCredentialStore: CredentialStore {
     #expect(await spyKeychain.hasSecretCount == 0)
 }
 
+@Test @MainActor func catalogLoadSkipsUnreadableProfilesAndRepairsStorage() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let fileURL = root.appendingPathComponent("bridge-profiles.json")
+    try Data(#"""
+    {"version":1,"remoteProvidersEnabled":true,
+     "profiles":[
+       {"id":"F42821E7-364C-4168-9FAD-BB75CA19389B","name":"Legacy ChatGPT","kind":"chatGPTPlan",
+        "baseURL":"https:\/\/api.openai.com\/v1","defaultSourceLanguage":"auto","defaultTargetLanguage":"en",
+        "modelID":"gpt-6-luna","openAIChatTokenLimitField":"max_completion_tokens","thinkingLevel":"default"},
+       {"id":"729F95B1-D17E-473D-B6B8-497851528CDD","name":"Local","kind":"openAIChat",
+        "baseURL":"http:\/\/127.0.0.1:8765\/v1","defaultSourceLanguage":"auto","defaultTargetLanguage":"en",
+        "modelID":"local-model","openAIChatTokenLimitField":"max_completion_tokens","thinkingLevel":"default"},
+       {"id":"11111111-1111-4111-8111-111111111111","name":"Insecure","kind":"openAIChat",
+        "baseURL":"http:\/\/example.com\/v1","defaultSourceLanguage":"auto","defaultTargetLanguage":"en",
+        "modelID":"bad","openAIChatTokenLimitField":"max_completion_tokens","thinkingLevel":"default"}
+     ],
+     "settings":{"sourceLanguage":"auto","targetLanguage":"en","outputTokenLimit":512,
+        "historyRetentionTurns":20,"contextTurnLimit":8,"includeSourceHistory":true,
+        "includeTranslatedHistory":true,"customPrompt":"","credentialStorageMode":"sessionOnly",
+        "translationDebounceMs":150,"sentenceCacheEnabled":true}}
+    """#.utf8).write(to: fileURL)
+
+    let service = ApplicationTranslationService(directory: root, credentials: MemoryCredentialStore())
+    let listed = try await service.call("translation.providers/list", params: [:])
+    #expect(listed.array?.compactMap { $0.object?["name"]?.string } == ["Local"])
+    let settings = try await service.call("translation.settings/get", params: [:])
+    #expect(settings.object?["settings"] != nil)
+
+    let repaired = String(decoding: try Data(contentsOf: fileURL), as: UTF8.self)
+    #expect(!repaired.contains("chatGPTPlan"))
+    #expect(!repaired.contains("Insecure"))
+
+    let reloaded = ApplicationTranslationService(directory: root, credentials: MemoryCredentialStore())
+    let relisted = try await reloaded.call("translation.providers/list", params: [:])
+    #expect(relisted.array?.count == 1)
+}
+
 @Test @MainActor func sentenceCacheListAndDeleteRPCs() async throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }

@@ -56,11 +56,10 @@ pub(crate) enum AppearanceMode {
     Dark,
 }
 
-pub(crate) const APPEARANCE_OPTIONS: [(&str, &str); 3] = [
-    ("跟随系统", "system"),
-    ("浅色", "light"),
-    ("深色", "dark"),
-];
+pub(crate) fn appearance_options() -> [(&'static str, &'static str); 3] {
+    let t = &crate::i18n::s().theme;
+    [(t.system, "system"), (t.light, "light"), (t.dark, "dark")]
+}
 
 impl AppearanceMode {
     pub(crate) fn from_wire(raw: &str) -> Self {
@@ -80,10 +79,11 @@ impl AppearanceMode {
     }
 
     pub(crate) fn label(self) -> &'static str {
+        let t = &crate::i18n::s().theme;
         match self {
-            Self::System => "跟随系统",
-            Self::Light => "浅色",
-            Self::Dark => "深色",
+            Self::System => t.system,
+            Self::Light => t.light,
+            Self::Dark => t.dark,
         }
     }
 

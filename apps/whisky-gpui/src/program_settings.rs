@@ -576,7 +576,7 @@ pub(crate) fn normalized_patch_for_dirty_check(
 
 pub(crate) fn locale_label(raw: &str) -> &str {
     match raw {
-        "" => "自动",
+        "" => crate::i18n::s().program_settings.locale_auto,
         "ja_JP.UTF-8" => "日本語",
         "zh_CN.UTF-8" => "简体中文",
         "zh_TW.UTF-8" => "繁體中文",
@@ -595,7 +595,7 @@ pub(crate) fn locale_label(raw: &str) -> &str {
 
 pub(crate) fn graphics_label(raw: &str) -> &str {
     match raw {
-        "recommended" => "自动推荐",
+        "recommended" => crate::i18n::s().program_settings.gfx_recommended,
         "d3dMetal" => "D3DMetal",
         "dxvk" => "DXVK",
         "dxmt" => "DXMT",
@@ -606,41 +606,40 @@ pub(crate) fn graphics_label(raw: &str) -> &str {
 
 pub(crate) fn upscaler_label(raw: &str) -> &str {
     match raw {
-        "off" => "关闭",
+        "off" => crate::i18n::s().common.off,
         "metalfx" => "MetalFX Spatial",
         "anime4k" => "Anime4K (CNN x2 S)",
         "realcugan" => "Real-CUGAN (models-se x2)",
-        "adaptive" => "动态 MetalFX／静态 Real-CUGAN",
+        "adaptive" => crate::i18n::config::option_title("gdiUpscaler", "adaptive", raw),
         "realesrgan" => "Real-ESRGAN AnimeVideo-v3 (x2)",
-        "adaptive-realesrgan" => "动态 MetalFX／静态 AnimeVideo-v3",
-        "adaptive-anime4k" => "动态 Anime4K／静态 Real-CUGAN",
-        "adaptive-anime4k-realesrgan" => "动态 Anime4K／静态 AnimeVideo-v3",
+        "adaptive-realesrgan" => crate::i18n::config::option_title("gdiUpscaler", "adaptive-realesrgan", raw),
+        "adaptive-anime4k" => crate::i18n::config::option_title("gdiUpscaler", "adaptive-anime4k", raw),
+        "adaptive-anime4k-realesrgan" => crate::i18n::config::option_title("gdiUpscaler", "adaptive-anime4k-realesrgan", raw),
         other => other,
     }
 }
 
 pub(crate) fn cache_label(raw: &str) -> &str {
     match raw {
-        "off" => "关闭跨场景缓存",
-        "memory" => "本次游戏缓存",
-        "persistent" => "缓存并保存到磁盘",
+        "off" | "memory" | "persistent" => crate::i18n::config::option_title("gdiUpscalerCache", raw, raw),
         other => other,
     }
 }
 
 pub(crate) fn hud_label(raw: &str) -> &str {
+    let ps = &crate::i18n::s().program_settings;
     match raw {
-        "full" => "完整",
-        "partial" => "部分",
-        "fps" => "仅 FPS",
-        "off" => "关闭",
+        "full" => ps.hud_full,
+        "partial" => ps.hud_partial,
+        "fps" => ps.hud_fps,
+        "off" => crate::i18n::s().common.off,
         other => other,
     }
 }
 
 pub(crate) fn sync_label(raw: &str) -> &str {
     match raw {
-        "none" => "关闭",
+        "none" => crate::i18n::s().common.off,
         "esync" => "ESync",
         "fsync" => "FSync",
         "msync" => "MSync",
@@ -655,19 +654,19 @@ pub(crate) fn resolution_label(raw: &str) -> &str {
         "r1920x1080" => "1920 × 1080",
         "r2560x1440" => "2560 × 1440",
         "r3840x2160" => "3840 × 2160",
-        "matchDisplay" => "匹配显示器",
-        "custom" => "自定义",
+        "matchDisplay" | "custom" => crate::i18n::config::option_title("resolutionPreset", raw, raw),
         other => other,
     }
 }
 
 pub(crate) fn dll_mode_label(raw: &str) -> &str {
+    let ps = &crate::i18n::s().program_settings;
     match raw {
-        "b" => "仅内建",
-        "n" => "仅原生",
-        "n,b" => "原生优先",
-        "b,n" => "内建优先",
-        "" => "禁用",
+        "b" => ps.dll_builtin_only,
+        "n" => ps.dll_native_only,
+        "n,b" => ps.dll_native_first,
+        "b,n" => ps.dll_builtin_first,
+        "" => ps.dll_disabled,
         other => other,
     }
 }
@@ -679,16 +678,16 @@ pub(crate) fn relative_time(unix_seconds: f64) -> String {
         .unwrap_or(0.0);
     let delta = (now - unix_seconds).max(0.0) as u64;
     match delta {
-        0..=59 => "刚刚".to_owned(),
-        60..=3_599 => format!("{} 分钟前", delta / 60),
-        3_600..=86_399 => format!("{} 小时前", delta / 3_600),
-        _ => format!("{} 天前", delta / 86_400),
+        0..=59 => crate::i18n::s().program_settings.just_now.to_owned(),
+        60..=3_599 => crate::i18n::fmt::relative_minutes_ago(delta / 60),
+        3_600..=86_399 => crate::i18n::fmt::relative_hours_ago(delta / 3_600),
+        _ => crate::i18n::fmt::relative_days_ago(delta / 86_400),
     }
 }
 
 pub(crate) fn duration_label(seconds: Option<f64>) -> String {
     let Some(seconds) = seconds.filter(|seconds| *seconds >= 0.0) else {
-        return "运行中".to_owned();
+        return crate::i18n::s().runtime.running.to_owned();
     };
     let total = seconds.round() as u64;
     if total >= 3_600 {

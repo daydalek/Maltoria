@@ -1,9 +1,18 @@
 //! Desktop conventions shared by the root view and menus.
 
 #[cfg(target_os = "macos")]
-pub(crate) const UI_FONT: &str = ".AppleSystemUIFont";
+pub(crate) fn ui_font() -> &'static str {
+    ".AppleSystemUIFont"
+}
+
 #[cfg(not(target_os = "macos"))]
-pub(crate) const UI_FONT: &str = "Noto Sans CJK SC";
+pub(crate) fn ui_font() -> &'static str {
+    match crate::i18n::locale() {
+        crate::i18n::Locale::Ja => "Noto Sans CJK JP",
+        crate::i18n::Locale::Ko => "Noto Sans CJK KR",
+        crate::i18n::Locale::ZhHans | crate::i18n::Locale::En => "Noto Sans CJK SC",
+    }
+}
 
 #[cfg(target_os = "macos")]
 pub(crate) const SHORTCUTS: [&str; 9] = [
@@ -30,25 +39,38 @@ pub(crate) const SHORTCUTS: [&str; 9] = [
     "alt-left",
 ];
 
-#[cfg(target_os = "macos")]
-pub(crate) const SETTINGS_TIP: &str = "设置（⌘,）";
-#[cfg(not(target_os = "macos"))]
-pub(crate) const SETTINGS_TIP: &str = "设置（Ctrl+,）";
+pub(crate) fn settings_tip() -> &'static str {
+    let p = &crate::i18n::s().platform;
+    if cfg!(target_os = "macos") {
+        p.settings_tip_mac
+    } else {
+        p.settings_tip_other
+    }
+}
 
 #[cfg(target_os = "macos")]
 pub(crate) const BACK_SHORTCUT_LABEL: &str = "⌘[";
 #[cfg(not(target_os = "macos"))]
 pub(crate) const BACK_SHORTCUT_LABEL: &str = "Alt+←";
 
-#[cfg(target_os = "macos")]
-pub(crate) const MOTION_MENU: &str = "界面动画 · ⌘⇧M";
-#[cfg(not(target_os = "macos"))]
-pub(crate) const MOTION_MENU: &str = "界面动画 · Ctrl+Shift+M";
+#[allow(dead_code)]
+pub(crate) fn motion_menu() -> &'static str {
+    let p = &crate::i18n::s().platform;
+    if cfg!(target_os = "macos") {
+        p.motion_menu_mac
+    } else {
+        p.motion_menu_other
+    }
+}
 
-#[cfg(target_os = "macos")]
-pub(crate) const REVEAL_LABEL: &str = "在访达中显示";
-#[cfg(not(target_os = "macos"))]
-pub(crate) const REVEAL_LABEL: &str = "在文件管理器中显示";
+pub(crate) fn reveal_label() -> &'static str {
+    let p = &crate::i18n::s().platform;
+    if cfg!(target_os = "macos") {
+        p.reveal_mac
+    } else {
+        p.reveal_other
+    }
+}
 
 /// The macOS traffic light cluster starts at x=15 (`traffic_light_position`)
 /// and ends near x=73; 80 leaves a small margin after the zoom button.

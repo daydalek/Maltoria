@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use gpui_kit::{App, Bounds, Pixels, WindowBounds, point, px, size};
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::LanguageMode;
 use crate::theme::AppearanceMode;
 
 const MIN_WIDTH: f32 = 800.;
@@ -172,6 +173,54 @@ pub(crate) fn save_appearance(mode: AppearanceMode) {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+struct StoredLanguage {
+    mode: LanguageMode,
+}
+
+fn language_path() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("WHISKY_GPUI_LANGUAGE_STATE") {
+        return Some(PathBuf::from(path));
+    }
+    if cfg!(test) {
+        return None;
+    }
+    Some(state_path()?.with_file_name("gpui-language.json"))
+}
+
+fn load_language_from(path: &std::path::Path) -> LanguageMode {
+    let Ok(data) = std::fs::read(path) else {
+        return LanguageMode::System;
+    };
+    serde_json::from_slice::<StoredLanguage>(&data)
+        .map(|stored| stored.mode)
+        .unwrap_or(LanguageMode::System)
+}
+
+fn save_language_to(path: &std::path::Path, mode: LanguageMode) {
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let stored = StoredLanguage { mode };
+    if let Ok(data) = serde_json::to_vec(&stored) {
+        let _ = std::fs::write(path, data);
+    }
+}
+
+/// Load the saved UI language preference, defaulting to `LanguageMode::System`
+/// so Maltoria follows the operating system language out of the box.
+pub(crate) fn load_language() -> LanguageMode {
+    let Some(path) = language_path() else {
+        return LanguageMode::System;
+    };
+    load_language_from(&path)
+}
+
+pub(crate) fn save_language(mode: LanguageMode) {
+    let Some(path) = language_path() else { return };
+    save_language_to(&path, mode);
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum TagBarMode {
@@ -318,6 +367,18 @@ mod tests {
             let decoded: StoredAppearance = serde_json::from_slice(&data).unwrap();
             assert_eq!(decoded.mode, mode);
         }
+    }
+
+    #[test]
+    fn stored_language_round_trips_through_file_and_defaults_to_system() {
+        let dir = std::env::temp_dir().join(format!("maltoria-lang-prefs-{}", uuid::Uuid::new_v4()));
+        let path = dir.join("gpui-language.json");
+        assert_eq!(load_language_from(&path), LanguageMode::System);
+        for mode in LanguageMode::ALL {
+            save_language_to(&path, mode);
+            assert_eq!(load_language_from(&path), mode);
+        }
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

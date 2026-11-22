@@ -89,20 +89,28 @@ impl WhiskyApp {
     /// pair of groups; real entries group by the last-played date the library
     /// already records, and unplayed entries tail into their own group.
     pub(crate) fn staggered_group_label(&self, index: usize, position: usize) -> Option<String> {
+        let strings = crate::i18n::s();
         if self.group_by_studio {
             return Some(
                 self.game(index)?
                     .studio_name()
-                    .unwrap_or_else(|| crate::library_view::UNKNOWN_STUDIO_LABEL.to_owned()),
+                    .unwrap_or_else(|| crate::library_view::unknown_studio_label().to_owned()),
             );
         }
         if self.demo {
-            return Some(if position < 4 { "今天" } else { "更早" }.to_owned());
+            return Some(
+                if position < 4 {
+                    strings.library.group_today
+                } else {
+                    strings.library.group_earlier
+                }
+                .to_owned(),
+            );
         }
         let game = self.game(index)?;
         Some(match game.last_played {
             Some(unix) => crate::model::format_last_played(Some(unix))?,
-            None => "未游玩".to_owned(),
+            None => strings.library.unplayed.to_owned(),
         })
     }
 
@@ -291,15 +299,16 @@ impl WhiskyApp {
             .max_h(px(46.))
             .overflow_hidden();
         if self.demo {
+            let lib = &crate::i18n::s().library;
             meta = meta
                 .child(icon("clock-3", 11.).text_color(rgb(muted_color())))
                 .child(muted(if index % 2 == 0 {
-                    "晚上7:39"
+                    lib.demo_time_even
                 } else {
-                    "下午6:39"
+                    lib.demo_time_odd
                 }))
                 .child(badge("package", self.bottle_name_at(g.bottle)))
-                .child(badge("clock-3", "8分钟"));
+                .child(badge("clock-3", lib.demo_duration_8m));
         } else {
             if let Some(label) = crate::model::format_last_played(g.last_played) {
                 meta = meta
@@ -340,7 +349,7 @@ impl WhiskyApp {
         }
         if let Some(state) = self.runtime_state(index) {
             meta = if state == RuntimeState::Running {
-                meta.child(live_badge(self.runtime_badge_label(index, "运行中")))
+                meta.child(live_badge(self.runtime_badge_label(index, crate::i18n::s().runtime.running)))
             } else if state.is_active() {
                 meta.child(phase_badge(
                     self.runtime_badge_label(index, state.phase_label()),
@@ -482,7 +491,7 @@ impl WhiskyApp {
                     .child(self.play_button_toned(
                         ("staggered-play", index),
                         index,
-                        "游玩",
+                        crate::i18n::s().library.play,
                         hover,
                         cx,
                     ))

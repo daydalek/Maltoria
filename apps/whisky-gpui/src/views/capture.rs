@@ -14,27 +14,36 @@ use crate::theme::*;
 use crate::translation::provider_kind_label;
 use crate::windows::capture_header_settings_button;
 
-const THREAD_ROLES: [(&str, &str); 4] = [
-    ("ignore", "忽略"),
-    ("body", "正文"),
-    ("speaker", "说话人"),
-    ("choice", "选项"),
-];
+fn thread_roles() -> [(&'static str, &'static str); 4] {
+    let c = &crate::i18n::s().capture;
+    [
+        ("ignore", c.role_ignore),
+        ("body", c.role_body),
+        ("speaker", c.role_speaker),
+        ("choice", c.role_choice),
+    ]
+}
 
-const OVERLAY_TEXT_COLORS: [(&str, &str); 5] = [
-    ("纯白", "#FFFFFF"),
-    ("暖黄", "#FDE047"),
-    ("冰蓝", "#7DD3FC"),
-    ("薄荷绿", "#86EFAC"),
-    ("樱粉", "#F9A8D4"),
-];
+fn overlay_text_colors() -> [(&'static str, &'static str); 5] {
+    let c = &crate::i18n::s().capture;
+    [
+        (c.color_white, "#FFFFFF"),
+        (c.color_warm_yellow, "#FDE047"),
+        (c.color_ice_blue, "#7DD3FC"),
+        (c.color_mint_green, "#86EFAC"),
+        (c.color_sakura_pink, "#F9A8D4"),
+    ]
+}
 
-const OVERLAY_SOURCE_COLORS: [(&str, &str); 4] = [
-    ("柔灰", "#D4D4D8"),
-    ("纯白", "#FFFFFF"),
-    ("浅黄", "#FEF08A"),
-    ("浅蓝", "#BAE6FD"),
-];
+fn overlay_source_colors() -> [(&'static str, &'static str); 4] {
+    let c = &crate::i18n::s().capture;
+    [
+        (c.color_soft_gray, "#D4D4D8"),
+        (c.color_white, "#FFFFFF"),
+        (c.color_light_yellow, "#FEF08A"),
+        (c.color_light_blue, "#BAE6FD"),
+    ]
+}
 
 impl WhiskyApp {
     /// Content rendered inside the independent native `CaptureWindow` — uses
@@ -48,7 +57,7 @@ impl WhiskyApp {
         let (cards, game_title, capture_status, is_live, attached) =
             self.capture_cards_body(window, cx);
         let status_badge = if is_live {
-            live_badge(if attached { "捕获中" } else { "扫描中" }).into_any_element()
+            live_badge(if attached { crate::i18n::s().capture.badge_capturing } else { crate::i18n::s().capture.badge_scanning }).into_any_element()
         } else {
             pill_badge(capture_status_label(&capture_status), badge_bg(), badge_text())
                 .into_any_element()
@@ -76,7 +85,7 @@ impl WhiskyApp {
                             .text_size(px(15.))
                             .font_weight(FontWeight::BOLD)
                             .text_color(rgb(text()))
-                            .child("游戏翻译"),
+                            .child(crate::i18n::s().capture.title),
                     )
                     .child(pill_badge(game_title, badge_bg(), badge_text()))
                     .child(status_badge),
@@ -110,7 +119,7 @@ impl WhiskyApp {
                         round_button("capture-close", "chevron-left")
                             .size(px(28.))
                             .rounded(px(7.))
-                            .tooltip(text_tip("返回游戏库"))
+                            .tooltip(text_tip(crate::i18n::s().library.back_to_library))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.close_capture_window(cx);
                             })),
@@ -120,11 +129,11 @@ impl WhiskyApp {
                             .text_size(px(18.))
                             .font_weight(FontWeight::BOLD)
                             .text_color(rgb(text()))
-                            .child("游戏翻译"),
+                            .child(crate::i18n::s().capture.title),
                     )
                     .child(pill_badge(game_title, badge_bg(), badge_text()))
                     .child(if is_live {
-                        live_badge(if attached { "捕获中" } else { "扫描中" }).into_any_element()
+                        live_badge(if attached { crate::i18n::s().capture.badge_capturing } else { crate::i18n::s().capture.badge_scanning }).into_any_element()
                     } else {
                         pill_badge(
                             capture_status_label(&capture_status),
@@ -155,7 +164,7 @@ impl WhiskyApp {
         let game_title = context
             .as_ref()
             .map(|x| x.2.as_str())
-            .unwrap_or("未选择游戏")
+            .unwrap_or(crate::i18n::s().capture.no_game_selected)
             .to_owned();
         let snap = self.capture.snapshot.clone();
         let source = snap
@@ -216,7 +225,7 @@ impl WhiskyApp {
         };
         let hook_input = ensure_capture_input(
             &mut self.capture.hook_input,
-            "显式 Hook code（UTF-8 <= 2048 字节）",
+            crate::i18n::s().capture.hook_code_placeholder,
             self.capture.hook_code.clone(),
             |this, value| this.capture.hook_code = value,
             window,
@@ -224,7 +233,7 @@ impl WhiskyApp {
         );
         let thread_filter_input = ensure_capture_input(
             &mut self.capture.thread_filter_input,
-            "过滤 Hook 名称或预览文本...",
+            crate::i18n::s().capture.thread_filter_placeholder,
             self.capture.thread_filter_query.clone(),
             |this, value| this.capture.thread_filter_query = value,
             window,
@@ -265,7 +274,7 @@ impl WhiskyApp {
             .capture
             .active_game
             .as_ref()
-            .map(|g| format!("当前活动会话：{}", g.2));
+            .map(|g| crate::i18n::fmt::capture_active_session(&g.2));
         let probe_pending = self.translation_page.provider_probe_pending();
         let start_disabled = self.capture.provider_id.is_none()
             || context.is_none()
@@ -314,14 +323,14 @@ impl WhiskyApp {
             cx,
         );
         let control_card = section_card(
-            "提供商与捕获控制",
+            crate::i18n::s().capture.section_provider_control,
             active_session_subtitle.as_deref(),
             col()
                 .gap(px(12.))
                 .child(
                     col()
                         .gap(px(6.))
-                        .child(field_label("翻译提供商"))
+                        .child(field_label(crate::i18n::s().capture.translation_provider))
                         .child(if provider_pills.is_empty() {
                             row()
                                 .gap(px(8.))
@@ -330,7 +339,7 @@ impl WhiskyApp {
                                 .bg(rgba(card_bg()))
                                 .border_1()
                                 .border_color(rgba(card_border()))
-                                .child(muted("尚未配置翻译提供商，请点击右上角「提供商设置…」添加。"))
+                                .child(muted(crate::i18n::s().capture.no_provider_configured))
                                 .into_any_element()
                         } else {
                             row().gap(px(6.)).flex_wrap().children(provider_pills).into_any_element()
@@ -344,7 +353,7 @@ impl WhiskyApp {
                         .child(
                             row()
                                 .gap(px(8.))
-                                .child(field_label("目标架构"))
+                                .child(field_label(crate::i18n::s().capture.target_architecture))
                                 .child(selectable_pill(
                                     "capture-arch-x64",
                                     "x64",
@@ -373,7 +382,7 @@ impl WhiskyApp {
                                     div()
                                         .text_size(px(12.))
                                         .text_color(rgb(subtext()))
-                                        .child("恢复历史"),
+                                        .child(crate::i18n::s().capture.restore_history),
                                 )
                                 .child(
                                     Switch::new("capture-restore-history")
@@ -395,9 +404,9 @@ impl WhiskyApp {
                             Button::new("capture-start")
                                 .when(!start_disabled, |button| button.primary())
                                 .label(if probe_pending {
-                                    "等待提供商探测完成"
+                                    crate::i18n::s().capture.wait_provider_probe
                                 } else {
-                                    "开始并扫描进程"
+                                    crate::i18n::s().capture.start_and_scan
                                 })
                                 .disabled(start_disabled)
                                 .on_click(cx.listener(|this, _, _, cx| {
@@ -407,7 +416,7 @@ impl WhiskyApp {
                         )
                         .child(
                             Button::new("capture-refresh-processes")
-                                .label("刷新进程")
+                                .label(crate::i18n::s().capture.refresh_processes)
                                 .disabled(
                                     self.capture.active_game.is_none()
                                         || self.capture.is_pending("translation.capture.processes"),
@@ -420,7 +429,7 @@ impl WhiskyApp {
                         .child(
                             Button::new("capture-attach")
                                 .when(!attach_disabled, |button| button.primary())
-                                .label("附加所选进程")
+                                .label(crate::i18n::s().capture.attach_selected)
                                 .disabled(attach_disabled)
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.capture.attach(&this.bridge);
@@ -429,7 +438,7 @@ impl WhiskyApp {
                         )
                         .child(
                             Button::new("capture-detach")
-                                .label("分离")
+                                .label(crate::i18n::s().capture.detach)
                                 .disabled(
                                     !attached
                                         || self.capture.is_pending("translation.capture.detach"),
@@ -446,7 +455,7 @@ impl WhiskyApp {
                         .child(
                             Button::new("capture-stop")
                                 .danger()
-                                .label("停止捕获")
+                                .label(crate::i18n::s().capture.stop_capture)
                                 .disabled(
                                     self.capture.active_game.is_none()
                                         || self.capture.is_pending("translation.capture.stop"),
@@ -466,7 +475,7 @@ impl WhiskyApp {
                             .items_center()
                             .when(auto_bound_count > 0, |r| {
                                 r.child(pill_badge(
-                                    format!("✓ 已自动恢复 {auto_bound_count} 个线程绑定"),
+                                    crate::i18n::fmt::capture_auto_bound(auto_bound_count as usize),
                                     installed_bg(),
                                     installed_fg(),
                                 ))
@@ -566,14 +575,14 @@ impl WhiskyApp {
             .collect();
 
         let process_card = section_card(
-            "游戏进程清单",
+            crate::i18n::s().capture.process_list_title,
             Some(if self.capture.truncated {
-                "进程清单达到服务端上限；可刷新后继续选择完整进程身份记录。"
+                crate::i18n::s().capture.process_list_truncated
             } else {
-                "选择完整身份记录（架构、PID 与启动时间）后再附加。"
+                crate::i18n::s().capture.process_list_hint
             }),
             if process_cards.is_empty() {
-                muted("尚无可用进程；启动游戏并点击「开始并扫描进程」或「刷新进程」。")
+                muted(crate::i18n::s().capture.process_list_empty)
                     .into_any_element()
             } else {
                 col().gap(px(6.)).children(process_cards).into_any_element()
@@ -583,7 +592,7 @@ impl WhiskyApp {
         // Card 3 — 实时字幕预览
         let has_error = !subtitle_error.is_empty() || !last_error.is_empty();
         let subtitle_card = section_card(
-            "实时字幕预览",
+            crate::i18n::s().capture.live_preview_title,
             None,
             col()
                 .gap(px(10.))
@@ -592,52 +601,52 @@ impl WhiskyApp {
                         .gap(px(6.))
                         .flex_wrap()
                         .child(pill_badge(
-                            format!("捕获：{}", capture_status_label(&capture_status)),
+                            crate::i18n::fmt::capture_status_line(capture_status_label(&capture_status)),
                             badge_bg(),
                             badge_text(),
                         ))
                         .child(pill_badge(
-                            format!("翻译：{}", subtitle_status_label(&subtitle_status)),
+                            crate::i18n::fmt::translation_status_line(subtitle_status_label(&subtitle_status)),
                             status_badge_bg(&subtitle_status),
                             status_badge_fg(&subtitle_status),
                         ))
                         .child(pill_badge(
                             if request_pending {
-                                "请求处理中"
+                                crate::i18n::s().capture.request_in_flight
                             } else {
-                                "通道空闲"
+                                crate::i18n::s().capture.channel_idle
                             },
                             badge_bg(),
                             badge_text(),
                         ))
                         .when(!speaker.is_empty(), |d| {
                             d.child(pill_badge(
-                                format!("说话人：{speaker}"),
+                                crate::i18n::fmt::speaker_prefix(&speaker),
                                 accent_subtle_bg(),
                                 accent_fg(),
                             ))
                         }),
                 )
                 .child(dialogue_box(
-                    "原文",
+                    crate::i18n::s().capture.source_text,
                     if source.is_empty() {
-                        "等待游戏文本输入…"
+                        crate::i18n::s().capture.waiting_game_text
                     } else {
                         &source
                     },
                     source.is_empty(),
                 ))
                 .child(dialogue_box(
-                    "译文",
+                    crate::i18n::s().capture.translated_text,
                     if translation.is_empty() {
-                        "等待翻译结果…"
+                        crate::i18n::s().capture.waiting_translation
                     } else {
                         &translation
                     },
                     translation.is_empty(),
                 ))
                 .when(translation_truncated, |d| {
-                    d.child(muted("译文预览已截断；可在下方会话历史中读取完整文本。").text_size(px(11.)))
+                    d.child(muted(crate::i18n::s().capture.preview_truncated).text_size(px(11.)))
                 })
                 .when(has_error, |d| {
                     d.child(error_banner(format_subtitle_error_banner(
@@ -665,7 +674,7 @@ impl WhiskyApp {
                 } else {
                     t.hook_name.clone()
                 };
-                let role_buttons: Vec<AnyElement> = THREAD_ROLES
+                let role_buttons: Vec<AnyElement> = thread_roles()
                     .into_iter()
                     .map(|(role, label)| {
                         let id_for_click = id.clone();
@@ -717,7 +726,7 @@ impl WhiskyApp {
                             .text_color(rgb(subtext()))
                             .line_height(relative(1.4))
                             .child(if t.preview.is_empty() {
-                                "（暂无预览文本）".to_owned()
+                                crate::i18n::s().capture.empty_preview_placeholder.to_owned()
                             } else {
                                 t.preview.clone()
                             }),
@@ -734,12 +743,11 @@ impl WhiskyApp {
             .collect();
 
         let threads_card = section_card(
-            &format!(
-                "文本线程与 Hook 注入（{}/{}）",
+            &crate::i18n::fmt::threads_section_title(
                 self.capture.threads.len(),
-                self.capture.thread_total
+                self.capture.thread_total,
             ),
-            Some("为捕获到的文本线程分配角色（正文 / 说话人 / 选项），或注入自定义 Hook code。"),
+            Some(crate::i18n::s().capture.threads_desc),
             col()
                 .gap(px(10.))
                 .child(
@@ -748,7 +756,7 @@ impl WhiskyApp {
                         .child(div().flex_1().min_w_0().child(Input::new(&hook_input)))
                         .child(
                             Button::new("capture-insert-hook")
-                                .label("注入 Hook")
+                                .label(crate::i18n::s().capture.inject_hook)
                                 .disabled(
                                     self.capture.hook_code.is_empty()
                                         || self.capture.hook_code.as_bytes().len() > 2048
@@ -781,7 +789,7 @@ impl WhiskyApp {
                         )
                         .child(selectable_pill(
                             "capture-threads-filter-non-empty",
-                            "仅看有文本",
+                            crate::i18n::s().capture.text_only_filter,
                             self.capture.thread_filter_non_empty,
                             false,
                             cx.listener(|this, _, _, cx| {
@@ -792,26 +800,22 @@ impl WhiskyApp {
                         ))
                         .when(hidden_empty_count > 0, |d| {
                             d.child(
-                                muted(format!("已隐藏 {hidden_empty_count} 条空预览"))
+                                muted(crate::i18n::fmt::hidden_empty_threads(hidden_empty_count))
                                     .text_size(px(11.)),
                             )
                         }),
                 )
                 .child(if thread_cards.is_empty() {
                     if threads.is_empty() {
-                        muted("附加游戏进程并触发对话后，文本线程将显示在此处。")
+                        muted(crate::i18n::s().capture.threads_empty_hint)
                     } else if hidden_empty_count > 0
                         && self.capture.thread_filter_query.trim().is_empty()
                     {
-                        muted(format!(
-                            "当前有 {hidden_empty_count} 条空预览线程被隐藏，点击「仅看有文本」可查看全部。"
-                        ))
+                        muted(crate::i18n::fmt::hidden_empty_threads_hint(hidden_empty_count))
                     } else if hidden_empty_count > 0 {
-                        muted(format!(
-                            "没有匹配当前搜索条件的可见线程（另有 {hidden_empty_count} 条空预览线程被「仅看有文本」隐藏）。"
-                        ))
+                        muted(crate::i18n::fmt::hidden_empty_threads_search_hint(hidden_empty_count))
                     } else {
-                        muted("没有匹配当前搜索条件的文本线程。")
+                        muted(crate::i18n::s().capture.threads_no_match)
                     }
                     .into_any_element()
                 } else {
@@ -822,7 +826,7 @@ impl WhiskyApp {
                         .gap(px(8.))
                         .child(
                             Button::new("threads-prev")
-                                .label("上一页")
+                                .label(crate::i18n::s().common.previous_page)
                                 .disabled(
                                     self.capture.thread_offset == 0
                                         || self.capture.is_pending("translation.threads.list"),
@@ -835,7 +839,7 @@ impl WhiskyApp {
                         )
                         .child(
                             Button::new("threads-next")
-                                .label("下一页")
+                                .label(crate::i18n::s().common.next_page)
                                 .disabled(
                                     self.capture.thread_offset + 64 >= self.capture.thread_total
                                         || self.capture.is_pending("translation.threads.list"),
@@ -892,7 +896,7 @@ impl WhiskyApp {
                                     ))
                                     .when(e.include_in_context, |d| {
                                         d.child(pill_badge(
-                                            "已纳入上下文",
+                                            crate::i18n::s().capture.in_context,
                                             installed_bg(),
                                             installed_fg(),
                                         ))
@@ -904,9 +908,9 @@ impl WhiskyApp {
                                     .child(
                                         Button::new(format!("history-include:{id}"))
                                             .label(if e.include_in_context {
-                                                "排除上下文"
+                                                crate::i18n::s().capture.exclude_context
                                             } else {
-                                                "纳入上下文"
+                                                crate::i18n::s().capture.include_context
                                             })
                                             .disabled(
                                                 self.capture
@@ -924,7 +928,7 @@ impl WhiskyApp {
                                     .child(
                                         Button::new(format!("history-source:{source_id}"))
                                             .ghost()
-                                            .label("读取完整来源")
+                                            .label(crate::i18n::s().capture.load_full_source)
                                             .disabled(
                                                 self.capture.is_pending("translation.history.text"),
                                             )
@@ -940,7 +944,7 @@ impl WhiskyApp {
                                     .child(
                                         Button::new(format!("history-translation:{translation_id}"))
                                             .ghost()
-                                            .label("读取完整译文")
+                                            .label(crate::i18n::s().capture.load_full_translation)
                                             .disabled(
                                                 self.capture.is_pending("translation.history.text"),
                                             )
@@ -972,13 +976,13 @@ impl WhiskyApp {
                         )
                     })
                     .when(e.translation_truncated, |d| {
-                        d.child(muted("译文预览已截断；点击「读取完整译文」查看全部。").text_size(px(11.)))
+                        d.child(muted(crate::i18n::s().capture.history_preview_truncated).text_size(px(11.)))
                     })
                     .when_some(full_source, |d, full| {
-                        d.child(dialogue_box("完整来源", &full, false))
+                        d.child(dialogue_box(crate::i18n::s().capture.full_source_title, &full, false))
                     })
                     .when_some(full_translation, |d, full| {
-                        d.child(dialogue_box("完整译文", &full, false))
+                        d.child(dialogue_box(crate::i18n::s().capture.full_translation_title, &full, false))
                     })
                     .into_any_element()
             })
@@ -1001,12 +1005,12 @@ impl WhiskyApp {
             .then(|| self.translation_cache_browser(true, browser_game_id, window, cx));
 
         let history_card = section_card(
-            &format!("会话历史（{}/{}）", self.capture.history.len(), history_total),
+            &crate::i18n::fmt::history_section_title(self.capture.history.len(), history_total),
             None,
             col()
                 .gap(px(10.))
                 .child(if history_cards.is_empty() {
-                    muted("当前游戏暂无翻译历史记录。").into_any_element()
+                    muted(crate::i18n::s().capture.history_empty).into_any_element()
                 } else {
                     col().gap(px(6.)).children(history_cards).into_any_element()
                 })
@@ -1020,7 +1024,7 @@ impl WhiskyApp {
                                 .gap(px(6.))
                                 .child(
                                     Button::new("history-prev")
-                                        .label("上一页")
+                                        .label(crate::i18n::s().common.previous_page)
                                         .disabled(
                                             self.capture.history_offset == 0
                                                 || self.capture.is_pending("translation.history"),
@@ -1034,7 +1038,7 @@ impl WhiskyApp {
                                 )
                                 .child(
                                     Button::new("history-next")
-                                        .label("下一页")
+                                        .label(crate::i18n::s().common.next_page)
                                         .disabled(
                                             self.capture.history_offset + 20 >= history_total
                                                 || self.capture.is_pending("translation.history"),
@@ -1052,7 +1056,7 @@ impl WhiskyApp {
                                 .flex_wrap()
                                 .child(
                                     Button::new("history-clear")
-                                        .label("清除当前游戏历史")
+                                        .label(crate::i18n::s().capture.clear_game_history)
                                         .disabled(
                                             self.capture.is_pending("translation.history.clear"),
                                         )
@@ -1067,7 +1071,7 @@ impl WhiskyApp {
                                 )
                                 .child(
                                     Button::new("cache-clear")
-                                        .label("清除当前游戏缓存")
+                                        .label(crate::i18n::s().capture.clear_game_cache)
                                         .disabled(cache_clear_pending)
                                         .on_click(cx.listener(move |this, _, _, cx| {
                                             if this.translation_page.cache.has_scope()
@@ -1088,9 +1092,9 @@ impl WhiskyApp {
                                     Button::new("cache-toggle-browser")
                                         .ghost()
                                         .label(if cache_expanded {
-                                            "收起句缓存"
+                                            crate::i18n::s().capture.collapse_sentence_cache
                                         } else {
-                                            "查看/管理句缓存"
+                                            crate::i18n::s().capture.view_sentence_cache
                                         })
                                         .on_click(cx.listener(move |this, _, _, cx| {
                                             let next =
@@ -1123,13 +1127,13 @@ impl WhiskyApp {
                         .justify_between()
                         .gap(px(8.))
                         .child(muted(if overlay_configure_available {
-                            "控制桌面原生悬浮字幕窗口的显示方式、尺寸与位置。"
+                            crate::i18n::s().capture.overlay_desc
                         } else {
-                            "叠层配置方法未公布；当前仅支持只读查看。"
+                            crate::i18n::s().capture.overlay_readonly
                         }))
                         .child(
                             Button::new("overlay-read")
-                                .label("读取设置")
+                                .label(crate::i18n::s().capture.load_settings)
                                 .disabled(self.capture.is_pending("translation.overlay.read"))
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     let _ = this.capture.request(
@@ -1144,7 +1148,7 @@ impl WhiskyApp {
                 .when_some(self.capture.overlay.clone(), |d, s| {
                     let pos_text = match (s.x, s.y) {
                         (Some(x), Some(y)) => format!("{x:.0}, {y:.0}"),
-                        _ => "默认".to_owned(),
+                        _ => crate::i18n::s().common.default_label.to_owned(),
                     };
                     d.child(
                         row()
@@ -1152,7 +1156,7 @@ impl WhiskyApp {
                             .flex_wrap()
                             .child(overlay_toggle_pill(
                                 "visible",
-                                "显示叠层",
+                                crate::i18n::s().capture.show_overlay,
                                 s.visible,
                                 overlay_disabled,
                                 cx,
@@ -1160,9 +1164,9 @@ impl WhiskyApp {
                             .child(overlay_toggle_pill(
                                 "clickThrough",
                                 if s.click_through {
-                                    "锁定位置（穿透）"
+                                    crate::i18n::s().capture.lock_passthrough
                                 } else {
-                                    "可拖动（已解锁）"
+                                    crate::i18n::s().capture.draggable_unlocked
                                 },
                                 s.click_through,
                                 overlay_disabled || !self.capture.overlay_supports_click_through,
@@ -1170,75 +1174,75 @@ impl WhiskyApp {
                             ))
                             .child(overlay_toggle_pill(
                                 "showSource",
-                                "显示原文",
+                                crate::i18n::s().capture.show_source,
                                 s.show_source,
                                 overlay_disabled,
                                 cx,
                             ))
                             .child(overlay_toggle_pill(
                                 "showTranslation",
-                                "显示译文",
+                                crate::i18n::s().capture.show_translation,
                                 s.show_translation,
                                 overlay_disabled,
                                 cx,
                             )),
                     )
                     .child(
-                        muted("提示：也可直接从桌面悬浮球快速切换字幕显隐与位置锁定/拖动状态。")
+                        muted(crate::i18n::s().capture.overlay_hud_tip)
                             .text_size(px(11.)),
                     )
                     .child(divider_line())
                     .child(overlay_adjust_row(
-                        "字号",
+                        crate::i18n::s().capture.font_size,
                         format!("{:.0} pt", s.font_size),
                         &[("font-", "−"), ("font+", "+")],
                         overlay_disabled,
                         cx,
                     ))
                     .child(overlay_adjust_row(
-                        "背景不透明度",
-                        format!("{:.0}%（0%–100%，0% 全透明）", s.opacity * 100.0),
+                        crate::i18n::s().capture.bg_opacity,
+                        crate::i18n::fmt::overlay_opacity_label((s.opacity * 100.0) as f32),
                         &[("opacity-", "−"), ("opacity+", "+")],
                         overlay_disabled,
                         cx,
                     ))
                     .child(overlay_color_row(
-                        "译文字色",
+                        crate::i18n::s().capture.translation_color,
                         "textColor",
                         &s.text_color,
-                        &OVERLAY_TEXT_COLORS,
+                        &overlay_text_colors(),
                         overlay_disabled,
                         cx,
                     ))
                     .child(overlay_color_row(
-                        "原文字色",
+                        crate::i18n::s().capture.source_color,
                         "sourceColor",
                         &s.source_text_color,
-                        &OVERLAY_SOURCE_COLORS,
+                        &overlay_source_colors(),
                         overlay_disabled,
                         cx,
                     ))
                     .child(overlay_adjust_row(
-                        "尺寸",
+                        crate::i18n::s().capture.size_label,
                         format!("{:.0} × {:.0}", s.width, s.height),
                         &[
-                            ("width-", "宽 −"),
-                            ("width+", "宽 +"),
-                            ("height-", "高 −"),
-                            ("height+", "高 +"),
+                            ("width-", crate::i18n::s().capture.width_minus),
+                            ("width+", crate::i18n::s().capture.width_plus),
+                            ("height-", crate::i18n::s().capture.height_minus),
+                            ("height+", crate::i18n::s().capture.height_plus),
                         ],
                         overlay_disabled,
                         cx,
                     ))
                     .child(overlay_adjust_row(
-                        "位置",
+                        crate::i18n::s().capture.position_label,
                         pos_text,
                         &[
-                            ("x-", "左移"),
-                            ("x+", "右移"),
-                            ("y-", "上移"),
-                            ("y+", "下移"),
-                            ("reset", "重置位置"),
+                            ("x-", crate::i18n::s().capture.move_left),
+                            ("x+", crate::i18n::s().capture.move_right),
+                            ("y-", crate::i18n::s().capture.move_up),
+                            ("y+", crate::i18n::s().capture.move_down),
+                            ("reset", crate::i18n::s().capture.reset_position),
                         ],
                         overlay_disabled,
                         cx,
@@ -1248,17 +1252,25 @@ impl WhiskyApp {
                     d.child(muted(self.capture.overlay_platform.clone()).text_size(px(11.)))
                 });
             section_card(
-                if cfg!(target_os = "linux") { "Linux 原生字幕叠层" } else { "macOS 原生字幕叠层" },
-                Some(if cfg!(target_os = "linux") { "X11 支持全屏置顶与鼠标穿透；解锁后拖动窗口内部移动，拖动边缘或角落调整尺寸。" } else { "支持在全屏游戏 Space 上方悬浮显示原生字幕窗口。" }),
+                if cfg!(target_os = "linux") {
+                    crate::i18n::s().capture.overlay_linux_title
+                } else {
+                    crate::i18n::s().capture.overlay_macos_title
+                },
+                Some(if cfg!(target_os = "linux") {
+                    crate::i18n::s().capture.overlay_linux_desc
+                } else {
+                    crate::i18n::s().capture.overlay_macos_desc
+                }),
                 overlay_body.when(cfg!(target_os = "linux") && !self.capture.overlay_supports_click_through, |d| {
-                    d.child(muted("Wayland 不支持鼠标穿透或精确定位；使用 LayerShell（如可用），否则为尽力置顶的浮动窗口。"))
+                    d.child(muted(crate::i18n::s().capture.overlay_wayland_note))
                 }),
             )
         } else {
             section_card(
-                "原生字幕叠层",
+                crate::i18n::s().capture.overlay_generic_title,
                 None,
-                muted("字幕叠层：当前桥接未公布此功能，因此不可用。"),
+                muted(crate::i18n::s().capture.overlay_unavailable),
             )
         };
 
@@ -1336,14 +1348,17 @@ fn capture_preset_bar(
         .as_deref()
         .filter(|p| !p.trim().is_empty())
         .map(exe_basename)
-        .unwrap_or("未记录目标进程")
+        .unwrap_or(crate::i18n::s().capture.no_recorded_target)
         .to_owned();
     let binding_summary = if total_bindings > 0 {
-        format!(
-            "线程绑定 {total_bindings}（正文 {body_count} · 说话人 {speaker_count} · 选项 {choice_count}）"
+        crate::i18n::fmt::thread_bindings_summary(
+            total_bindings,
+            body_count,
+            speaker_count,
+            choice_count,
         )
     } else {
-        "线程绑定 0".to_owned()
+        crate::i18n::s().capture.thread_bindings_zero.to_owned()
     };
     let auto_attach_btn_disabled = attached
         || !has_target
@@ -1380,11 +1395,11 @@ fn capture_preset_bar(
                                 .text_size(px(12.))
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(rgb(text()))
-                                .child("游戏翻译预设"),
+                                .child(crate::i18n::s().capture.game_preset_title),
                         )
                         .child(selectable_pill(
                             "capture-preset-translation-enabled",
-                            "为此游戏启用翻译",
+                            crate::i18n::s().capture.enable_for_game,
                             enabled,
                             preset_mutating || !has_context,
                             cx.listener(move |this, _, _, cx| {
@@ -1402,7 +1417,7 @@ fn capture_preset_bar(
                         ))
                         .child(selectable_pill(
                             "capture-preset-prompt-on-launch",
-                            "启动时弹出悬浮捕获窗",
+                            crate::i18n::s().capture.popup_hud_on_launch,
                             prompt_on_launch,
                             preset_mutating || !has_context || !enabled,
                             cx.listener(move |this, _, _, cx| {
@@ -1421,7 +1436,7 @@ fn capture_preset_bar(
                 .when(hud_available, |r| {
                     r.child(
                         Button::new("capture-open-hud")
-                            .label("打开悬浮捕获窗")
+                            .label(crate::i18n::s().capture.open_hud_window)
                             .disabled(!has_context || hud_pending)
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 if let Some((container, entry_id)) = &key_for_hud {
@@ -1450,7 +1465,7 @@ fn capture_preset_bar(
                                     .text_size(px(12.))
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(rgb(text()))
-                                    .child("已记忆附加预设"),
+                                    .child(crate::i18n::s().capture.remembered_preset_title),
                             )
                             .child(pill_badge(
                                 target_name,
@@ -1461,7 +1476,7 @@ fn capture_preset_bar(
                             .child(pill_badge(binding_summary, badge_bg(), badge_text()))
                             .when(custom_hooks > 0, |r| {
                                 r.child(pill_badge(
-                                    format!("自定义 Hook {custom_hooks}"),
+                                    crate::i18n::fmt::custom_hooks_count(custom_hooks),
                                     badge_bg(),
                                     badge_text(),
                                 ))
@@ -1474,7 +1489,7 @@ fn capture_preset_bar(
                             .items_center()
                             .child(selectable_pill(
                                 "capture-preset-auto-attach",
-                                "打开捕获时自动附加",
+                                crate::i18n::s().capture.auto_attach_on_open,
                                 preset.auto_attach,
                                 preset_mutating || !has_context,
                                 cx.listener(|this, _, _, cx| {
@@ -1487,9 +1502,9 @@ fn capture_preset_bar(
                                     Button::new("capture-preset-run-auto-attach")
                                         .when(!auto_attach_btn_disabled, |btn| btn.primary())
                                         .label(if auto_attaching {
-                                            "自动附加中…"
+                                            crate::i18n::s().capture.auto_attaching
                                         } else {
-                                            "自动附加并恢复"
+                                            crate::i18n::s().capture.auto_attach_and_restore
                                         })
                                         .disabled(auto_attach_btn_disabled)
                                         .on_click(cx.listener(|this, _, _, cx| {
@@ -1505,7 +1520,7 @@ fn capture_preset_bar(
                             .child(
                                 Button::new("capture-preset-clear")
                                     .ghost()
-                                    .label("清除记忆")
+                                    .label(crate::i18n::s().capture.clear_memory)
                                     .disabled(preset_mutating || !has_context)
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.capture.clear_preset(&this.bridge);
@@ -1774,22 +1789,24 @@ fn capture_guidance_hint(
     has_selected_process: bool,
 ) -> Option<&'static str> {
     if !has_active_game {
+        let c = &crate::i18n::s().capture;
         if !has_providers {
-            Some("请先点击右上角「提供商设置…」添加并保存至少一个翻译提供商。")
+            Some(c.guide_need_provider)
         } else if !has_provider_id {
-            Some("请先在上方点击选择一个翻译提供商，然后即可点击「开始并扫描进程」。")
+            Some(c.guide_select_provider)
         } else if !has_context {
-            Some("请先从游戏详情、画廊、沉浸视图、运行设置或卡片右键菜单打开「游戏翻译与捕获」。")
+            Some(c.guide_open_from_menu)
         } else if probe_pending {
-            Some("正在等待提供商探测完成，完成后即可开始捕获。")
+            Some(c.guide_wait_probe)
         } else {
             None
         }
     } else if !attached {
+        let c = &crate::i18n::s().capture;
         if !has_processes {
-            Some("正在扫描或暂未发现可用进程，可点击「刷新进程」重试。")
+            Some(c.guide_refresh_proc)
         } else if !has_selected_process {
-            Some("请在下方「游戏进程清单」中点击选择目标进程（如游戏主程序），再点击「附加所选进程」。")
+            Some(c.guide_pick_proc)
         } else {
             None
         }
@@ -1799,25 +1816,27 @@ fn capture_guidance_hint(
 }
 
 fn capture_status_label(status: &str) -> &str {
+    let c = &crate::i18n::s().capture;
     match status {
-        "idle" => "空闲",
-        "scanning" => "扫描中",
-        "running" => "运行中",
-        "attached" => "已附加",
-        "detaching" => "正在分离",
-        "stopping" => "正在停止",
-        "failed" | "error" => "异常",
+        "idle" => c.status_idle,
+        "scanning" => c.status_scanning,
+        "running" => c.status_running,
+        "attached" => c.status_attached,
+        "detaching" => c.status_detaching,
+        "stopping" => c.status_stopping,
+        "failed" | "error" => c.status_abnormal,
         other => other,
     }
 }
 
 fn subtitle_status_label(status: &str) -> &str {
+    let c = &crate::i18n::s().capture;
     match status {
-        "idle" => "空闲",
-        "translating" | "pending" => "翻译中",
-        "translated" | "completed" => "已翻译",
-        "failed" | "error" => "失败",
-        "skipped" => "已跳过",
+        "idle" => c.status_idle,
+        "translating" | "pending" => c.sub_translating,
+        "translated" | "completed" => c.sub_translated,
+        "failed" | "error" => c.sub_failed,
+        "skipped" => crate::i18n::s().common.skipped,
         other => other,
     }
 }
@@ -1833,21 +1852,16 @@ fn status_badge_bg(status: &str) -> u32 {
 
 fn format_capture_error(error: &str) -> &str {
     match error {
-        "events_dropped" => {
-            "events_dropped（游戏高频触发底层文本钩子导致事件队列溢出；可忽略系统噪声线程，仅保留正文线程）"
-        }
-        other => other,
+        "events_dropped" => crate::i18n::s().capture.err_events_dropped,
+        _ => crate::i18n::bridge_errors::code_text(error).unwrap_or(error),
     }
 }
 
 fn format_subtitle_error_banner(subtitle_error: &str, last_error: &str) -> String {
+    let formatted_subtitle = crate::i18n::bridge_errors::code_text(subtitle_error)
+        .unwrap_or(subtitle_error);
     let formatted_last = format_capture_error(last_error);
-    match (subtitle_error.is_empty(), last_error.is_empty()) {
-        (false, false) => format!("翻译错误：{subtitle_error}；捕获错误：{formatted_last}"),
-        (false, true) => format!("翻译错误：{subtitle_error}"),
-        (true, false) => format!("捕获错误：{formatted_last}"),
-        (true, true) => String::new(),
-    }
+    crate::i18n::fmt::capture_and_subtitle_errors(formatted_subtitle, formatted_last)
 }
 
 fn status_badge_fg(status: &str) -> u32 {
@@ -1871,11 +1885,11 @@ mod tests {
         );
         assert_eq!(
             format_subtitle_error_banner("timeout", "events_dropped"),
-            "翻译错误：timeout；捕获错误：events_dropped（游戏高频触发底层文本钩子导致事件队列溢出；可忽略系统噪声线程，仅保留正文线程）"
+            "翻译错误：翻译超时；捕获错误：events_dropped（游戏高频触发底层文本钩子导致事件队列溢出；可忽略系统噪声线程，仅保留正文线程）"
         );
         assert_eq!(
             format_subtitle_error_banner("", "disconnected"),
-            "捕获错误：disconnected"
+            "捕获错误：文本钩子连接已断开"
         );
     }
 }

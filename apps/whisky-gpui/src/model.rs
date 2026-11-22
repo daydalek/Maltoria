@@ -254,14 +254,15 @@ pub(crate) fn empty_library_message(
     bottles: usize,
     visible_entries: usize,
 ) -> &'static str {
+    let l = &crate::i18n::s().library;
     if demo {
-        "没有找到匹配的游戏"
+        l.search_empty_title
     } else if bottles == 0 {
-        "还没有创建容器"
+        l.no_bottles_title
     } else if visible_entries == 0 {
-        "此容器还没有游戏"
+        l.bottle_empty_title
     } else {
-        "没有找到匹配的游戏"
+        l.search_empty_title
     }
 }
 
@@ -273,11 +274,7 @@ pub(crate) fn format_play_time(seconds: Option<u64>) -> Option<String> {
         return None;
     }
     let (hours, minutes) = (minutes / 60, minutes % 60);
-    Some(match (hours, minutes) {
-        (0, m) => format!("{m} 分钟"),
-        (h, 0) => format!("{h} 小时"),
-        (h, m) => format!("{h} 小时 {m} 分钟"),
-    })
+    Some(crate::i18n::fmt::play_time(hours, minutes))
 }
 
 /// Unix seconds to `YYYY-MM-DD` in UTC. The bridge sends no time zone.

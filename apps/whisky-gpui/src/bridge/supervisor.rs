@@ -4210,7 +4210,7 @@ fn run_with_spawner_and_backoff<F, B>(
                     name,
                 }) => {
                     if !describe.methods.iter().any(|method| method == "programs.run") {
-                        emit_event(&events, BridgeEvent::ActionFailed { reason: "当前主机尚未提供 Windows 程序运行服务".into() });
+                        emit_event(&events, BridgeEvent::ActionFailed { reason: crate::i18n::tr("当前主机尚未提供 Windows 程序运行服务", "現在のホストでは Windows プログラム実行サービスを利用できません", "Windows program execution is not available on this host", "현재 호스트에서 Windows 프로그램 실행 서비스를 사용할 수 없습니다").into() });
                         continue;
                     }
                     match client
@@ -4359,7 +4359,7 @@ fn run_with_spawner_and_backoff<F, B>(
                                 Err(error) => {
                                     if let CallFailure::Session(reason) = &error { reconnect = Some(reason.clone()); }
                                     emit_event(&events, BridgeEvent::ImportCandidatesFailed { request,
-                                        reason: format!("导入已保存，刷新列表失败：{}", error.into_message()) });
+                                        reason: match crate::i18n::locale() { crate::i18n::Locale::ZhHans => format!("导入已保存，刷新列表失败：{}", error.into_message()), crate::i18n::Locale::Ja => format!("インポートを保存しましたが、一覧の更新に失敗しました：{}", error.into_message()), crate::i18n::Locale::En => format!("Import saved, but failed to refresh list: {}", error.into_message()), crate::i18n::Locale::Ko => format!("가져오기를 저장했으나 목록을 새로 고치지 못했습니다: {}", error.into_message()) } });
                                 }
                             }
                         }
@@ -4467,7 +4467,7 @@ fn run_with_spawner_and_backoff<F, B>(
                                 operation,
                                 container,
                                 update: BottleOperationUpdate::Failed {
-                                    reason: "另一个容器操作正在进行，请稍后再试".into(),
+                                    reason: crate::i18n::tr("另一个容器操作正在进行，请稍后再试", "別のコンテナ操作が進行中です。しばらくしてから再試行してください", "Another bottle operation is already in progress; try again shortly", "다른 컨테이너 작업이 진행 중입니다. 잠시 후 다시 시도하세요").into(),
                                 },
                             },
                         );
@@ -4646,7 +4646,7 @@ fn run_with_spawner_and_backoff<F, B>(
                             &events,
                             BridgeEvent::Setup {
                                 update: SetupUpdate::Failed {
-                                    reason: "Wine 运行时安装正在进行".into(),
+                                    reason: crate::i18n::tr("Wine 运行时安装正在进行", "Wine ランタイムをインストール中です", "Wine runtime installation is already in progress", "Wine 런타임 설치가 진행 중입니다").into(),
                                 },
                             },
                         );
@@ -4696,7 +4696,7 @@ fn run_with_spawner_and_backoff<F, B>(
                             &events,
                             BridgeEvent::Setup {
                                 update: SetupUpdate::Failed {
-                                    reason: "安装任务正在进行".into(),
+                                    reason: crate::i18n::tr("安装任务正在进行", "インストールタスクが進行中です", "An installation task is already in progress", "설치 작업이 이미 진행 중입니다").into(),
                                 },
                             },
                         );
@@ -4757,7 +4757,7 @@ fn run_with_spawner_and_backoff<F, B>(
                                 &events,
                                 BridgeEvent::Metadata {
                                     update: MetadataUpdate::Failed {
-                                        reason: "元数据同步正在进行，请稍后再试".into(),
+                                        reason: crate::i18n::tr("元数据同步正在进行，请稍后再试", "メタデータの同期が進行中です。しばらくしてから再試行してください", "Metadata sync is already in progress; try again shortly", "메타데이터 동기화가 진행 중입니다. 잠시 후 다시 시도하세요").into(),
                                     },
                                 },
                             );
@@ -5111,7 +5111,7 @@ fn run_with_spawner_and_backoff<F, B>(
                 }) => {
                     if !describe.methods.iter().any(|method| method == "gameConfig.apply") {
                         emit_event(&events, BridgeEvent::Metadata {
-                            update: MetadataUpdate::Failed { reason: "当前会话提供 GameDB 配置参考".into() },
+                            update: MetadataUpdate::Failed { reason: crate::i18n::s().state.gamedb_session_reference.into() },
                         });
                         continue;
                     }
@@ -5162,7 +5162,7 @@ fn run_with_spawner_and_backoff<F, B>(
                         emit_event(
                             &events,
                             BridgeEvent::ActionFailed {
-                                reason: "另一个诊断任务正在进行，请稍后再试".into(),
+                                reason: crate::i18n::tr("另一个诊断任务正在进行，请稍后再试", "別の診断タスクが進行中です。しばらくしてから再試行してください", "Another diagnostics task is already in progress; try again shortly", "다른 진단 작업이 진행 중입니다. 잠시 후 다시 시도하세요").into(),
                             },
                         );
                     } else {
@@ -5185,7 +5185,7 @@ fn run_with_spawner_and_backoff<F, B>(
                         emit_event(
                             &events,
                             BridgeEvent::ActionFailed {
-                                reason: "另一个诊断任务正在进行，请稍后再试".into(),
+                                reason: crate::i18n::tr("另一个诊断任务正在进行，请稍后再试", "別の診断タスクが進行中です。しばらくしてから再試行してください", "Another diagnostics task is already in progress; try again shortly", "다른 진단 작업이 진행 중입니다. 잠시 후 다시 시도하세요").into(),
                             },
                         );
                     } else {
@@ -5211,7 +5211,7 @@ fn run_with_spawner_and_backoff<F, B>(
                         emit_event(
                             &events,
                             BridgeEvent::ActionFailed {
-                                reason: "另一个诊断任务正在进行，请稍后再试".into(),
+                                reason: crate::i18n::tr("另一个诊断任务正在进行，请稍后再试", "別の診断タスクが進行中です。しばらくしてから再試行してください", "Another diagnostics task is already in progress; try again shortly", "다른 진단 작업이 진행 중입니다. 잠시 후 다시 시도하세요").into(),
                             },
                         );
                     } else {
@@ -5234,7 +5234,7 @@ fn run_with_spawner_and_backoff<F, B>(
                         emit_event(
                             &events,
                             BridgeEvent::ActionFailed {
-                                reason: "另一个诊断任务正在进行，请稍后再试".into(),
+                                reason: crate::i18n::tr("另一个诊断任务正在进行，请稍后再试", "別の診断タスクが進行中です。しばらくしてから再試行してください", "Another diagnostics task is already in progress; try again shortly", "다른 진단 작업이 진행 중입니다. 잠시 후 다시 시도하세요").into(),
                             },
                         );
                     } else {
@@ -5345,7 +5345,7 @@ fn run_with_spawner_and_backoff<F, B>(
                 }
                 for active in metadata_records.drain(..) {
                     emit_event(&events, active.event(Err(
-                        "桥接连接中断；请重新打开资料检查保存结果后再重试。".into()
+                        crate::i18n::tr("桥接连接中断；请重新打开资料检查保存结果后再重试。", "ブリッジ接続が切断されました。ゲーム情報を開き直して保存結果を確認してから再試行してください。", "Bridge disconnected; reopen Game Info to check saved changes before retrying.", "브리지 연결이 끊어졌습니다. 저장 결과를 확인한 뒤 다시 시도하세요.").into()
                     )));
                 }
                 if setup.take().is_some() {
@@ -5927,7 +5927,7 @@ fn poll_update_check(
                 .error
                 .as_ref()
                 .map(BridgeFailureDto::reason)
-                .unwrap_or_else(|| "Wine 更新检查失败".to_owned());
+                .unwrap_or_else(|| crate::i18n::tr("Wine 更新检查失败", "Wine の更新確認に失敗しました", "Failed to check for Wine updates", "Wine 업데이트 확인에 실패했습니다").to_owned());
             Ok(Some(UpdateCheckTerminal::Failed(reason)))
         }
         JobStatus::Queued | JobStatus::Running | JobStatus::Cancelling => Ok(None),
@@ -6003,7 +6003,7 @@ fn fetch_desktop(client: &mut Client, events: &smol::channel::Sender<BridgeEvent
             events,
             BridgeEvent::HostDesktop {
                 install,
-                result: Err("桌面集成服务接入后可配置".into()),
+                result: Err(crate::i18n::tr("桌面集成服务接入后可配置", "デスクトップ統合サービスが接続されると設定できます", "Desktop integration will be configurable once the service is connected", "데스크톱 통합 서비스가 연결되면 설정할 수 있습니다").into()),
             },
         );
         return;
@@ -6029,7 +6029,7 @@ fn fetch_terminals(client: &mut Client, events: &smol::channel::Sender<BridgeEve
         emit_event(
             events,
             BridgeEvent::HostTerminals {
-                result: Err("终端发现服务接入后可选择".into()),
+                result: Err(crate::i18n::tr("终端发现服务接入后可选择", "ターミナル検出サービスが接続されると選択できます", "Terminal selection will be available once the service is connected", "터미널 검색 서비스가 연결되면 선택할 수 있습니다").into()),
             },
         );
         return;
@@ -6151,9 +6151,9 @@ fn poll_setup(
                 .map(BridgeFailureDto::reason)
                 .unwrap_or_else(|| {
                     if status == JobStatus::Cancelled {
-                        "安装已取消".to_owned()
+                        crate::i18n::tr("安装已取消", "インストールがキャンセルされました", "Installation cancelled", "설치가 취소되었습니다").to_owned()
                     } else {
-                        "Wine 运行时安装失败".to_owned()
+                        crate::i18n::tr("Wine 运行时安装失败", "Wine ランタイムのインストールに失敗しました", "Wine runtime installation failed", "Wine 런타임 설치에 실패했습니다").to_owned()
                     }
                 });
             Ok(Some(SetupTerminal::Failed(reason)))
@@ -6202,9 +6202,9 @@ fn poll_metadata_sync(
                 .map(BridgeFailureDto::reason)
                 .unwrap_or_else(|| {
                     if status == JobStatus::Cancelled {
-                        "同步已取消".to_owned()
+                        crate::i18n::tr("同步已取消", "同期がキャンセルされました", "Sync cancelled", "동기화가 취소되었습니다").to_owned()
                     } else {
-                        "元数据同步失败".to_owned()
+                        crate::i18n::tr("元数据同步失败", "メタデータの同期に失敗しました", "Metadata sync failed", "메타데이터 동기화에 실패했습니다").to_owned()
                     }
                 });
             Ok((Some(MetadataSyncTerminal::Failed(reason)), None))
@@ -6249,7 +6249,7 @@ fn metadata_apply_result(job: &JobDto) -> Result<Option<Result<(), String>>, Cal
     match status {
         JobStatus::Completed => Ok(Some(Ok(()))),
         JobStatus::Failed | JobStatus::Cancelled => Ok(Some(Err(job.error.as_ref()
-            .map(BridgeFailureDto::reason).unwrap_or_else(|| "游戏资料更新失败或已取消".to_owned())))),
+            .map(BridgeFailureDto::reason).unwrap_or_else(|| crate::i18n::tr("游戏资料更新失败或已取消", "ゲーム情報の更新に失敗したかキャンセルされました", "Game info update failed or was cancelled", "게임 정보 업데이트에 실패했거나 취소되었습니다").to_owned())))),
         JobStatus::Queued | JobStatus::Running | JobStatus::Cancelling => Ok(None),
     }
 }
@@ -6283,9 +6283,9 @@ fn poll_metadata_search(
                 .map(BridgeFailureDto::reason)
                 .unwrap_or_else(|| {
                     if status == JobStatus::Cancelled {
-                        "搜索已取消".to_owned()
+                        crate::i18n::tr("搜索已取消", "検索がキャンセルされました", "Search cancelled", "검색이 취소되었습니다").to_owned()
                     } else {
-                        "元数据搜索失败".to_owned()
+                        crate::i18n::tr("元数据搜索失败", "メタデータ検索に失敗しました", "Metadata search failed", "메타데이터 검색에 실패했습니다").to_owned()
                     }
                 });
             Ok(Some(MetadataSearchTerminal::Failed(reason)))
@@ -6360,9 +6360,9 @@ fn poll_diagnostic(
                 .map(BridgeFailureDto::reason)
                 .unwrap_or_else(|| {
                     if status == JobStatus::Cancelled {
-                        "操作已取消".to_owned()
+                        crate::i18n::tr("操作已取消", "操作がキャンセルされました", "Operation cancelled", "작업이 취소되었습니다").to_owned()
                     } else {
-                        "诊断任务失败".to_owned()
+                        crate::i18n::tr("诊断任务失败", "診断タスクに失敗しました", "Diagnostics task failed", "진단 작업에 실패했습니다").to_owned()
                     }
                 });
             Ok(Some(DiagnosticTerminal::Failed(reason)))
@@ -6415,9 +6415,9 @@ fn poll_bottle_operation(
                 .map(BridgeFailureDto::reason)
                 .unwrap_or_else(|| {
                     if status == JobStatus::Cancelled {
-                        "操作已取消".to_owned()
+                        crate::i18n::tr("操作已取消", "操作がキャンセルされました", "Operation cancelled", "작업이 취소되었습니다").to_owned()
                     } else {
-                        "容器操作失败".to_owned()
+                        crate::i18n::tr("容器操作失败", "コンテナ操作に失敗しました", "Bottle operation failed", "컨테이너 작업에 실패했습니다").to_owned()
                     }
                 });
             Ok(Some(BottleOperationTerminal::Failed { reason }))
@@ -6601,15 +6601,15 @@ fn poll_winetricks(
                     // winetricks failure; turn it into the repair action the
                     // SwiftUI alert offers.
                     if error.code == "prefix_invalid" {
-                        "容器前缀不完整或已损坏，请先在容器页执行「修复容器」，然后重试"
+                        crate::i18n::tr("容器前缀不完整或已损坏，请先在容器页执行「修复容器」，然后重试", "コンテナプレフィックスが不完全または破損しています。コンテナページで「コンテナを修復」を実行してから再試行してください", "Bottle prefix is incomplete or damaged; run Repair Bottle on the bottle page first and retry", "컨테이너 접두사가 불완전하거나 손상되었습니다. 컨테이너 페이지에서 컨테이너 복구를 실행한 후 다시 시도하세요")
                             .to_owned()
                     } else {
                         error.reason()
                     }
                 })
                 .unwrap_or_else(|| match status {
-                    JobStatus::Cancelled => "已取消".to_owned(),
-                    _ => "安装失败".to_owned(),
+                    JobStatus::Cancelled => crate::i18n::s().winetricks.cancelled.to_owned(),
+                    _ => crate::i18n::s().winetricks.install_failed.to_owned(),
                 });
             Ok(Some(WinetricksTerminal::Failed { status, reason }))
         }
@@ -6949,9 +6949,38 @@ impl CallFailure {
 pub(crate) fn classify(error: whisky_bridge::Error) -> CallFailure {
     match error {
         whisky_bridge::Error::Remote(error) => {
-            CallFailure::Remote(format!("{}: {}", error.code, error.message))
+            CallFailure::Remote(crate::i18n::bridge_errors::describe(&error.code, &error.message))
         }
-        other => CallFailure::Session(other.to_string()),
+        whisky_bridge::Error::Timeout { .. } => CallFailure::Session(crate::i18n::tr(
+            "桥接响应超时；重试前请刷新状态",
+            "ブリッジがタイムアウトしました。再試行前に状態を再読み込みしてください",
+            "Bridge timed out; reload state before retrying a mutation",
+            "브리지 시간 초과; 변경 작업을 다시 시도하기 전에 상태를 새로 고치세요",
+        ).to_owned()),
+        whisky_bridge::Error::Closed => CallFailure::Session(crate::i18n::tr(
+            "桥接会话已关闭",
+            "ブリッジセッションが閉じられました",
+            "Bridge session is closed",
+            "브리지 세션이 닫혔습니다",
+        ).to_owned()),
+        whisky_bridge::Error::Transport(detail) => CallFailure::Session(format!(
+            "{}: {detail}",
+            crate::i18n::tr(
+                "桥接传输错误",
+                "ブリッジ転送エラー",
+                "Bridge transport error",
+                "브리지 전송 오류",
+            )
+        )),
+        whisky_bridge::Error::Protocol(detail) => CallFailure::Session(format!(
+            "{}: {detail}",
+            crate::i18n::tr(
+                "桥接协议错误",
+                "ブリッジプロトコルエラー",
+                "Bridge protocol error",
+                "브리지 프로토콜 오류",
+            )
+        )),
     }
 }
 

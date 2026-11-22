@@ -20,12 +20,13 @@ impl WhiskyApp {
     pub(crate) fn launchers_page(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let indices = self.launchers();
         let mut rows: Vec<AnyElement> = Vec::new();
+        let strings = crate::i18n::s();
         if indices.is_empty() {
             rows.push(
                 muted(if self.demo {
-                    "Demo 模式没有启动器"
+                    strings.launchers.demo_empty
                 } else {
-                    "没有发现启动器。固定 steam.exe 等启动器程序，或在扫描文件夹中放入启动器目录后，它会出现在这里而不是游戏库中。"
+                    strings.launchers.empty_desc
                 })
                 .line_height(relative(1.5))
                 .into_any_element(),
@@ -36,7 +37,7 @@ impl WhiskyApp {
         }
         self.form(
             "launchers-scroll",
-            vec![self.section("launchers", "启动器", rows, cx)],
+            vec![self.section("launchers", strings.library.launchers, rows, cx)],
         )
     }
 
@@ -97,7 +98,7 @@ impl WhiskyApp {
                             .text_size(px(11.)),
                     )
                     .child(
-                        muted(format!("容器：{bottle}"))
+                        muted(crate::i18n::fmt::container_prefix(&bottle))
                             .truncate()
                             .text_size(px(11.)),
                     ),
@@ -108,7 +109,7 @@ impl WhiskyApp {
                     .gap(px(6.))
                     .child(
                         Switch::new(("launcher-autostart", index))
-                            .label("打开 Maltoria 时启动")
+                            .label(crate::i18n::s().launchers.autostart_switch)
                             .checked(auto_start)
                             .on_change(cx.listener(move |this, _, _, cx| {
                                 this.command(Command::LauncherAutoStart(index), cx);
@@ -120,7 +121,7 @@ impl WhiskyApp {
                             .when(needs_executable, |d| {
                                 d.child(
                                     Button::new(("launcher-exe", index))
-                                        .label("选择可执行文件…")
+                                        .label(crate::i18n::s().launchers.choose_exe_ellipsis)
                                         .ghost()
                                         .on_click(cx.listener(move |this, _, _, cx| {
                                             this.command(Command::Executable(index), cx);

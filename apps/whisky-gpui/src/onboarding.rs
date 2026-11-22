@@ -20,6 +20,28 @@ pub(crate) const CATEGORIES: [(&str, &str, &str); 4] = [
     ("characters", "人物", "libraryMetadataCharactersSource"),
 ];
 
+pub(crate) fn source_label(id: &str) -> &str {
+    match id {
+        "bangumi" => "Bangumi",
+        "vndb" => "VNDB",
+        "steam" => "Steam",
+        "ymgal" => crate::i18n::s().metadata.ymgal_name,
+        "nextmoe" => "NextMoe",
+        other => other,
+    }
+}
+
+pub(crate) fn category_label(id: &str) -> &str {
+    let m = &crate::i18n::s().metadata;
+    match id {
+        "basic" => m.cat_basic,
+        "summary" => m.cat_summary,
+        "cover" => m.cat_cover,
+        "characters" => m.cat_characters_short,
+        other => other,
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct MetadataPreferences {
     pub(crate) default_source: String,
