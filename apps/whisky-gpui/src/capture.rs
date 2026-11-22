@@ -467,6 +467,11 @@ impl Default for CaptureState {
 }
 
 impl CaptureState {
+    pub(crate) fn clear_window_inputs(&mut self) {
+        self.hook_input = None;
+        self.thread_filter_input = None;
+    }
+
     pub(crate) fn set_context(&mut self, context: Option<(String, String, String)>) {
         if self.context != context {
             self.context = context;

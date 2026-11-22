@@ -8,10 +8,11 @@ use gpui_kit::{prelude::*, *};
 use serde_json::json;
 
 use crate::capture::{CapturePreset, exe_basename, filter_threads};
-use crate::controls::{col, icon, live_badge, muted, row, selectable_pill};
+use crate::controls::{col, icon, live_badge, muted, round_button, row, selectable_pill, text_tip};
 use crate::state::WhiskyApp;
 use crate::theme::*;
 use crate::translation::provider_kind_label;
+use crate::windows::capture_header_settings_button;
 
 const THREAD_ROLES: [(&str, &str); 4] = [
     ("ignore", "忽略"),
@@ -36,11 +37,120 @@ const OVERLAY_SOURCE_COLORS: [(&str, &str); 4] = [
 ];
 
 impl WhiskyApp {
+    /// Content rendered inside the independent native `CaptureWindow` — uses
+    /// a unified macOS titlebar with traffic-light clearance and no Back button.
+    pub(crate) fn capture_window_content(
+        &mut self,
+        left_padding: f32,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let (cards, game_title, capture_status, is_live, attached) =
+            self.capture_cards_body(window, cx);
+        let status_badge = if is_live {
+            live_badge(if attached { "捕获中" } else { "扫描中" }).into_any_element()
+        } else {
+            pill_badge(capture_status_label(&capture_status), badge_bg(), badge_text())
+                .into_any_element()
+        };
+        let header = row()
+            .h(px(52.))
+            .flex_shrink_0()
+            .pl(px(left_padding))
+            .pr(px(18.))
+            .gap(px(10.))
+            .items_center()
+            .justify_between()
+            .bg(rgba(toolbar_bg()))
+            .border_b_1()
+            .border_color(rgba(divider()))
+            .child(
+                row()
+                    .flex_1()
+                    .min_w_0()
+                    .gap(px(10.))
+                    .items_center()
+                    .child(icon("languages", 16.).text_color(rgb(ACCENT)))
+                    .child(
+                        div()
+                            .text_size(px(15.))
+                            .font_weight(FontWeight::BOLD)
+                            .text_color(rgb(text()))
+                            .child("游戏翻译"),
+                    )
+                    .child(pill_badge(game_title, badge_bg(), badge_text()))
+                    .child(status_badge),
+            )
+            .child(capture_header_settings_button(cx));
+
+        let body = col().w_full().gap(px(14.)).p(px(22.)).children(cards);
+        col()
+            .size_full()
+            .child(header)
+            .child(div().flex_1().min_h_0().w_full().child(self.preview_scroll("capture-panel-scroll", body)))
+            .into_any_element()
+    }
+
     pub(crate) fn capture_panel(
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        let (cards, game_title, capture_status, is_live, attached) =
+            self.capture_cards_body(window, cx);
+        let top_bar = row()
+            .justify_between()
+            .gap(px(12.))
+            .flex_wrap()
+            .child(
+                row()
+                    .gap(px(10.))
+                    .flex_wrap()
+                    .child(
+                        round_button("capture-close", "chevron-left")
+                            .size(px(28.))
+                            .rounded(px(7.))
+                            .tooltip(text_tip("返回游戏库"))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.close_capture_window(cx);
+                            })),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(18.))
+                            .font_weight(FontWeight::BOLD)
+                            .text_color(rgb(text()))
+                            .child("游戏翻译"),
+                    )
+                    .child(pill_badge(game_title, badge_bg(), badge_text()))
+                    .child(if is_live {
+                        live_badge(if attached { "捕获中" } else { "扫描中" }).into_any_element()
+                    } else {
+                        pill_badge(
+                            capture_status_label(&capture_status),
+                            badge_bg(),
+                            badge_text(),
+                        )
+                        .into_any_element()
+                    }),
+            )
+            .child(capture_header_settings_button(cx));
+
+        let body = col()
+            .w_full()
+            .gap(px(14.))
+            .p(px(22.))
+            .child(top_bar)
+            .children(cards);
+
+        self.preview_scroll("capture-panel-scroll", body)
+    }
+
+    fn capture_cards_body(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> (Vec<Div>, String, String, bool, bool) {
         let context = self.capture.context.clone();
         let game_title = context
             .as_ref()
@@ -128,49 +238,6 @@ impl WhiskyApp {
         let attached = snap.as_ref().is_some_and(|s| s.target.is_some());
         let arch_is_x64 =
             self.capture.architecture.is_empty() || self.capture.architecture == "x64";
-
-        // Top Bar
-        let top_bar = row()
-            .justify_between()
-            .gap(px(12.))
-            .flex_wrap()
-            .child(
-                row()
-                    .gap(px(10.))
-                    .flex_wrap()
-                    .child(
-                        Button::new("capture-close")
-                            .ghost()
-                            .label("← 返回")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.capture.panel_open = false;
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(18.))
-                            .font_weight(FontWeight::BOLD)
-                            .text_color(rgb(text()))
-                            .child("游戏翻译"),
-                    )
-                    .child(pill_badge(game_title, badge_bg(), badge_text()))
-                    .child(if is_live {
-                        live_badge(if attached { "捕获中" } else { "扫描中" }).into_any_element()
-                    } else {
-                        pill_badge(
-                            capture_status_label(&capture_status),
-                            badge_bg(),
-                            badge_text(),
-                        )
-                        .into_any_element()
-                    }),
-            )
-            .child(
-                Button::new("capture-provider-settings")
-                    .label("提供商设置…")
-                    .on_click(cx.listener(|this, _, _, cx| this.open_translation_settings(cx))),
-            );
 
         // Card 1 — 提供商与捕获控制
         let provider_pills: Vec<AnyElement> = self
@@ -1195,24 +1262,15 @@ impl WhiskyApp {
             )
         };
 
-        let body = col()
-            .w_full()
-            .gap(px(14.))
-            .p(px(22.))
-            .child(top_bar)
-            .child(control_card)
-            .child(process_card)
-            .child(subtitle_card)
-            .child(threads_card)
-            .child(history_card)
-            .child(overlay_card);
-
-        div()
-            .id("capture-panel-scroll")
-            .size_full()
-            .overflow_y_scroll()
-            .child(body)
-            .into_any_element()
+        let cards = vec![
+            control_card,
+            process_card,
+            subtitle_card,
+            threads_card,
+            history_card,
+            overlay_card,
+        ];
+        (cards, game_title, capture_status, is_live, attached)
     }
 }
 

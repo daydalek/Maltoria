@@ -83,20 +83,6 @@ impl WhiskyApp {
         };
         col()
             .size_full()
-            .child(
-                row()
-                    .flex_shrink_0()
-                    .px(px(24.))
-                    .py(px(8.))
-                    .gap(px(10.))
-                    .child(
-                        Button::new("page-back")
-                            .label("‹ 返回")
-                            .ghost()
-                            .on_click(cx.listener(|this, _, _, cx| this.navigate_back(cx))),
-                    )
-                    .child(muted(self.bottle_name().to_owned())),
-            )
             .child(div().flex_1().min_h_0().child(body))
             .child(if self.preview.page == PreviewPage::ConfigureBottle {
                 row()

@@ -61,6 +61,95 @@ pub(crate) enum AboutTab {
     Notices,
 }
 
+/// Top-level sections in the macOS-style Settings sidebar.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum SettingsSection {
+    #[default]
+    General,
+    Library,
+    Translation,
+    Metadata,
+    Runtime,
+    Network,
+}
+
+impl SettingsSection {
+    pub(crate) const ALL: [Self; 6] = [
+        Self::General,
+        Self::Library,
+        Self::Translation,
+        Self::Metadata,
+        Self::Runtime,
+        Self::Network,
+    ];
+
+    pub(crate) fn id(self) -> &'static str {
+        match self {
+            Self::General => "general",
+            Self::Library => "library",
+            Self::Translation => "translation",
+            Self::Metadata => "metadata",
+            Self::Runtime => "runtime",
+            Self::Network => "network",
+        }
+    }
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::General => "通用",
+            Self::Library => "游戏库",
+            Self::Translation => "AI 翻译",
+            Self::Metadata => "资料来源",
+            Self::Runtime => "运行时与引擎",
+            Self::Network => "网络与更新",
+        }
+    }
+
+    pub(crate) fn icon(self) -> &'static str {
+        match self {
+            Self::General => "sliders-horizontal",
+            Self::Library => "layout-grid",
+            Self::Translation => "languages",
+            Self::Metadata => "book-open",
+            Self::Runtime => "cpu",
+            Self::Network => "globe",
+        }
+    }
+
+    pub(crate) fn scroll_id(self) -> &'static str {
+        match self {
+            Self::General => "settings-section-general",
+            Self::Library => "settings-section-library",
+            Self::Translation => "settings-section-translation",
+            Self::Metadata => "settings-section-metadata",
+            Self::Runtime => "settings-section-runtime",
+            Self::Network => "settings-section-network",
+        }
+    }
+}
+
+/// Lifecycle state for a secondary native window owned by `WhiskyApp`.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) enum DetachedWindow {
+    #[default]
+    Closed,
+    Opening,
+    Open(AnyWindowHandle),
+}
+
+impl DetachedWindow {
+    pub(crate) fn is_active(&self) -> bool {
+        !matches!(self, Self::Closed)
+    }
+
+    pub(crate) fn handle(&self) -> Option<AnyWindowHandle> {
+        match self {
+            Self::Open(handle) => Some(*handle),
+            Self::Closed | Self::Opening => None,
+        }
+    }
+}
+
 /// `configuration.schema` + `configuration.read` for the selected bottle.
 #[derive(Clone)]
 pub(crate) struct ConfigPage {
@@ -147,7 +236,7 @@ pub(crate) struct ProcessesPage {
     pub(crate) error: Option<String>,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PreviewPage {
     Library,
     Statistics,
@@ -844,6 +933,9 @@ pub(crate) struct WhiskyApp {
     /// collapse button and `ToggleSidebar` switch to. Persisted.
     pub(crate) sidebar_collapsed_style: SidebarMode,
     pub(crate) settings: bool,
+    pub(crate) settings_section: SettingsSection,
+    pub(crate) settings_window: DetachedWindow,
+    pub(crate) capture_window: DetachedWindow,
     /// The About panel; independent of the settings page and sheets.
     pub(crate) about: bool,
     pub(crate) about_tab: AboutTab,
@@ -1157,6 +1249,9 @@ impl WhiskyApp {
             sidebar_dirty: false,
             sidebar_collapsed_style: SidebarMode::Icons,
             settings: false,
+            settings_section: SettingsSection::default(),
+            settings_window: DetachedWindow::Closed,
+            capture_window: DetachedWindow::Closed,
             about: false,
             about_tab: AboutTab::default(),
             app_info: None,
@@ -3277,7 +3372,9 @@ impl WhiskyApp {
     /// bottle, so revisiting is instant; only a bottle without a cache issues a
     /// read. The runtime is configured once per session, lazily.
     pub(crate) fn select_bottle(&mut self, index: Option<usize>, cx: &mut Context<Self>) {
-        self.settings = false;
+        if self.inline_settings_active() {
+            self.settings = false;
+        }
         self.selected_bottle = index;
         self.preview.page = if index.is_none() {
             PreviewPage::Library
@@ -3850,7 +3947,18 @@ impl WhiskyApp {
         self.quit_error = None;
         self.quit_generation = self.quit_generation.wrapping_add(1);
         let generation = self.quit_generation;
-        crate::ui_state::save_window(window.window_bounds());
+        let current = window.window_handle();
+        let is_secondary = self
+            .settings_window
+            .handle()
+            .is_some_and(|h| h.window_id() == current.window_id())
+            || self
+                .capture_window
+                .handle()
+                .is_some_and(|h| h.window_id() == current.window_id());
+        if !is_secondary {
+            crate::ui_state::save_window(window.window_bounds());
+        }
         self.bridge.shutdown_application();
         cx.spawn(async move |this, cx| {
             cx.background_executor().timer(Duration::from_secs(65)).await;
@@ -3887,14 +3995,136 @@ impl WhiskyApp {
         *about_tab = AboutTab::Overview;
     }
 
-    /// The settings page replaces the library body, as the gear does.
+    pub(crate) fn inline_settings_active(&self) -> bool {
+        self.settings && !self.settings_window.is_active()
+    }
+
+    pub(crate) fn inline_capture_active(&self) -> bool {
+        self.capture.panel_open && !self.capture_window.is_active()
+    }
+
+    pub(crate) fn can_navigate_back(&self) -> bool {
+        !self.inline_settings_active()
+            && !self.inline_capture_active()
+            && matches!(
+                self.preview.page,
+                PreviewPage::ConfigureBottle
+                    | PreviewPage::Programs
+                    | PreviewPage::Processes
+                    | PreviewPage::GameConfigs
+            )
+    }
+
+    pub(crate) fn back_destination_label(&self) -> String {
+        match self.preview.history.last().copied().unwrap_or(PreviewPage::Bottle) {
+            PreviewPage::Library => "游戏库".into(),
+            PreviewPage::Statistics => "游玩统计".into(),
+            PreviewPage::Launchers => "启动器".into(),
+            PreviewPage::Bottle => self.bottle_name().to_owned(),
+            PreviewPage::ConfigureBottle => "容器配置".into(),
+            PreviewPage::Programs => "已安装的程序".into(),
+            PreviewPage::Processes => "运行中的进程".into(),
+            PreviewPage::GameConfigs => "游戏配置".into(),
+        }
+    }
+
+    fn clear_settings_scroll_handles(&self) {
+        let mut handles = self.preview.scroll_handles.borrow_mut();
+        handles.remove("app-settings-scroll");
+        handles.remove("translation-settings-scroll");
+        for section in SettingsSection::ALL {
+            handles.remove(section.scroll_id());
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn ensure_settings_window(&mut self, cx: &mut Context<Self>) {
+        match self.settings_window {
+            DetachedWindow::Open(handle) => {
+                let weak = cx.entity().downgrade();
+                (**cx).defer(move |cx| {
+                    let activated = handle
+                        .update(cx, |_, window, _| {
+                            window.activate_window();
+                        })
+                        .is_ok();
+                    if !activated {
+                        if let Some(app) = weak.upgrade() {
+                            app.update(cx, |this, cx| {
+                                this.settings_window = DetachedWindow::Opening;
+                                cx.notify();
+                            });
+                            crate::windows::open_settings_window_if_needed(weak, cx);
+                        }
+                    }
+                });
+            }
+            DetachedWindow::Opening => {}
+            DetachedWindow::Closed => {
+                self.settings_window = DetachedWindow::Opening;
+                let weak = cx.entity().downgrade();
+                (**cx).defer(move |cx| {
+                    crate::windows::open_settings_window_if_needed(weak, cx);
+                });
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn ensure_capture_window(&mut self, cx: &mut Context<Self>) {
+        match self.capture_window {
+            DetachedWindow::Open(handle) => {
+                let weak = cx.entity().downgrade();
+                (**cx).defer(move |cx| {
+                    let activated = handle
+                        .update(cx, |_, window, _| {
+                            window.activate_window();
+                        })
+                        .is_ok();
+                    if !activated {
+                        if let Some(app) = weak.upgrade() {
+                            app.update(cx, |this, cx| {
+                                this.capture_window = DetachedWindow::Opening;
+                                cx.notify();
+                            });
+                            crate::windows::open_capture_window_if_needed(weak, cx);
+                        }
+                    }
+                });
+            }
+            DetachedWindow::Opening => {}
+            DetachedWindow::Closed => {
+                self.capture_window = DetachedWindow::Opening;
+                let weak = cx.entity().downgrade();
+                (**cx).defer(move |cx| {
+                    crate::windows::open_capture_window_if_needed(weak, cx);
+                });
+            }
+        }
+    }
+
+    /// Opens Preferences/Settings in an independent native window on macOS (or
+    /// inline on Linux where X11 coordinate smoke tests target the main window).
     pub(crate) fn open_settings(&mut self, cx: &mut Context<Self>) {
-        self.capture.panel_open = false;
-        self.translation_page.dismiss();
-        self.settings = true;
-        self.detail_open = false;
-        self.preview.sheet = None;
-        self.preview.sheet_history.clear();
+        #[cfg(target_os = "linux")]
+        {
+            self.capture.panel_open = false;
+            self.translation_page.dismiss();
+            self.settings = true;
+            self.detail_open = false;
+            self.preview.sheet = None;
+            self.preview.sheet_history.clear();
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            self.settings = true;
+            if self.settings_section == SettingsSection::Translation
+                && !self.translation_page.active
+            {
+                self.translation_page.open(&self.bridge);
+            }
+            self.ensure_settings_window(cx);
+        }
         if !self.demo && self.service_available("setup.status") {
             self.bridge.load_setup_status();
             #[cfg(not(target_os = "linux"))]
@@ -3906,17 +4136,99 @@ impl WhiskyApp {
         cx.notify();
     }
 
+    pub(crate) fn open_settings_section(
+        &mut self,
+        section: SettingsSection,
+        window: Option<&mut Window>,
+        cx: &mut Context<Self>,
+    ) {
+        if self.settings_section == SettingsSection::Translation
+            && section != SettingsSection::Translation
+        {
+            if let Some(window) = window {
+                self.translation_page.close(window, cx);
+            } else {
+                self.translation_page.dismiss();
+                self.translation_page.clear_window_inputs();
+            }
+        }
+        self.settings_section = section;
+        if section == SettingsSection::Translation {
+            self.translation_page.open(&self.bridge);
+        }
+        self.clear_settings_scroll_handles();
+        cx.notify();
+    }
+
     pub(crate) fn open_translation_settings(&mut self, cx: &mut Context<Self>) {
         let from_capture = self.capture.panel_open;
-        self.capture.panel_open = false;
-        self.open_settings(cx);
-        self.translation_page.context = if from_capture {
-            self.capture.context.clone()
+        #[cfg(target_os = "linux")]
+        {
+            self.capture.panel_open = false;
+            self.open_settings(cx);
+            self.translation_page.context = if from_capture {
+                self.capture.context.clone()
+            } else {
+                None
+            };
+            self.translation_page.return_to_capture = from_capture;
+            self.settings_section = SettingsSection::Translation;
+            self.translation_page.open(&self.bridge);
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            self.settings_section = SettingsSection::Translation;
+            self.translation_page.context = if from_capture {
+                self.capture.context.clone()
+            } else {
+                None
+            };
+            self.translation_page.return_to_capture = false;
+            self.open_settings(cx);
+            self.translation_page.open(&self.bridge);
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn close_settings(
+        &mut self,
+        window: Option<&mut Window>,
+        cx: &mut Context<Self>,
+    ) {
+        self.clear_settings_scroll_handles();
+        let handle = self.settings_window.handle();
+        self.settings_window = DetachedWindow::Closed;
+        self.settings = false;
+        if handle.is_none() {
+            if let Some(window) = window {
+                self.translation_page.close(window, cx);
+            } else {
+                self.translation_page.dismiss();
+                self.translation_page.clear_window_inputs();
+            }
         } else {
-            None
-        };
-        self.translation_page.return_to_capture = from_capture;
-        self.translation_page.open(&self.bridge);
+            self.translation_page.dismiss();
+            self.translation_page.clear_window_inputs();
+            if let Some(handle) = handle {
+                (**cx).defer(move |cx| {
+                    let _ = handle.update(cx, |_, window, _| window.remove_window());
+                });
+            }
+        }
+        self.sync_capture_provider_selection();
+        cx.notify();
+    }
+
+    pub(crate) fn handle_settings_window_closing(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.clear_settings_scroll_handles();
+        self.translation_page.close(window, cx);
+        self.settings = false;
+        self.settings_window = DetachedWindow::Closed;
+        self.sync_capture_provider_selection();
         cx.notify();
     }
 
@@ -3961,6 +4273,10 @@ impl WhiskyApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.settings_window.is_active() {
+            self.close_settings(None, cx);
+            return;
+        }
         let return_to_capture = self.translation_page.return_to_capture;
         self.translation_page.close(window, cx);
         if return_to_capture {
@@ -3977,9 +4293,17 @@ impl WhiskyApp {
             self.capture.set_context(Some(context));
         }
         self.sync_capture_provider_selection();
-        self.settings = false;
-        self.translation_page.active = false;
-        self.capture.panel_open = true;
+        #[cfg(target_os = "linux")]
+        {
+            self.settings = false;
+            self.translation_page.active = false;
+            self.capture.panel_open = true;
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            self.capture.panel_open = true;
+            self.ensure_capture_window(cx);
+        }
         if self.translation_page.providers.is_empty() {
             self.translation_page.request(
                 &self.bridge,
@@ -4019,6 +4343,72 @@ impl WhiskyApp {
             self.capture.refresh_history(&self.bridge, 0);
         }
         cx.notify();
+    }
+
+    pub(crate) fn close_capture_window(&mut self, cx: &mut Context<Self>) {
+        self.capture.panel_open = false;
+        self.capture.clear_window_inputs();
+        self.preview
+            .scroll_handles
+            .borrow_mut()
+            .remove("capture-panel-scroll");
+        let handle = self.capture_window.handle();
+        self.capture_window = DetachedWindow::Closed;
+        if let Some(handle) = handle {
+            (**cx).defer(move |cx| {
+                let _ = handle.update(cx, |_, window, _| window.remove_window());
+            });
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn handle_capture_window_closing(&mut self, cx: &mut Context<Self>) {
+        self.capture.panel_open = false;
+        self.capture.clear_window_inputs();
+        self.capture_window = DetachedWindow::Closed;
+        self.preview
+            .scroll_handles
+            .borrow_mut()
+            .remove("capture-panel-scroll");
+        cx.notify();
+    }
+
+    pub(crate) fn handle_secondary_window_closed(
+        &mut self,
+        closed_id: gpui_kit::WindowId,
+        cx: &mut Context<Self>,
+    ) {
+        let mut changed = false;
+        if self
+            .settings_window
+            .handle()
+            .is_some_and(|h| h.window_id() == closed_id)
+        {
+            self.clear_settings_scroll_handles();
+            self.settings_window = DetachedWindow::Closed;
+            self.settings = false;
+            self.translation_page.dismiss();
+            self.translation_page.clear_window_inputs();
+            self.sync_capture_provider_selection();
+            changed = true;
+        }
+        if self
+            .capture_window
+            .handle()
+            .is_some_and(|h| h.window_id() == closed_id)
+        {
+            self.capture_window = DetachedWindow::Closed;
+            self.capture.panel_open = false;
+            self.capture.clear_window_inputs();
+            self.preview
+                .scroll_handles
+                .borrow_mut()
+                .remove("capture-panel-scroll");
+            changed = true;
+        }
+        if changed {
+            cx.notify();
+        }
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -8117,8 +8507,18 @@ impl WhiskyApp {
         }
     }
     pub(crate) fn navigate(&mut self, page: PreviewPage, cx: &mut Context<Self>) {
-        if page != self.preview.page {
-            self.preview.history.push(self.preview.page);
+        if matches!(
+            page,
+            PreviewPage::ConfigureBottle
+                | PreviewPage::Programs
+                | PreviewPage::Processes
+                | PreviewPage::GameConfigs
+        ) {
+            if page != self.preview.page {
+                self.preview.history.push(self.preview.page);
+            }
+        } else {
+            self.preview.history.clear();
         }
         self.preview.page = page;
         if matches!(page, PreviewPage::Statistics | PreviewPage::Launchers) {
@@ -8127,7 +8527,9 @@ impl WhiskyApp {
                 self.refresh_library(cx);
             }
         }
-        self.settings = false;
+        if self.inline_settings_active() {
+            self.settings = false;
+        }
         self.detail_open = false;
         self.preview.sheet = None;
         self.hovered = None;
@@ -8255,7 +8657,7 @@ impl WhiskyApp {
         cx.notify();
     }
     pub(crate) fn preview_title(&self) -> SharedString {
-        if self.settings {
+        if self.inline_settings_active() {
             return if self.translation_page.active {
                 "游戏翻译".into()
             } else {
@@ -8788,7 +9190,7 @@ impl WhiskyApp {
     }
 
     pub(crate) fn replay_tag_bar_hint(&mut self, cx: &mut Context<Self>) {
-        self.settings = false;
+        self.close_settings(None, cx);
         self.preview.page = PreviewPage::Library;
         if self.tag_bar_mode != crate::ui_state::TagBarMode::PullDown {
             self.tag_bar_mode = crate::ui_state::TagBarMode::PullDown;

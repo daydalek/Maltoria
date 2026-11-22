@@ -1,8 +1,8 @@
 //! Existing-prefix selection uses the same surface and controls as the bottle dialogs.
 use crate::container_import::ImportState;
 use crate::{controls::*, state::WhiskyApp, theme::*};
-use gpui_kit::component::Disableable;
 use gpui_kit::component::{
+    Disableable, Sizable,
     button::{Button, ButtonVariants},
     switch::Switch,
 };
@@ -152,8 +152,10 @@ impl WhiskyApp {
                             )
                             .child(
                                 Button::new("import-bottles-close")
-                                    .label("×")
                                     .ghost()
+                                    .small()
+                                    .icon(icon("x", 14.))
+                                    .tooltip("关闭（Esc）")
                                     .disabled(busy)
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.import_bottles = None;

@@ -6,7 +6,7 @@ pub(crate) const UI_FONT: &str = ".AppleSystemUIFont";
 pub(crate) const UI_FONT: &str = "Noto Sans CJK SC";
 
 #[cfg(target_os = "macos")]
-pub(crate) const SHORTCUTS: [&str; 7] = [
+pub(crate) const SHORTCUTS: [&str; 9] = [
     "cmd-q",
     "cmd-r",
     "cmd-shift-m",
@@ -14,9 +14,11 @@ pub(crate) const SHORTCUTS: [&str; 7] = [
     "cmd-ctrl-s",
     "cmd-m",
     "cmd-f",
+    "cmd-w",
+    "cmd-[",
 ];
 #[cfg(not(target_os = "macos"))]
-pub(crate) const SHORTCUTS: [&str; 7] = [
+pub(crate) const SHORTCUTS: [&str; 9] = [
     "ctrl-q",
     "ctrl-r",
     "ctrl-shift-m",
@@ -24,12 +26,19 @@ pub(crate) const SHORTCUTS: [&str; 7] = [
     "ctrl-alt-s",
     "ctrl-m",
     "ctrl-f",
+    "ctrl-w",
+    "alt-left",
 ];
 
 #[cfg(target_os = "macos")]
 pub(crate) const SETTINGS_TIP: &str = "设置（⌘,）";
 #[cfg(not(target_os = "macos"))]
 pub(crate) const SETTINGS_TIP: &str = "设置（Ctrl+,）";
+
+#[cfg(target_os = "macos")]
+pub(crate) const BACK_SHORTCUT_LABEL: &str = "⌘[";
+#[cfg(not(target_os = "macos"))]
+pub(crate) const BACK_SHORTCUT_LABEL: &str = "Alt+←";
 
 #[cfg(target_os = "macos")]
 pub(crate) const MOTION_MENU: &str = "界面动画 · ⌘⇧M";

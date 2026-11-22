@@ -2368,6 +2368,13 @@ impl TranslationPage {
         self.clear_provider_inputs();
     }
 
+    pub(crate) fn clear_window_inputs(&mut self) {
+        self.secret.clear();
+        self.pending_credential.clear();
+        self.inputs.clear();
+        self.prompt_input = None;
+    }
+
     pub(crate) fn dismiss(&mut self) {
         self.active = false;
         self.return_to_capture = false;
@@ -2384,6 +2391,7 @@ impl TranslationPage {
         if let Some(input) = input {
             input.update(cx, |state, cx| state.set_value(String::new(), window, cx));
         }
+        self.clear_window_inputs();
     }
 
     pub(crate) fn save_settings(&mut self, bridge: &BridgeSupervisor, cx: &Context<WhiskyApp>) {
@@ -2973,41 +2981,88 @@ mod tests {
 
         window
             .update(cx, |this, window, cx| {
-                // Opened from capture panel -> return_to_capture = true
-                this.capture.panel_open = true;
-                this.capture.context = Some((
-                    "container-1".into(),
-                    "game-1".into(),
-                    "Demo Game".into(),
-                ));
-                this.open_translation_settings(cx);
-                assert!(!this.capture.panel_open);
-                assert!(this.settings);
-                assert!(this.translation_page.active);
-                assert!(this.translation_page.return_to_capture);
-                assert_eq!(
-                    this.translation_page.context.as_ref().map(|c| c.2.as_str()),
-                    Some("Demo Game")
-                );
+                #[cfg(target_os = "linux")]
+                {
+                    // Opened from capture panel -> return_to_capture = true
+                    this.capture.panel_open = true;
+                    this.capture.context = Some((
+                        "container-1".into(),
+                        "game-1".into(),
+                        "Demo Game".into(),
+                    ));
+                    this.open_translation_settings(cx);
+                    assert!(!this.capture.panel_open);
+                    assert!(this.settings);
+                    assert!(this.translation_page.active);
+                    assert!(this.translation_page.return_to_capture);
+                    assert_eq!(
+                        this.translation_page.context.as_ref().map(|c| c.2.as_str()),
+                        Some("Demo Game")
+                    );
 
-                this.close_translation_settings(window, cx);
-                assert!(!this.settings);
-                assert!(!this.translation_page.active);
-                assert!(!this.translation_page.return_to_capture);
-                assert!(this.capture.panel_open);
+                    this.close_translation_settings(window, cx);
+                    assert!(!this.settings);
+                    assert!(!this.translation_page.active);
+                    assert!(!this.translation_page.return_to_capture);
+                    assert!(this.capture.panel_open);
 
-                // Opened from application settings -> return_to_capture = false
-                this.capture.panel_open = false;
-                this.open_translation_settings(cx);
-                assert!(this.settings);
-                assert!(this.translation_page.active);
-                assert!(!this.translation_page.return_to_capture);
-                assert!(this.translation_page.context.is_none());
+                    // Opened from application settings -> return_to_capture = false
+                    this.capture.panel_open = false;
+                    this.open_translation_settings(cx);
+                    assert!(this.settings);
+                    assert!(this.translation_page.active);
+                    assert!(!this.translation_page.return_to_capture);
+                    assert!(this.translation_page.context.is_none());
 
-                this.close_translation_settings(window, cx);
-                assert!(this.settings);
-                assert!(!this.translation_page.active);
-                assert!(!this.capture.panel_open);
+                    this.close_translation_settings(window, cx);
+                    assert!(this.settings);
+                    assert!(!this.translation_page.active);
+                    assert!(!this.capture.panel_open);
+                }
+                #[cfg(not(target_os = "linux"))]
+                {
+                    let _ = window;
+                    // On macOS, SettingsWindow and CaptureWindow coexist side-by-side.
+                    this.capture.panel_open = true;
+                    this.capture.context = Some((
+                        "container-1".into(),
+                        "game-1".into(),
+                        "Demo Game".into(),
+                    ));
+                    this.open_translation_settings(cx);
+                    assert!(this.capture.panel_open);
+                    assert!(this.settings);
+                    assert_eq!(
+                        this.settings_section,
+                        crate::state::SettingsSection::Translation
+                    );
+                    assert!(this.translation_page.active);
+                    assert_eq!(
+                        this.translation_page.context.as_ref().map(|c| c.2.as_str()),
+                        Some("Demo Game")
+                    );
+
+                    this.close_settings(None, cx);
+                    assert!(!this.settings);
+                    assert!(!this.translation_page.active);
+                    assert!(this.translation_page.inputs.is_empty());
+                    assert!(this.capture.panel_open);
+
+                    this.capture.panel_open = false;
+                    this.open_translation_settings(cx);
+                    assert!(this.settings);
+                    assert_eq!(
+                        this.settings_section,
+                        crate::state::SettingsSection::Translation
+                    );
+                    assert!(this.translation_page.active);
+                    assert!(this.translation_page.context.is_none());
+
+                    this.close_settings(None, cx);
+                    assert!(!this.settings);
+                    assert!(!this.translation_page.active);
+                    assert!(!this.capture.panel_open);
+                }
             })
             .unwrap();
     }

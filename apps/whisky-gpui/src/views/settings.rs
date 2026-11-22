@@ -9,7 +9,7 @@ use gpui_kit::{prelude::*, *};
 
 use crate::controls::{col, muted, row};
 use crate::preferences;
-use crate::state::WhiskyApp;
+use crate::state::{SettingsSection, WhiskyApp};
 use crate::theme::*;
 
 const BLUR_SLIDER_WIDTH: f32 = 132.;
@@ -401,6 +401,44 @@ impl WhiskyApp {
     }
 
     pub(crate) fn application_settings(&self, cx: &Context<Self>) -> AnyElement {
+        self.form(
+            "app-settings-scroll",
+            vec![
+                self.general_section(cx),
+                self.library_prefs_section(cx),
+                self.translation_entry_section(cx),
+                self.metadata_section(cx),
+                self.runtime_section(cx),
+                self.network_section(cx),
+                #[cfg(not(target_os = "linux"))]
+                self.gptk_section(cx),
+                self.engines_section(cx),
+            ],
+        )
+    }
+
+    pub(crate) fn settings_section_page(
+        &self,
+        section: SettingsSection,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let sections = match section {
+            SettingsSection::General => vec![self.general_section(cx)],
+            SettingsSection::Library => vec![self.library_prefs_section(cx)],
+            SettingsSection::Translation => vec![self.translation_entry_section(cx)],
+            SettingsSection::Metadata => vec![self.metadata_section(cx)],
+            SettingsSection::Runtime => vec![
+                self.runtime_section(cx),
+                #[cfg(not(target_os = "linux"))]
+                self.gptk_section(cx),
+                self.engines_section(cx),
+            ],
+            SettingsSection::Network => vec![self.network_section(cx)],
+        };
+        self.form(section.scroll_id(), sections)
+    }
+
+    fn general_section(&self, cx: &Context<Self>) -> AnyElement {
         let bottle_location = self
             .default_bottle_location
             .clone()
@@ -412,290 +450,309 @@ impl WhiskyApp {
             .child(terminal)
             .child(self.desktop_preferences(cx))
             .into_any_element();
-        self.form(
-            "app-settings-scroll",
+        self.section(
+            "general",
+            "通用",
             vec![
-                self.section(
-                    "general",
-                    "通用",
-                    vec![
-                        self.toggle(
-                            "kill",
-                            "退出 Maltoria 时结束所有进程",
-                            if self.toggle_available("kill") {
-                                "退出应用时按此设置处理运行中的 Windows 程序。"
-                            } else {
-                                "运行时服务接入后可设置。"
-                            },
-                            cx,
-                        ),
-                        // "在菜单栏显示 Whisky" is deliberately absent: the
-                        // GPUI toolkit has no menu-bar/status-item API, so
-                        // the toggle would write a shared default nothing
-                        // reads here. It stays in the schema for SwiftUI.
-                        #[cfg(not(target_os = "linux"))]
-                        self.choice_pairs(
-                            "appearance",
-                            "主题外观",
-                            &crate::theme::APPEARANCE_OPTIONS,
-                            cx,
-                        ),
-                        terminal,
-                        row()
-                            .py(px(10.))
-                            .gap(px(16.))
-                            .child(div().flex_1().min_w_0().child("默认容器位置"))
-                            .child(
-                                muted(bottle_location.clone())
-                                    .max_w(relative(0.5))
-                                    .truncate(),
-                            )
-                            .child(
-                                Button::new("choose-bottle-location")
-                                    .label("更改…")
-                                    .disabled(
-                                        !self.service_available("system.chooseFolder")
-                                            || !self.service_available("preferences.set"),
-                                    )
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.choose_bottle_location(cx);
-                                    })),
-                            )
-                            .into_any_element(),
-                    ],
-                    cx,
-                ),
-                self.section(
-                    "library-prefs",
-                    "游戏库",
-                    {
-                        let mut rows = vec![
-                            self.library_mode_cards(cx),
-                            self.toggle(
-                                "refresh",
-                                "退出游戏后刷新游戏库",
-                                if self.toggle_available("refresh") {
-                                    ""
-                                } else {
-                                    "运行时事件服务接入后可设置。"
-                                },
-                                cx,
-                            ),
-                            self.toggle(
-                                "group-by-studio",
-                                "按厂商聚类展示",
-                                "按开发商 / 厂商分组显示作品，支持在网格、画廊、时间线与沉浸式视图中一键归类。",
-                                cx,
-                            ),
-                            self.choice_pairs(
-                                "tag-bar-mode",
-                                "标签与厂商栏显示方式",
-                                &[
-                                    ("顶部二次下滑抽出", "pull-down"),
-                                    ("始终常驻显示", "always"),
-                                ],
-                                cx,
-                            ),
-                        ];
-                        if self.tag_bar_mode == crate::ui_state::TagBarMode::PullDown {
-                            rows.push(
-                                row()
-                                    .py(px(10.))
-                                    .gap(px(16.))
-                                    .items_center()
-                                    .child(
-                                        col()
-                                            .flex_1()
-                                            .min_w_0()
-                                            .gap(px(4.))
-                                            .child("顶部下滑抽出引导")
-                                            .child(
-                                                muted("返回首页并演示微微下滑露出标签与厂商栏的引导动画。")
-                                                    .line_height(relative(1.4)),
-                                            ),
-                                    )
-                                    .child(
-                                        Button::new("replay-tag-bar-hint")
-                                            .label("重播引导")
-                                            .on_click(cx.listener(|this, _, _, cx| {
-                                                this.command(super::Command::ReplayTagBarHint, cx);
-                                            })),
-                                    )
-                                    .into_any_element(),
-                            );
-                        }
-                        rows.extend([
-                            self.toggle(
-                                "mixed",
-                                "混合封面布局",
-                                "横版封面跨两列，竖版封面占一列。",
-                                cx,
-                            ),
-                            self.toggle("single-title", "单行显示标题", "", cx),
-                            self.toggle(
-                                "backdrop-fill",
-                                "图片填充背景",
-                                "悬停时用游戏封面填充窗口与详情页背景；关闭后使用主题纯色。",
-                                cx,
-                            ),
-                            self.backdrop_blur_row(cx),
-                            #[cfg(any(target_os = "macos", target_os = "linux"))]
-                            self.choice_pairs(
-                                "cover-upscale",
-                                COVER_UPSCALE_LABEL,
-                                &[("关闭", "off"), ("2× 实用", "x2"), ("4× 激进", "x4")],
-                                cx,
-                            ),
-                            #[cfg(any(target_os = "macos", target_os = "linux"))]
-                            self.choice_pairs(
-                                "cover-engine",
-                                COVER_ENGINE_LABEL,
-                                COVER_ENGINES,
-                                cx,
-                            ),
-                            #[cfg(target_os = "linux")]
-                            self.cover_upscale_status(),
-                            #[cfg(any(target_os = "macos", target_os = "linux"))]
-                            self.cover_batch_row(cx),
-                            self.toggle("scrape-characters", "默认获取人物资料", "从支持的数据源获取人物、声优与头像。", cx),
-                            self.toggle(
-                                "center-cover-text",
-                                "宽封面文字居中",
-                                "横版封面上的标题与信息居中对齐。",
-                                cx,
-                            ),
-                            // The SwiftUI-only display preferences (blurred cover
-                            // fill, fill style, detail layout) stay absent: this
-                            // renderer crops covers with object-fit so a fill never
-                            // shows, and implements one detail layout. They stay in
-                            // the shared preference schema and still affect the
-                            // SwiftUI app. Backdrop blur is a GPUI decode variant
-                            // driven by the `libraryBackdrop*` keys above.
-                            self.toggle(
-                                "motion",
-                                "界面动画",
-                                "滚动回弹、卡片弹簧重排、悬停与详情页过渡。",
-                                cx,
-                            ),
-                            self.toggle(
-                                "lively",
-                                "明显弹性动画",
-                                "卡片重排使用更明显的弹性曲线（默认：柔和）。",
-                                cx,
-                            ),
-                        ]);
-                        rows
-                    },
-                    cx,
-                ),
-                self.section(
-                    "translation-settings",
-                    "游戏翻译",
-                    vec![
-                        muted("配置翻译服务、模型和对话上下文。游戏翻译入口也可从游戏菜单打开。")
-                            .line_height(relative(1.4))
-                            .into_any_element(),
-                        row()
-                            .py(px(6.))
-                            .child(
-                                Button::new("translation-settings-open")
-                                    .label("提供商与翻译设置…")
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.open_translation_settings(cx)
-                                    })),
-                            )
-                            .into_any_element(),
-                    ],
-                    cx,
-                ),
-                self.section(
-                    "metadata-preferences",
-                    "资料来源",
-                    vec![
-                        self.info(
-                            "默认来源",
-                            crate::onboarding::SOURCES.iter()
-                                .find(|(id, _)| *id == self.metadata_preferences.default_source)
-                                .map(|(_, label)| *label).unwrap_or("Bangumi"),
-                        ),
-                        muted("按资料类型选择平台。更改默认偏好不会覆盖已有作品或手动编辑。")
-                            .into_any_element(),
-                        row().gap(px(8.))
-                            .child(Button::new("metadata-preferences-open").label("调整来源…")
-                                .disabled(!self.service_available("preferences.setMany"))
-                                .on_click(cx.listener(|this, _, _, cx| this.open_onboarding(false, cx))))
-                            .child(Button::new("welcome-reopen").label("使用指南…").ghost()
-                                .disabled(!self.service_available("preferences.setMany"))
-                                .on_click(cx.listener(|this, _, _, cx| this.open_onboarding(true, cx))))
-                            .into_any_element(),
-                    ],
-                    cx,
-                ),
-                self.section(
-                    "runtime",
-                    "Wine 运行时",
-                    if self.service_available("setup.status") {
-                        vec![
-                            self.info(
-                                "状态",
-                                self.setup_status.as_ref().map_or_else(
-                                    || "未知".to_owned(),
-                                    |status| {
-                                        if status.installed {
-                                            status.version.clone().map_or_else(
-                                                || "已安装".to_owned(),
-                                                |version| format!("已安装 · {version}"),
-                                            )
-                                        } else {
-                                            "未安装".to_owned()
-                                        }
-                                    },
-                                ),
-                            ),
-                            row()
-                                .py(px(6.))
-                                .child(
-                                    Button::new("runtime-install")
-                                        .label("安装或更新运行时…")
-                                        .disabled(!self.service_available("setup.install"))
-                                        .on_click(
-                                            cx.listener(|this, _, _, cx| this.install_wine_runtime(cx)),
-                                        ),
-                                )
-                                .into_any_element(),
-                        ]
+                self.toggle(
+                    "kill",
+                    "退出 Maltoria 时结束所有进程",
+                    if self.toggle_available("kill") {
+                        "退出应用时按此设置处理运行中的 Windows 程序。"
                     } else {
-                        vec![self.info("当前服务", "文件管理与宿主集成")]
+                        "运行时服务接入后可设置。"
                     },
                     cx,
                 ),
-                self.section(
-                    "network",
-                    "网络与更新",
-                    vec![
-                        self.toggle(
-                            "offline",
-                            "离线模式",
-                            "阻止 Maltoria 自身的联网请求；游戏不受影响。",
-                            cx,
-                        ),
-                        self.toggle(
-                            "updates",
-                            "检查 Wine 更新",
-                            if self.toggle_available("updates") {
-                                ""
-                            } else {
-                                "运行时更新服务接入后可设置。"
-                            },
-                            cx,
-                        ),
-                    ],
+                // "在菜单栏显示 Whisky" is deliberately absent: the
+                // GPUI toolkit has no menu-bar/status-item API, so
+                // the toggle would write a shared default nothing
+                // reads here. It stays in the schema for SwiftUI.
+                #[cfg(not(target_os = "linux"))]
+                self.choice_pairs(
+                    "appearance",
+                    "主题外观",
+                    &crate::theme::APPEARANCE_OPTIONS,
                     cx,
                 ),
-                #[cfg(not(target_os = "linux"))]
-                self.gptk_section(cx),
-                self.engines_section(cx),
+                terminal,
+                row()
+                    .py(px(10.))
+                    .gap(px(16.))
+                    .child(div().flex_1().min_w_0().child("默认容器位置"))
+                    .child(
+                        muted(bottle_location)
+                            .max_w(relative(0.5))
+                            .truncate(),
+                    )
+                    .child(
+                        Button::new("choose-bottle-location")
+                            .label("更改…")
+                            .disabled(
+                                !self.service_available("system.chooseFolder")
+                                    || !self.service_available("preferences.set"),
+                            )
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.choose_bottle_location(cx);
+                            })),
+                    )
+                    .into_any_element(),
             ],
+            cx,
+        )
+    }
+
+    fn library_prefs_section(&self, cx: &Context<Self>) -> AnyElement {
+        let mut rows = vec![
+            self.library_mode_cards(cx),
+            self.toggle(
+                "refresh",
+                "退出游戏后刷新游戏库",
+                if self.toggle_available("refresh") {
+                    ""
+                } else {
+                    "运行时事件服务接入后可设置。"
+                },
+                cx,
+            ),
+            self.toggle(
+                "group-by-studio",
+                "按厂商聚类展示",
+                "按开发商 / 厂商分组显示作品，支持在网格、画廊、时间线与沉浸式视图中一键归类。",
+                cx,
+            ),
+            self.choice_pairs(
+                "tag-bar-mode",
+                "标签与厂商栏显示方式",
+                &[
+                    ("顶部二次下滑抽出", "pull-down"),
+                    ("始终常驻显示", "always"),
+                ],
+                cx,
+            ),
+        ];
+        if self.tag_bar_mode == crate::ui_state::TagBarMode::PullDown {
+            rows.push(
+                row()
+                    .py(px(10.))
+                    .gap(px(16.))
+                    .items_center()
+                    .child(
+                        col()
+                            .flex_1()
+                            .min_w_0()
+                            .gap(px(4.))
+                            .child("顶部下滑抽出引导")
+                            .child(
+                                muted("返回首页并演示微微下滑露出标签与厂商栏的引导动画。")
+                                    .line_height(relative(1.4)),
+                            ),
+                    )
+                    .child(
+                        Button::new("replay-tag-bar-hint")
+                            .label("重播引导")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.command(super::Command::ReplayTagBarHint, cx);
+                            })),
+                    )
+                    .into_any_element(),
+            );
+        }
+        rows.extend([
+            self.toggle(
+                "mixed",
+                "混合封面布局",
+                "横版封面跨两列，竖版封面占一列。",
+                cx,
+            ),
+            self.toggle("single-title", "单行显示标题", "", cx),
+            self.toggle(
+                "backdrop-fill",
+                "图片填充背景",
+                "悬停时用游戏封面填充窗口与详情页背景；关闭后使用主题纯色。",
+                cx,
+            ),
+            self.backdrop_blur_row(cx),
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            self.choice_pairs(
+                "cover-upscale",
+                COVER_UPSCALE_LABEL,
+                &[("关闭", "off"), ("2× 实用", "x2"), ("4× 激进", "x4")],
+                cx,
+            ),
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            self.choice_pairs(
+                "cover-engine",
+                COVER_ENGINE_LABEL,
+                COVER_ENGINES,
+                cx,
+            ),
+            #[cfg(target_os = "linux")]
+            self.cover_upscale_status(),
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            self.cover_batch_row(cx),
+            self.toggle(
+                "scrape-characters",
+                "默认获取人物资料",
+                "从支持的数据源获取人物、声优与头像。",
+                cx,
+            ),
+            self.toggle(
+                "center-cover-text",
+                "宽封面文字居中",
+                "横版封面上的标题与信息居中对齐。",
+                cx,
+            ),
+            // The SwiftUI-only display preferences (blurred cover
+            // fill, fill style, detail layout) stay absent: this
+            // renderer crops covers with object-fit so a fill never
+            // shows, and implements one detail layout. They stay in
+            // the shared preference schema and still affect the
+            // SwiftUI app. Backdrop blur is a GPUI decode variant
+            // driven by the `libraryBackdrop*` keys above.
+            self.toggle(
+                "motion",
+                "界面动画",
+                "滚动回弹、卡片弹簧重排、悬停与详情页过渡。",
+                cx,
+            ),
+            self.toggle(
+                "lively",
+                "明显弹性动画",
+                "卡片重排使用更明显的弹性曲线（默认：柔和）。",
+                cx,
+            ),
+        ]);
+        self.section("library-prefs", "游戏库", rows, cx)
+    }
+
+    fn translation_entry_section(&self, cx: &Context<Self>) -> AnyElement {
+        self.section(
+            "translation-settings",
+            "游戏翻译",
+            vec![
+                muted("配置翻译服务、模型和对话上下文。游戏翻译入口也可从游戏菜单打开。")
+                    .line_height(relative(1.4))
+                    .into_any_element(),
+                row()
+                    .py(px(6.))
+                    .child(
+                        Button::new("translation-settings-open")
+                            .label("提供商与翻译设置…")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.open_translation_settings(cx)
+                            })),
+                    )
+                    .into_any_element(),
+            ],
+            cx,
+        )
+    }
+
+    fn metadata_section(&self, cx: &Context<Self>) -> AnyElement {
+        self.section(
+            "metadata-preferences",
+            "资料来源",
+            vec![
+                self.info(
+                    "默认来源",
+                    crate::onboarding::SOURCES
+                        .iter()
+                        .find(|(id, _)| *id == self.metadata_preferences.default_source)
+                        .map(|(_, label)| *label)
+                        .unwrap_or("Bangumi"),
+                ),
+                muted("按资料类型选择平台。更改默认偏好不会覆盖已有作品或手动编辑。")
+                    .into_any_element(),
+                row()
+                    .gap(px(8.))
+                    .child(
+                        Button::new("metadata-preferences-open")
+                            .label("调整来源…")
+                            .disabled(!self.service_available("preferences.setMany"))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.open_onboarding(false, cx)
+                            })),
+                    )
+                    .child(
+                        Button::new("welcome-reopen")
+                            .label("使用指南…")
+                            .ghost()
+                            .disabled(!self.service_available("preferences.setMany"))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.open_onboarding(true, cx)
+                            })),
+                    )
+                    .into_any_element(),
+            ],
+            cx,
+        )
+    }
+
+    fn runtime_section(&self, cx: &Context<Self>) -> AnyElement {
+        self.section(
+            "runtime",
+            "Wine 运行时",
+            if self.service_available("setup.status") {
+                vec![
+                    self.info(
+                        "状态",
+                        self.setup_status.as_ref().map_or_else(
+                            || "未知".to_owned(),
+                            |status| {
+                                if status.installed {
+                                    status.version.clone().map_or_else(
+                                        || "已安装".to_owned(),
+                                        |version| format!("已安装 · {version}"),
+                                    )
+                                } else {
+                                    "未安装".to_owned()
+                                }
+                            },
+                        ),
+                    ),
+                    row()
+                        .py(px(6.))
+                        .child(
+                            Button::new("runtime-install")
+                                .label("安装或更新运行时…")
+                                .disabled(!self.service_available("setup.install"))
+                                .on_click(
+                                    cx.listener(|this, _, _, cx| this.install_wine_runtime(cx)),
+                                ),
+                        )
+                        .into_any_element(),
+                ]
+            } else {
+                vec![self.info("当前服务", "文件管理与宿主集成")]
+            },
+            cx,
+        )
+    }
+
+    fn network_section(&self, cx: &Context<Self>) -> AnyElement {
+        self.section(
+            "network",
+            "网络与更新",
+            vec![
+                self.toggle(
+                    "offline",
+                    "离线模式",
+                    "阻止 Maltoria 自身的联网请求；游戏不受影响。",
+                    cx,
+                ),
+                self.toggle(
+                    "updates",
+                    "检查 Wine 更新",
+                    if self.toggle_available("updates") {
+                        ""
+                    } else {
+                        "运行时更新服务接入后可设置。"
+                    },
+                    cx,
+                ),
+            ],
+            cx,
         )
     }
 

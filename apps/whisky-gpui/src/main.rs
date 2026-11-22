@@ -43,6 +43,7 @@ mod translation;
 mod ui_state;
 mod upscale;
 mod views;
+mod windows;
 mod winetricks;
 #[cfg(test)]
 mod headless_state_machine_tests;
@@ -59,6 +60,8 @@ gpui_kit::actions!(
     whisky_preview,
     [
         DismissPreview,
+        CloseWindow,
+        NavigateBack,
         QuitPreview,
         ToggleMotion,
         RefreshLibrary,
@@ -106,9 +109,9 @@ impl Render for WhiskyApp {
         let fullscreen = window.is_fullscreen() || window.is_simple_fullscreen();
         self.apply_pending_tag_inputs(window, cx);
         let backdrop = self.backdrop(window, cx);
-        let body = if self.capture.panel_open {
+        let body = if self.inline_capture_active() {
             self.capture_panel(window, cx)
-        } else if self.settings {
+        } else if self.inline_settings_active() {
             if self.translation_page.active {
                 self.translation_settings(window, cx)
             } else {
@@ -195,8 +198,9 @@ impl Render for WhiskyApp {
                     return;
                 }
                 if this.settings || this.preview.page != PreviewPage::Library {
-                    this.translation_page.close(window, cx);
-                    this.settings = false;
+                    if this.settings {
+                        this.close_settings(Some(window), cx);
+                    }
                     this.preview.page = PreviewPage::Library;
                     this.selected_bottle = None;
                 }
@@ -221,6 +225,20 @@ impl Render for WhiskyApp {
             }))
             .on_action(cx.listener(|_, _: &ToggleFullScreen, window, _| {
                 window.toggle_fullscreen();
+            }))
+            .on_action(cx.listener(|_, _: &CloseWindow, window, _| {
+                window.remove_window();
+            }))
+            .on_action(cx.listener(|this, _: &NavigateBack, _, cx| {
+                if this.preview.sheet.is_some() && !this.preview.sheet_history.is_empty() {
+                    this.preview.sheet = this.preview.sheet_history.pop();
+                    cx.notify();
+                } else if this.detail_open && this.detail_character.is_some() {
+                    this.detail_character = None;
+                    cx.notify();
+                } else if this.can_navigate_back() {
+                    this.navigate_back(cx);
+                }
             }))
             .on_action(cx.listener(|this, _: &DismissPreview, window, cx| {
                 if this.bridge_dialog {
@@ -264,16 +282,14 @@ impl Render for WhiskyApp {
                     this.close_detail(window, cx);
                     return;
                 } else if this.staggered_selection.is_some() {
-                } else if this.staggered_selection.is_some() {
                     this.staggered_selection = None;
-                } else if this.settings
+                } else if this.inline_settings_active()
                     && this.translation_page.active
                     && this.translation_page.wizard.is_some()
                 {
                     this.translation_page.close_wizard(Some(window), Some(cx));
                 } else if this.settings {
-                    this.translation_page.close(window, cx);
-                    this.settings = false;
+                    this.close_settings(Some(window), cx);
                 }
                 this.focus_handle.focus(window, cx);
                 cx.notify();
@@ -351,16 +367,19 @@ impl Render for WhiskyApp {
         if self.import_bottles.is_some() {
             root = root.child(self.import_bottles_view(ww, wh, cx));
         }
-        if self.setup_dialog {
+        if self.setup_dialog && !self.settings_window.is_active() {
             root = root.child(self.setup_dialog_view(ww, wh, cx));
         }
         if self.about {
             root = root.child(self.about_dialog(ww, wh, cx));
         }
-        if self.onboarding.is_some() {
+        if self.onboarding.is_some() && !self.settings_window.is_active() {
             root = root.child(self.onboarding_view(ww, wh, cx));
         }
-        if self.settings && self.translation_page.active && self.translation_page.wizard.is_some() {
+        if self.inline_settings_active()
+            && self.translation_page.active
+            && self.translation_page.wizard.is_some()
+        {
             root = root.child(self.translation_wizard_modal(ww, wh, window, cx));
         }
         // Recovery and quit errors must stay actionable even during setup saves.
@@ -642,6 +661,8 @@ fn install_menus(cx: &mut App) {
             MenuItem::os_action("全选", NoAction, OsAction::SelectAll),
         ]),
         Menu::new("显示").items(vec![
+            MenuItem::action("返回上一页", NavigateBack),
+            MenuItem::separator(),
             MenuItem::action("搜索游戏库", FocusSearch),
             MenuItem::action("刷新游戏库", RefreshLibrary),
             MenuItem::separator(),
@@ -654,6 +675,8 @@ fn install_menus(cx: &mut App) {
             MenuItem::action("设置…", ShowSettings),
         ]),
         Menu::new("窗口").items(vec![
+            MenuItem::action("关闭窗口", CloseWindow),
+            MenuItem::separator(),
             MenuItem::action("最小化", MinimizeWindow),
             MenuItem::action("缩放", ZoomWindow),
             MenuItem::separator(),
@@ -674,6 +697,8 @@ pub(crate) fn bind_shortcuts(cx: &mut App) {
         KeyBinding::new(platform::SHORTCUTS[4], ToggleSidebar, None),
         KeyBinding::new(platform::SHORTCUTS[5], MinimizeWindow, None),
         KeyBinding::new(platform::SHORTCUTS[6], FocusSearch, None),
+        KeyBinding::new(platform::SHORTCUTS[7], CloseWindow, None),
+        KeyBinding::new(platform::SHORTCUTS[8], NavigateBack, None),
     ]);
 }
 
@@ -836,12 +861,6 @@ fn main() {
             let appearance = ui_state::load_appearance();
             cx.set_window_appearance(appearance.window_override());
             theme::sync_theme(appearance, None, cx);
-            #[cfg(not(target_os = "linux"))]
-            cx.on_window_closed(|cx, _| {
-                if cx.windows().is_empty() {
-                    cx.quit();
-                }
-            }).detach();
             let bounds = ui_state::initial_window_bounds(cx);
             let (_handle, _view) = gpui_kit::open_window(
                 WindowOptions {
@@ -862,14 +881,23 @@ fn main() {
                 |window, cx| cx.new(|cx| WhiskyApp::new(window, cx)),
             )
             .expect("Failed to open GPUI preview");
+            let main_id = _handle.window_id();
+            let app_weak = _view.downgrade();
+            cx.on_window_closed(move |cx, closed_id| {
+                if closed_id == main_id || !cx.windows().iter().any(|handle| handle.window_id() == main_id) {
+                    for handle in cx.windows() {
+                        let _ = handle.update(cx, |_, window, _| window.remove_window());
+                    }
+                    cx.quit();
+                } else if let Some(app) = app_weak.upgrade() {
+                    let _ = app.update(cx, |this, cx| {
+                        this.handle_secondary_window_closed(closed_id, cx);
+                    });
+                }
+            })
+            .detach();
             #[cfg(target_os = "linux")]
             {
-                let main_id = _handle.window_id();
-                cx.on_window_closed(move |cx, _| {
-                    if !cx.windows().iter().any(|handle| handle.window_id() == main_id) {
-                        cx.quit();
-                    }
-                }).detach();
                 linux_overlay::start(&_view, cx);
                 linux_hud::start(&_view, cx);
             }

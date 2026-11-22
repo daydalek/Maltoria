@@ -4051,12 +4051,17 @@ impl WhiskyApp {
                             .border_b_1()
                             .border_color(rgba(crate::theme::divider()))
                             .when(!self.preview.sheet_history.is_empty(), |d| {
-                                d.child(Button::new("sheet-back").label("‹").ghost().on_click(
-                                    cx.listener(|this, _, _, cx| {
-                                        this.preview.sheet = this.preview.sheet_history.pop();
-                                        cx.notify();
-                                    }),
-                                ))
+                                d.child(
+                                    Button::new("sheet-back")
+                                        .ghost()
+                                        .small()
+                                        .icon(icon("chevron-left", 14.))
+                                        .tooltip("返回上一层")
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.preview.sheet = this.preview.sheet_history.pop();
+                                            cx.notify();
+                                        })),
+                                )
                             })
                             .child(
                                 div()
@@ -4064,19 +4069,24 @@ impl WhiskyApp {
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .child(title),
                             )
-                            .child(Button::new("sheet-close").label("×").ghost().on_click(
-                                cx.listener(|this, _, window, cx| {
-                                    this.preview.sheet = None;
-                                    this.preview.sheet_history.clear();
-                                    this.preview_sheet_return_captured_gen = 0;
-                                    this.program_settings.pending_switch = None;
-                                    this.executable_picker = None;
-                                    this.tag_manager_rename_target = None;
-                                    this.game_info = None;
-                                    this.restore_preview_sheet_focus(window, cx);
-                                    cx.notify();
-                                }),
-                            )),
+                            .child(
+                                Button::new("sheet-close")
+                                    .ghost()
+                                    .small()
+                                    .icon(icon("x", 14.))
+                                    .tooltip("关闭（Esc）")
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.preview.sheet = None;
+                                        this.preview.sheet_history.clear();
+                                        this.preview_sheet_return_captured_gen = 0;
+                                        this.program_settings.pending_switch = None;
+                                        this.executable_picker = None;
+                                        this.tag_manager_rename_target = None;
+                                        this.game_info = None;
+                                        this.restore_preview_sheet_focus(window, cx);
+                                        cx.notify();
+                                    })),
+                            ),
                     )
                     .child(div().flex_1().min_h_0().child(content))
                     .child(
@@ -4419,8 +4429,10 @@ impl WhiskyApp {
                             )
                             .child(
                                 Button::new("clipboard-close")
-                                    .label("×")
                                     .ghost()
+                                    .small()
+                                    .icon(icon("x", 14.))
+                                    .tooltip("关闭（Esc）")
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.dismiss_clipboard(cx);
                                         this.focus_handle.focus(window, cx);
@@ -4556,8 +4568,10 @@ impl WhiskyApp {
                             )
                             .child(
                                 Button::new("legacy-fullscreen-close")
-                                    .label("×")
                                     .ghost()
+                                    .small()
+                                    .icon(icon("x", 14.))
+                                    .tooltip("关闭（Esc）")
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.dismiss_legacy_fullscreen(cx);
                                         this.focus_handle.focus(window, cx);
@@ -5163,8 +5177,10 @@ impl WhiskyApp {
                             )
                             .child(
                                 Button::new("about-close")
-                                    .label("×")
                                     .ghost()
+                                    .small()
+                                    .icon(icon("x", 14.))
+                                    .tooltip("关闭（Esc）")
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.dismiss_about();
                                         this.focus_handle.focus(window, cx);
@@ -5424,8 +5440,10 @@ impl WhiskyApp {
                             .child(div().flex_1().font_weight(FontWeight::SEMIBOLD).child(title))
                             .child(
                                 Button::new("bridge-dialog-close")
-                                    .label("×")
                                     .ghost()
+                                    .small()
+                                    .icon(icon("x", 14.))
+                                    .tooltip("关闭（Esc）")
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.bridge_dialog = false;
                                         this.focus_handle.focus(window, cx);
@@ -6691,11 +6709,16 @@ impl WhiskyApp {
                                             .text_size(px(11.5)),
                                     ),
                             )
-                            .child(Button::new("launch-chooser-close").label("×").ghost().on_click(
-                                cx.listener(|this, _, window, cx| {
-                                    this.close_launch_chooser(window, cx);
-                                }),
-                            )),
+                            .child(
+                                Button::new("launch-chooser-close")
+                                    .ghost()
+                                    .small()
+                                    .icon(icon("x", 14.))
+                                    .tooltip("关闭（Esc）")
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.close_launch_chooser(window, cx);
+                                    })),
+                            ),
                     )
                     .child(list)
                     .child(

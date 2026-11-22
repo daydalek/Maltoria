@@ -4,6 +4,7 @@ use gpui_kit::component::Icon;
 use gpui_kit::component::Sizable;
 use gpui_kit::component::button::Button;
 use gpui_kit::component::spinner::Spinner;
+use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::{prelude::*, *};
 
 use crate::theme;
@@ -193,6 +194,13 @@ pub(crate) fn gradient(top: u32, bottom: u32) -> Background {
         linear_color_stop(rgba(bottom), 1.),
     )
 }
+pub(crate) fn text_tip(
+    text: impl Into<SharedString>,
+) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+    let text = text.into();
+    move |_, cx| cx.new(|_| Tooltip::new(text.clone())).into()
+}
+
 pub(crate) fn badge(name: &str, text: impl Into<SharedString>) -> Div {
     row()
         .gap(px(5.))

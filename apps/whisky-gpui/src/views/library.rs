@@ -9,7 +9,6 @@ use gpui_kit::component::{
     input::Input,
     menu::{ContextMenuExt, PopupMenu, PopupMenuItem},
     spinner::Spinner,
-    tooltip::Tooltip,
 };
 use gpui_kit::{IntoElement, prelude::*, *};
 
@@ -238,12 +237,6 @@ fn sidebar_icon(id: impl Into<ElementId>, symbol: &str, selected: bool) -> State
         .cursor_pointer()
         .hover(|s| s.bg(rgba(hover())))
         .child(icon(symbol, 18.).text_color(rgb(ACCENT)))
-}
-
-/// A plain tooltip closure for the sidebar's collapsed presentations.
-fn text_tip(text: impl Into<SharedString>) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
-    let text = text.into();
-    move |_, cx| cx.new(|_| Tooltip::new(text.clone())).into()
 }
 
 impl WhiskyApp {
@@ -817,7 +810,9 @@ impl WhiskyApp {
             sidebar_icon(
                 "library",
                 "layout-grid",
-                !self.settings && self.preview.page == PreviewPage::Library && self.selected_bottle.is_none(),
+                !self.inline_settings_active()
+                    && self.preview.page == PreviewPage::Library
+                    && self.selected_bottle.is_none(),
             )
             .tooltip(text_tip(format!(
                 "游戏库 · {}",
@@ -831,7 +826,7 @@ impl WhiskyApp {
             sidebar_icon(
                 "statistics",
                 "rows-3",
-                !self.settings && self.preview.page == PreviewPage::Statistics,
+                !self.inline_settings_active() && self.preview.page == PreviewPage::Statistics,
             )
             .tooltip(text_tip(format!(
                 "游玩统计 · {}",
@@ -850,7 +845,7 @@ impl WhiskyApp {
             sidebar_icon(
                 "launchers",
                 "store",
-                !self.settings && self.preview.page == PreviewPage::Launchers,
+                !self.inline_settings_active() && self.preview.page == PreviewPage::Launchers,
             )
             .tooltip(text_tip(format!(
                 "启动器 · {}",
@@ -875,7 +870,7 @@ impl WhiskyApp {
                 sidebar_icon(
                     "containers",
                     "package",
-                    !self.settings && self.selected_bottle.is_some(),
+                    !self.inline_settings_active() && self.selected_bottle.is_some(),
                 )
                 .tooltip(text_tip(container_tip))
                 .on_click(cx.listener(|this, _, _, cx| {
@@ -946,9 +941,15 @@ impl WhiskyApp {
                         round_button("settings", "settings-2")
                             .size(px(28.))
                             .tooltip(text_tip(crate::platform::SETTINGS_TIP))
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.settings = !this.settings;
-                                cx.notify();
+                            .on_click(cx.listener(|this, _, _window, cx| {
+                                #[cfg(not(target_os = "linux"))]
+                                this.open_settings(cx);
+                                #[cfg(target_os = "linux")]
+                                if this.settings {
+                                    this.close_settings(Some(_window), cx);
+                                } else {
+                                    this.open_settings(cx);
+                                }
                             }))
                             .key_focus("sidebar-rail-settings")
                             .tab_index(1),
@@ -967,7 +968,9 @@ impl WhiskyApp {
                 "游戏库",
                 "layout-grid",
                 games.iter().filter(|game| !game.is_launcher).count(),
-                !self.settings && self.preview.page == PreviewPage::Library && self.selected_bottle.is_none(),
+                !self.inline_settings_active()
+                    && self.preview.page == PreviewPage::Library
+                    && self.selected_bottle.is_none(),
             )
             .on_click(cx.listener(|this, _, _, cx| this.select_bottle(None, cx)))
             .key_focus("sidebar-expanded-library")
@@ -977,7 +980,7 @@ impl WhiskyApp {
             sidebar_row(
                 "statistics", "游玩统计", "rows-3",
                 games.iter().filter(|game| !game.is_launcher && game.play_time.unwrap_or(0) > 0).count(),
-                !self.settings && self.preview.page == PreviewPage::Statistics,
+                !self.inline_settings_active() && self.preview.page == PreviewPage::Statistics,
             ).on_click(cx.listener(|this, _, _, cx| {
                 this.navigate(PreviewPage::Statistics, cx);
             }))
@@ -988,7 +991,7 @@ impl WhiskyApp {
             sidebar_row(
                 "launchers", "启动器", "store",
                 games.iter().filter(|game| game.is_launcher).count(),
-                !self.settings && self.preview.page == PreviewPage::Launchers,
+                !self.inline_settings_active() && self.preview.page == PreviewPage::Launchers,
             ).on_click(cx.listener(|this, _, _, cx| {
                 this.navigate(PreviewPage::Launchers, cx);
             }))
@@ -1015,7 +1018,7 @@ impl WhiskyApp {
                         &bottle.name,
                         "package",
                         count,
-                        !self.settings && self.selected_bottle == Some(index),
+                        !self.inline_settings_active() && self.selected_bottle == Some(index),
                     )
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.select_bottle(Some(index), cx);
@@ -1137,9 +1140,15 @@ impl WhiskyApp {
                                         round_button("settings", "settings-2")
                                             .size(px(28.))
                                             .tooltip(text_tip(crate::platform::SETTINGS_TIP))
-                                            .on_click(cx.listener(|this, _, _, cx| {
-                                                this.settings = !this.settings;
-                                                cx.notify();
+                                            .on_click(cx.listener(|this, _, _window, cx| {
+                                                #[cfg(not(target_os = "linux"))]
+                                                this.open_settings(cx);
+                                                #[cfg(target_os = "linux")]
+                                                if this.settings {
+                                                    this.close_settings(Some(_window), cx);
+                                                } else {
+                                                    this.open_settings(cx);
+                                                }
                                             }))
                                             .key_focus("sidebar-expanded-settings")
                                             .tab_index(1),
@@ -1215,7 +1224,12 @@ impl WhiskyApp {
     ) -> impl IntoElement {
         // Classic stays hidden in GPUI; immersive is GPUI-only. Labelled
         // segments read better than bare icons: each mode names its layout.
-        let is_library = self.preview.page == PreviewPage::Library && !self.settings;
+        let inline_settings = self.inline_settings_active();
+        let inline_capture = self.inline_capture_active();
+        let is_library =
+            self.preview.page == PreviewPage::Library && !inline_settings && !inline_capture;
+        let can_back = self.can_navigate_back();
+        let back_dest = self.back_destination_label();
         let modes = self.library_mode_menu(cx);
         row()
             .h(px(52.))
@@ -1261,40 +1275,85 @@ impl WhiskyApp {
                     .context_menu(self.sidebar_mode_menu(cx)),
                 )
             })
-            .when(self.settings, |d| {
-                let back_label = if self.translation_page.active {
+            .when(can_back, |d| {
+                d.child(
+                    round_button("toolbar-back", "chevron-left")
+                        .size(px(28.))
+                        .rounded(px(7.))
+                        .tooltip(text_tip(format!(
+                            "返回 {}（{}）",
+                            back_dest,
+                            crate::platform::BACK_SHORTCUT_LABEL,
+                        )))
+                        .on_click(cx.listener(|this, _, _, cx| this.navigate_back(cx))),
+                )
+            })
+            .when(inline_settings, |d| {
+                let back_tip = if self.translation_page.active {
                     if self.translation_page.return_to_capture {
-                        "‹ 返回游戏捕获"
+                        "返回游戏翻译"
                     } else {
-                        "‹ 返回设置"
+                        "返回设置"
                     }
                 } else {
-                    "‹ 返回"
+                    "返回游戏库"
                 };
                 d.child(
-                    Button::new("settings-back")
-                        .label(back_label)
-                        .ghost()
+                    round_button("settings-back", "chevron-left")
+                        .size(px(28.))
+                        .rounded(px(7.))
+                        .tooltip(text_tip(back_tip))
                         .on_click(cx.listener(|this, _, window, cx| {
                             if this.translation_page.active {
                                 this.close_translation_settings(window, cx);
                             } else {
-                                this.settings = false;
-                                cx.notify();
+                                this.close_settings(Some(window), cx);
                             }
                         })),
                 )
             })
-            .child(
+            .child(if can_back {
+                row()
+                    .flex_1()
+                    .min_w_0()
+                    .gap(px(4.))
+                    .items_center()
+                    .child(
+                        div()
+                            .id("toolbar-breadcrumb-parent")
+                            .px(px(5.))
+                            .py(px(2.))
+                            .rounded(px(5.))
+                            .cursor_pointer()
+                            .text_size(px(14.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(rgb(muted_color()))
+                            .hover(|s| s.bg(rgba(hover())).text_color(rgb(text())))
+                            .on_click(cx.listener(|this, _, _, cx| this.navigate_back(cx)))
+                            .child(back_dest),
+                    )
+                    .child(icon("chevron-right", 12.).text_color(rgb(muted_color())))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .text_size(px(15.))
+                            .font_weight(FontWeight::BOLD)
+                            .child(self.preview_title()),
+                    )
+                    .into_any_element()
+            } else {
                 div()
                     .flex_1()
                     .min_w_0()
                     .truncate()
                     .text_size(px(15.))
                     .font_weight(FontWeight::BOLD)
-                    .child(self.preview_title()),
-            )
-            .when(!self.settings, |d| {
+                    .child(self.preview_title())
+                    .into_any_element()
+            })
+            .when(!inline_settings && !inline_capture, |d| {
                 d.child(
                     round_button("add", "plus")
                         .tooltip(text_tip("创建容器…"))
@@ -1317,7 +1376,9 @@ impl WhiskyApp {
                 is_library && self.mode == 0,
                 |d| d.child(self.cover_size_control(cx)),
             )
-            .when(!self.settings, |d| d.child(self.options_menu(cx)))
+            .when(!inline_settings && !inline_capture, |d| {
+                d.child(self.options_menu(cx))
+            })
             .when(is_library, |d| {
                 d.child(
                     div()
@@ -3059,7 +3120,10 @@ impl WhiskyApp {
             .border_color(rgba(divider()))
             .child(
                 Button::new("character-back")
-                    .label("‹ 返回人物列表")
+                    .ghost()
+                    .small()
+                    .icon(icon("chevron-left", 14.))
+                    .label("人物列表")
                     .on_click(cx.listener(move |this, _, _, cx| {
                         if in_game_info {
                             if let Some(page) = this.game_info.as_mut() {
@@ -3074,16 +3138,17 @@ impl WhiskyApp {
             .when(total > 1, |d| {
                 d.child(
                     row()
-                        .gap(px(8.))
                         .items_center()
-                        .child(
-                            muted(format!("{} / {}", pos + 1, total))
-                                .text_size(px(12.))
-                                .font_weight(FontWeight::MEDIUM),
-                        )
+                        .rounded(px(8.))
+                        .border_1()
+                        .border_color(rgba(divider()))
+                        .bg(rgba(card_bg()))
                         .child(
                             Button::new("character-prev")
-                                .label("‹ 上一位")
+                                .ghost()
+                                .xsmall()
+                                .icon(icon("chevron-left", 13.))
+                                .tooltip("上一位")
                                 .disabled(prev_id.is_none())
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     if let Some(id) = prev_id.clone() {
@@ -3098,9 +3163,20 @@ impl WhiskyApp {
                                     }
                                 })),
                         )
+                        .child(div().w(px(1.)).h(px(14.)).bg(rgba(divider())))
+                        .child(
+                            muted(format!("{} / {}", pos + 1, total))
+                                .text_size(px(11.5))
+                                .font_weight(FontWeight::MEDIUM)
+                                .px(px(8.)),
+                        )
+                        .child(div().w(px(1.)).h(px(14.)).bg(rgba(divider())))
                         .child(
                             Button::new("character-next")
-                                .label("下一位 ›")
+                                .ghost()
+                                .xsmall()
+                                .icon(icon("chevron-right", 13.))
+                                .tooltip("下一位")
                                 .disabled(next_id.is_none())
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     if let Some(id) = next_id.clone() {
