@@ -78,6 +78,11 @@ gpui_kit::actions!(
         LanguageJa,
         LanguageEn,
         LanguageKo,
+        LanguageFr,
+        LanguageEs,
+        LanguageIt,
+        LanguageDe,
+        LanguageRu,
         MinimizeWindow,
         ZoomWindow,
         ToggleFullScreen
@@ -181,6 +186,21 @@ impl Render for WhiskyApp {
             }))
             .on_action(cx.listener(|this, _: &LanguageKo, _, cx| {
                 this.set_language(crate::i18n::LanguageMode::Ko, cx);
+            }))
+            .on_action(cx.listener(|this, _: &LanguageFr, _, cx| {
+                this.set_language(crate::i18n::LanguageMode::Fr, cx);
+            }))
+            .on_action(cx.listener(|this, _: &LanguageEs, _, cx| {
+                this.set_language(crate::i18n::LanguageMode::Es, cx);
+            }))
+            .on_action(cx.listener(|this, _: &LanguageIt, _, cx| {
+                this.set_language(crate::i18n::LanguageMode::It, cx);
+            }))
+            .on_action(cx.listener(|this, _: &LanguageDe, _, cx| {
+                this.set_language(crate::i18n::LanguageMode::De, cx);
+            }))
+            .on_action(cx.listener(|this, _: &LanguageRu, _, cx| {
+                this.set_language(crate::i18n::LanguageMode::Ru, cx);
             }))
             .on_action(cx.listener(|this, _: &RefreshLibrary, _, cx| {
                 if this.onboarding.is_some() { return; }
@@ -707,6 +727,16 @@ pub(crate) fn install_menus(cx: &mut App) {
                     .checked(lang_mode == crate::i18n::LanguageMode::En),
                 MenuItem::action("한국어", LanguageKo)
                     .checked(lang_mode == crate::i18n::LanguageMode::Ko),
+                MenuItem::action("Français", LanguageFr)
+                    .checked(lang_mode == crate::i18n::LanguageMode::Fr),
+                MenuItem::action("Español", LanguageEs)
+                    .checked(lang_mode == crate::i18n::LanguageMode::Es),
+                MenuItem::action("Italiano", LanguageIt)
+                    .checked(lang_mode == crate::i18n::LanguageMode::It),
+                MenuItem::action("Deutsch", LanguageDe)
+                    .checked(lang_mode == crate::i18n::LanguageMode::De),
+                MenuItem::action("Русский", LanguageRu)
+                    .checked(lang_mode == crate::i18n::LanguageMode::Ru),
             ])),
             MenuItem::separator(),
             MenuItem::action(m.settings, ShowSettings),

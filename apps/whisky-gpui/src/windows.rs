@@ -14,9 +14,10 @@ use crate::theme::{
     sidebar_gradient, text, toast_bg, toast_border, toolbar_bg,
 };
 use crate::{
-    AppearanceDark, AppearanceLight, AppearanceSystem, CloseWindow, DismissPreview, LanguageEn,
-    LanguageJa, LanguageKo, LanguageSystem, LanguageZhHans, MinimizeWindow, QuitPreview,
-    ShowSettings, ToggleFullScreen, ZoomWindow,
+    AppearanceDark, AppearanceLight, AppearanceSystem, CloseWindow, DismissPreview, LanguageDe,
+    LanguageEn, LanguageEs, LanguageFr, LanguageIt, LanguageJa, LanguageKo, LanguageRu,
+    LanguageSystem, LanguageZhHans, MinimizeWindow, QuitPreview, ShowSettings, ToggleFullScreen,
+    ZoomWindow,
 };
 
 /// macOS-style two-pane Settings window (`⌘,`).
@@ -259,6 +260,11 @@ fn attach_shared_window_actions<V: Render + 'static>(
     let app_lang_ja = app.clone();
     let app_lang_en = app.clone();
     let app_lang_ko = app.clone();
+    let app_lang_fr = app.clone();
+    let app_lang_es = app.clone();
+    let app_lang_it = app.clone();
+    let app_lang_de = app.clone();
+    let app_lang_ru = app.clone();
     element
         .on_action(cx.listener(move |_, _: &QuitPreview, window, cx| {
             app_quit.update(cx, |this, cx| this.request_quit(window, cx));
@@ -295,6 +301,31 @@ fn attach_shared_window_actions<V: Render + 'static>(
         .on_action(cx.listener(move |_, _: &LanguageKo, _, cx| {
             app_lang_ko.update(cx, |this, cx| {
                 this.set_language(crate::i18n::LanguageMode::Ko, cx);
+            });
+        }))
+        .on_action(cx.listener(move |_, _: &LanguageFr, _, cx| {
+            app_lang_fr.update(cx, |this, cx| {
+                this.set_language(crate::i18n::LanguageMode::Fr, cx);
+            });
+        }))
+        .on_action(cx.listener(move |_, _: &LanguageEs, _, cx| {
+            app_lang_es.update(cx, |this, cx| {
+                this.set_language(crate::i18n::LanguageMode::Es, cx);
+            });
+        }))
+        .on_action(cx.listener(move |_, _: &LanguageIt, _, cx| {
+            app_lang_it.update(cx, |this, cx| {
+                this.set_language(crate::i18n::LanguageMode::It, cx);
+            });
+        }))
+        .on_action(cx.listener(move |_, _: &LanguageDe, _, cx| {
+            app_lang_de.update(cx, |this, cx| {
+                this.set_language(crate::i18n::LanguageMode::De, cx);
+            });
+        }))
+        .on_action(cx.listener(move |_, _: &LanguageRu, _, cx| {
+            app_lang_ru.update(cx, |this, cx| {
+                this.set_language(crate::i18n::LanguageMode::Ru, cx);
             });
         }))
         .on_action(cx.listener(|_, _: &MinimizeWindow, window, _| {

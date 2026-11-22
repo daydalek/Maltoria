@@ -1,5 +1,6 @@
 //! Application internationalization: Chinese (Simplified), Japanese, English,
-//! and Korean with independent language selection (defaulting to system locale).
+//! Korean, French, Spanish, Italian, German, and Russian with independent
+//! language selection (defaulting to system locale).
 
 #![allow(dead_code)]
 
@@ -23,16 +24,36 @@ pub(crate) enum Locale {
     Ja = 1,
     En = 2,
     Ko = 3,
+    Fr = 4,
+    Es = 5,
+    It = 6,
+    De = 7,
+    Ru = 8,
 }
 
 impl Locale {
-    pub(crate) const ALL: [Self; 4] = [Self::ZhHans, Self::Ja, Self::En, Self::Ko];
+    pub(crate) const ALL: [Self; 9] = [
+        Self::ZhHans,
+        Self::Ja,
+        Self::En,
+        Self::Ko,
+        Self::Fr,
+        Self::Es,
+        Self::It,
+        Self::De,
+        Self::Ru,
+    ];
 
     fn from_u8(value: u8) -> Self {
         match value {
             1 => Self::Ja,
             2 => Self::En,
             3 => Self::Ko,
+            4 => Self::Fr,
+            5 => Self::Es,
+            6 => Self::It,
+            7 => Self::De,
+            8 => Self::Ru,
             _ => Self::ZhHans,
         }
     }
@@ -43,6 +64,11 @@ impl Locale {
             Self::Ja => "ja",
             Self::En => "en",
             Self::Ko => "ko",
+            Self::Fr => "fr",
+            Self::Es => "es",
+            Self::It => "it",
+            Self::De => "de",
+            Self::Ru => "ru",
         }
     }
 
@@ -52,6 +78,11 @@ impl Locale {
             Self::Ja => "日本語",
             Self::En => "English",
             Self::Ko => "한국어",
+            Self::Fr => "Français",
+            Self::Es => "Español",
+            Self::It => "Italiano",
+            Self::De => "Deutsch",
+            Self::Ru => "Русский",
         }
     }
 }
@@ -71,15 +102,30 @@ pub(crate) enum LanguageMode {
     En = 3,
     #[serde(rename = "ko")]
     Ko = 4,
+    #[serde(rename = "fr")]
+    Fr = 5,
+    #[serde(rename = "es")]
+    Es = 6,
+    #[serde(rename = "it")]
+    It = 7,
+    #[serde(rename = "de")]
+    De = 8,
+    #[serde(rename = "ru")]
+    Ru = 9,
 }
 
 impl LanguageMode {
-    pub(crate) const ALL: [Self; 5] = [
+    pub(crate) const ALL: [Self; 10] = [
         Self::System,
         Self::ZhHans,
         Self::Ja,
         Self::En,
         Self::Ko,
+        Self::Fr,
+        Self::Es,
+        Self::It,
+        Self::De,
+        Self::Ru,
     ];
 
     fn from_u8(value: u8) -> Self {
@@ -88,6 +134,11 @@ impl LanguageMode {
             2 => Self::Ja,
             3 => Self::En,
             4 => Self::Ko,
+            5 => Self::Fr,
+            6 => Self::Es,
+            7 => Self::It,
+            8 => Self::De,
+            9 => Self::Ru,
             _ => Self::System,
         }
     }
@@ -100,10 +151,20 @@ impl LanguageMode {
             "ja" | "ja-jp" => Self::Ja,
             "en" | "en-us" | "en-gb" | "en-au" | "en-ca" => Self::En,
             "ko" | "ko-kr" => Self::Ko,
+            "fr" | "fr-fr" | "fr-be" | "fr-ca" | "fr-ch" => Self::Fr,
+            "es" | "es-es" | "es-mx" | "es-ar" | "es-419" => Self::Es,
+            "it" | "it-it" | "it-ch" => Self::It,
+            "de" | "de-de" | "de-at" | "de-ch" => Self::De,
+            "ru" | "ru-ru" | "ru-by" | "ru-kz" => Self::Ru,
             _ if normalized.starts_with("zh-") => Self::ZhHans,
             _ if normalized.starts_with("ja-") => Self::Ja,
             _ if normalized.starts_with("en-") => Self::En,
             _ if normalized.starts_with("ko-") => Self::Ko,
+            _ if normalized.starts_with("fr-") => Self::Fr,
+            _ if normalized.starts_with("es-") => Self::Es,
+            _ if normalized.starts_with("it-") => Self::It,
+            _ if normalized.starts_with("de-") => Self::De,
+            _ if normalized.starts_with("ru-") => Self::Ru,
             _ => Self::System,
         }
     }
@@ -115,6 +176,11 @@ impl LanguageMode {
             Self::Ja => "ja",
             Self::En => "en",
             Self::Ko => "ko",
+            Self::Fr => "fr",
+            Self::Es => "es",
+            Self::It => "it",
+            Self::De => "de",
+            Self::Ru => "ru",
         }
     }
 
@@ -125,16 +191,26 @@ impl LanguageMode {
             Self::Ja => "日本語",
             Self::En => "English",
             Self::Ko => "한국어",
+            Self::Fr => "Français",
+            Self::Es => "Español",
+            Self::It => "Italiano",
+            Self::De => "Deutsch",
+            Self::Ru => "Русский",
         }
     }
 
-    pub(crate) fn options() -> [(&'static str, &'static str); 5] {
+    pub(crate) fn options() -> [(&'static str, &'static str); 10] {
         [
             (s().settings.language_system, Self::System.wire()),
             ("简体中文", Self::ZhHans.wire()),
             ("日本語", Self::Ja.wire()),
             ("English", Self::En.wire()),
             ("한국어", Self::Ko.wire()),
+            ("Français", Self::Fr.wire()),
+            ("Español", Self::Es.wire()),
+            ("Italiano", Self::It.wire()),
+            ("Deutsch", Self::De.wire()),
+            ("Русский", Self::Ru.wire()),
         ]
     }
 
@@ -145,6 +221,11 @@ impl LanguageMode {
             Self::Ja => Locale::Ja,
             Self::En => Locale::En,
             Self::Ko => Locale::Ko,
+            Self::Fr => Locale::Fr,
+            Self::Es => Locale::Es,
+            Self::It => Locale::It,
+            Self::De => Locale::De,
+            Self::Ru => Locale::Ru,
         }
     }
 }
@@ -206,7 +287,68 @@ pub(crate) fn s() -> &'static Strings {
 pub(crate) struct Plural {
     pub(crate) zero: Option<&'static str>,
     pub(crate) one: Option<&'static str>,
+    pub(crate) few: Option<&'static str>,
+    pub(crate) many: Option<&'static str>,
     pub(crate) other: &'static str,
+}
+
+/// CLDR cardinal plural category used to select a `Plural` template.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PluralCategory {
+    One,
+    Few,
+    Many,
+    Other,
+}
+
+/// CLDR cardinal plural rules for `n` in `locale` (`zero` is handled
+/// separately by `pick_plural` as an explicit n == 0 override).
+pub(crate) fn plural_category(locale: Locale, n: u64) -> PluralCategory {
+    match locale {
+        Locale::ZhHans | Locale::Ja | Locale::Ko => PluralCategory::Other,
+        Locale::En | Locale::Es | Locale::It | Locale::De => {
+            if n == 1 {
+                PluralCategory::One
+            } else {
+                PluralCategory::Other
+            }
+        }
+        Locale::Fr => {
+            if n <= 1 {
+                PluralCategory::One
+            } else {
+                PluralCategory::Other
+            }
+        }
+        Locale::Ru => {
+            let mod10 = n % 10;
+            let mod100 = n % 100;
+            if mod10 == 1 && mod100 != 11 {
+                PluralCategory::One
+            } else if (2..=4).contains(&mod10) && !(12..=14).contains(&mod100) {
+                PluralCategory::Few
+            } else {
+                PluralCategory::Many
+            }
+        }
+    }
+}
+
+/// Select the template for `count` from a plural table: `zero` wins for
+/// n == 0 when present, then the locale's CLDR category, falling back to
+/// `other` when that category has no template.
+pub(crate) fn pick_plural(table: &Plural, count: impl PluralCount) -> &'static str {
+    let n = count.as_u64();
+    if n == 0 && table.zero.is_some() {
+        return table.zero.unwrap();
+    }
+    match plural_category(locale(), n) {
+        PluralCategory::One => table.one,
+        PluralCategory::Few => table.few,
+        PluralCategory::Many => table.many,
+        PluralCategory::Other => None,
+    }
+    .unwrap_or(table.other)
 }
 
 /// Integer argument usable for plural-category selection.
@@ -293,7 +435,7 @@ pub(crate) fn lookup(
         .map(|i| map[i].1)
 }
 
-/// Parse a single BCP-47 / POSIX locale tag into one of the four supported locales.
+/// Parse a single BCP-47 / POSIX locale tag into one of the supported locales.
 pub(crate) fn parse_locale_tag(raw: &str) -> Option<Locale> {
     let base = raw
         .trim()
@@ -316,13 +458,23 @@ pub(crate) fn parse_locale_tag(raw: &str) -> Option<Locale> {
         Some(Locale::Ko)
     } else if base == "en" || base.starts_with("en-") {
         Some(Locale::En)
+    } else if base == "fr" || base.starts_with("fr-") {
+        Some(Locale::Fr)
+    } else if base == "es" || base.starts_with("es-") {
+        Some(Locale::Es)
+    } else if base == "it" || base.starts_with("it-") {
+        Some(Locale::It)
+    } else if base == "de" || base.starts_with("de-") {
+        Some(Locale::De)
+    } else if base == "ru" || base.starts_with("ru-") {
+        Some(Locale::Ru)
     } else {
         None
     }
 }
 
 /// Resolve an ordered preference list of language tags. Falls back to English
-/// when no preferred tag matches Chinese, Japanese, Korean, or English.
+/// when no preferred tag matches a supported locale.
 pub(crate) fn locale_from_tags<'a>(tags: impl IntoIterator<Item = &'a str>) -> Locale {
     for tag in tags {
         if let Some(locale) = parse_locale_tag(tag) {
@@ -429,6 +581,11 @@ impl LocaleGuard {
             Locale::Ja => LanguageMode::Ja,
             Locale::En => LanguageMode::En,
             Locale::Ko => LanguageMode::Ko,
+            Locale::Fr => LanguageMode::Fr,
+            Locale::Es => LanguageMode::Es,
+            Locale::It => LanguageMode::It,
+            Locale::De => LanguageMode::De,
+            Locale::Ru => LanguageMode::Ru,
         };
         let prev_mode = TEST_MODE_OVERRIDE.with(|cell| cell.replace(Some(mode)));
         Self {
@@ -460,6 +617,11 @@ mod tests {
         assert_eq!(LanguageMode::from_wire("ja_JP"), LanguageMode::Ja);
         assert_eq!(LanguageMode::from_wire("en_US"), LanguageMode::En);
         assert_eq!(LanguageMode::from_wire("ko_KR"), LanguageMode::Ko);
+        assert_eq!(LanguageMode::from_wire("fr_FR"), LanguageMode::Fr);
+        assert_eq!(LanguageMode::from_wire("es-MX"), LanguageMode::Es);
+        assert_eq!(LanguageMode::from_wire("it_CH"), LanguageMode::It);
+        assert_eq!(LanguageMode::from_wire("de_AT"), LanguageMode::De);
+        assert_eq!(LanguageMode::from_wire("ru-RU"), LanguageMode::Ru);
         assert_eq!(LanguageMode::from_wire("unknown"), LanguageMode::System);
     }
 
@@ -471,15 +633,21 @@ mod tests {
         assert_eq!(parse_locale_tag("ja-JP"), Some(Locale::Ja));
         assert_eq!(parse_locale_tag("en_US.UTF-8"), Some(Locale::En));
         assert_eq!(parse_locale_tag("ko_KR.UTF-8"), Some(Locale::Ko));
+        assert_eq!(parse_locale_tag("fr_FR.UTF-8"), Some(Locale::Fr));
+        assert_eq!(parse_locale_tag("es_419.UTF-8"), Some(Locale::Es));
+        assert_eq!(parse_locale_tag("it_IT.UTF-8"), Some(Locale::It));
+        assert_eq!(parse_locale_tag("de_DE.UTF-8"), Some(Locale::De));
+        assert_eq!(parse_locale_tag("ru_RU.UTF-8"), Some(Locale::Ru));
         assert_eq!(parse_locale_tag("C.UTF-8"), None);
         assert_eq!(parse_locale_tag("POSIX"), None);
-        assert_eq!(parse_locale_tag("fr_FR.UTF-8"), None);
-        assert_eq!(locale_from_tags(["C", "fr-FR", "ja-JP", "en-US"]), Locale::Ja);
-        assert_eq!(locale_from_tags(["fr-FR", "de-DE"]), Locale::En);
+        assert_eq!(parse_locale_tag("pt_BR.UTF-8"), None);
+        assert_eq!(locale_from_tags(["C", "pt-BR", "ja-JP", "en-US"]), Locale::Ja);
+        assert_eq!(locale_from_tags(["fr-FR", "ja-JP"]), Locale::Fr);
+        assert_eq!(locale_from_tags(["pt-BR", "nl-NL"]), Locale::En);
     }
 
     #[test]
-    fn all_four_locales_are_distinct_and_non_empty() {
+    fn every_locale_table_is_non_empty_and_reference_locales_differ() {
         for loc in Locale::ALL {
             let _guard = LocaleGuard::new(loc);
             let tbl = s();
@@ -518,16 +686,31 @@ mod tests {
         assert_eq!(Locale::Ja.code(), "ja");
         assert_eq!(Locale::En.code(), "en");
         assert_eq!(Locale::Ko.code(), "ko");
+        assert_eq!(Locale::Fr.code(), "fr");
+        assert_eq!(Locale::Es.code(), "es");
+        assert_eq!(Locale::It.code(), "it");
+        assert_eq!(Locale::De.code(), "de");
+        assert_eq!(Locale::Ru.code(), "ru");
 
         assert_eq!(Locale::ZhHans.native_name(), "简体中文");
         assert_eq!(Locale::Ja.native_name(), "日本語");
         assert_eq!(Locale::En.native_name(), "English");
         assert_eq!(Locale::Ko.native_name(), "한국어");
+        assert_eq!(Locale::Fr.native_name(), "Français");
+        assert_eq!(Locale::Es.native_name(), "Español");
+        assert_eq!(Locale::It.native_name(), "Italiano");
+        assert_eq!(Locale::De.native_name(), "Deutsch");
+        assert_eq!(Locale::Ru.native_name(), "Русский");
 
         assert_eq!(LanguageMode::ZhHans.resolve(), Locale::ZhHans);
         assert_eq!(LanguageMode::Ja.resolve(), Locale::Ja);
         assert_eq!(LanguageMode::En.resolve(), Locale::En);
         assert_eq!(LanguageMode::Ko.resolve(), Locale::Ko);
+        assert_eq!(LanguageMode::Fr.resolve(), Locale::Fr);
+        assert_eq!(LanguageMode::Es.resolve(), Locale::Es);
+        assert_eq!(LanguageMode::It.resolve(), Locale::It);
+        assert_eq!(LanguageMode::De.resolve(), Locale::De);
+        assert_eq!(LanguageMode::Ru.resolve(), Locale::Ru);
 
         for (loc, sys_label) in [
             (Locale::ZhHans, "跟随系统"),
@@ -543,6 +726,98 @@ mod tests {
             assert_eq!(opts[2], ("日本語", "ja"));
             assert_eq!(opts[3], ("English", "en"));
             assert_eq!(opts[4], ("한국어", "ko"));
+            assert_eq!(opts[5], ("Français", "fr"));
+            assert_eq!(opts[6], ("Español", "es"));
+            assert_eq!(opts[7], ("Italiano", "it"));
+            assert_eq!(opts[8], ("Deutsch", "de"));
+            assert_eq!(opts[9], ("Русский", "ru"));
+        }
+    }
+
+    #[test]
+    fn plural_category_matches_cldr_cardinal_rules() {
+        use PluralCategory::*;
+        // Russian: one/few/many on mod10/mod100.
+        for (n, expected) in [
+            (1, One),
+            (2, Few),
+            (5, Many),
+            (11, Many),
+            (21, One),
+            (22, Few),
+            (25, Many),
+            (101, One),
+            (111, Many),
+        ] {
+            assert_eq!(plural_category(Locale::Ru, n), expected, "ru n={n}");
+        }
+        // French: 0 and 1 are singular.
+        assert_eq!(plural_category(Locale::Fr, 0), One);
+        assert_eq!(plural_category(Locale::Fr, 1), One);
+        assert_eq!(plural_category(Locale::Fr, 2), Other);
+        // English and the other Latin locales: only n == 1 is singular.
+        for loc in [Locale::En, Locale::De, Locale::Es, Locale::It] {
+            assert_eq!(plural_category(loc, 1), One, "{loc:?} n=1");
+            assert_eq!(plural_category(loc, 0), Other, "{loc:?} n=0");
+            assert_eq!(plural_category(loc, 2), Other, "{loc:?} n=2");
+        }
+        // CJK locales have a single form.
+        for loc in [Locale::ZhHans, Locale::Ja, Locale::Ko] {
+            for n in [0, 1, 2, 5, 21, 101] {
+                assert_eq!(plural_category(loc, n), Other, "{loc:?} n={n}");
+            }
+        }
+    }
+
+    #[test]
+    fn pick_plural_prefers_zero_then_category_then_other() {
+        let full = Plural {
+            zero: Some("zero"),
+            one: Some("one"),
+            few: Some("few"),
+            many: Some("many"),
+            other: "other",
+        };
+        {
+            let _g = LocaleGuard::new(Locale::En);
+            assert_eq!(pick_plural(&full, 0u64), "zero");
+            assert_eq!(pick_plural(&full, 1u64), "one");
+            assert_eq!(pick_plural(&full, 2u64), "other");
+        }
+        {
+            let _g = LocaleGuard::new(Locale::Fr);
+            // n == 0 with a `zero` template wins over fr's One category.
+            assert_eq!(pick_plural(&full, 0u64), "zero");
+            let no_zero = Plural {
+                zero: None,
+                one: Some("one"),
+                few: None,
+                many: None,
+                other: "other",
+            };
+            assert_eq!(pick_plural(&no_zero, 0u64), "one");
+            assert_eq!(pick_plural(&no_zero, 2u64), "other");
+        }
+        {
+            let _g = LocaleGuard::new(Locale::Ru);
+            assert_eq!(pick_plural(&full, 2u64), "few");
+            assert_eq!(pick_plural(&full, 5u64), "many");
+            assert_eq!(pick_plural(&full, 21u64), "one");
+            let sparse = Plural {
+                zero: None,
+                one: None,
+                few: None,
+                many: None,
+                other: "other",
+            };
+            // Categories missing from the table fall back to `other`.
+            assert_eq!(pick_plural(&sparse, 2u64), "other");
+        }
+        {
+            let _g = LocaleGuard::new(Locale::Ja);
+            assert_eq!(pick_plural(&full, 0u64), "zero");
+            assert_eq!(pick_plural(&full, 1u64), "other");
+            assert_eq!(pick_plural(&full, 9u64), "other");
         }
     }
 }

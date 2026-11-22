@@ -26,7 +26,24 @@ ALLOWLIST_PATH = LOCALES / "i18n-allowlist.toml"
 
 PLACEHOLDER_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 CJK_RE = re.compile(r"[぀-ヿ一-鿿가-힯]")
-PLURAL_CATEGORIES = {"zero", "one", "other"}
+PLURAL_CATEGORIES = {"zero", "one", "few", "many", "other"}
+
+# Per-locale CLDR plural categories: stem -> (allowed, required). `zero` is an
+# optional n == 0 override wherever it is allowed. Mirrored in build.rs.
+PLURAL_RULES = {
+    # CJK locales inflect identically for every cardinal.
+    "zh-Hans": ({"zero", "other"}, {"other"}),
+    "ja": ({"zero", "other"}, {"other"}),
+    "ko": ({"zero", "other"}, {"other"}),
+    # n == 1 is singular (French also treats 0 as singular, same categories).
+    "en": ({"zero", "one", "other"}, {"one", "other"}),
+    "de": ({"zero", "one", "other"}, {"one", "other"}),
+    "es": ({"zero", "one", "other"}, {"one", "other"}),
+    "it": ({"zero", "one", "other"}, {"one", "other"}),
+    "fr": ({"zero", "one", "other"}, {"one", "other"}),
+    # Russian cardinals use one/few/many on mod10/mod100.
+    "ru": ({"zero", "one", "few", "many", "other"}, {"one", "few", "many", "other"}),
+}
 
 # Banned call patterns outside src/i18n/: all text comes from locales/*.toml.
 BANNED_PATTERNS = [
@@ -105,12 +122,20 @@ def validate_locales(files):
             if kind == "array" and not all(isinstance(v, str) for v in value):
                 errors.append(f"en.toml: {name}: array items must be strings")
             if kind == "plural":
+                en_allowed, en_required = PLURAL_RULES["en"]
+                for cat in en_required:
+                    if cat not in value:
+                        errors.append(
+                            f"en.toml: {name}: missing required plural category `{cat}` for locale `en`"
+                        )
                 for cat in value:
                     if cat not in PLURAL_CATEGORIES:
                         errors.append(f"en.toml: {name}: invalid plural category `{cat}`")
-                if "other" not in value:
-                    errors.append(f"en.toml: {name}: plural table is missing required category `other`")
-                elif "count" not in placeholders(value["other"]):
+                    elif cat not in en_allowed:
+                        errors.append(
+                            f"en.toml: {name}: plural category `{cat}` not allowed for locale `en`"
+                        )
+                if "other" in value and "count" not in placeholders(value["other"]):
                     errors.append(f"en.toml: {name}.other: plural `other` must contain {{count}}")
             if kind == "other":
                 errors.append(f"en.toml: {name}: value must be a string, string array, or plural table")
@@ -154,19 +179,41 @@ def validate_locales(files):
                 if ek == "template" and placeholders(value) != placeholders(en_value):
                     errors.append(f"{file}: {name}: placeholder set does not match en.toml")
                 if ek == "plural":
+                    rules = PLURAL_RULES.get(stem)
+                    if rules is None:
+                        errors.append(
+                            f"{file}: unknown locale `{stem}` — add its plural-category rules "
+                            "to plural_rule() in build.rs and PLURAL_RULES in scripts/i18n.py"
+                        )
+                        allowed, required = PLURAL_CATEGORIES, {"other"}
+                    else:
+                        allowed, required = rules
+                    for cat in required:
+                        if cat not in value:
+                            errors.append(
+                                f"{file}: {name}: missing required plural category `{cat}` for locale `{stem}`"
+                            )
                     for cat in value:
                         if cat not in PLURAL_CATEGORIES:
                             errors.append(f"{file}: {name}: invalid plural category `{cat}`")
-                        elif cat == "one":
-                            errors.append(f"{file}: {name}: `one` is only allowed in en.toml")
+                        elif cat not in allowed:
+                            errors.append(
+                                f"{file}: {name}: plural category `{cat}` not allowed for locale `{stem}`"
+                            )
                         elif cat == "other" and "count" not in placeholders(value[cat]):
                             errors.append(f"{file}: {name}.other: plural `other` must contain {{count}}")
-                        elif cat not in en_value and cat != "zero":
-                            errors.append(f"{file}: {name}: category `{cat}` not present in en.toml")
                         elif cat in en_value and placeholders(value[cat]) != placeholders(en_value[cat]):
                             errors.append(f"{file}: {name}.{cat}: placeholder set does not match en.toml")
-                    if "other" not in value:
-                        errors.append(f"{file}: {name}: plural table is missing required category `other`")
+                        elif (
+                            cat not in en_value
+                            and cat != "zero"
+                            and "count" not in placeholders(value[cat])
+                        ):
+                            # `zero` is a free-form n == 0 override; categories a
+                            # locale needs but en lacks must render the count.
+                            errors.append(
+                                f"{file}: {name}.{cat}: category absent from en.toml must contain {{count}}"
+                            )
         for map_name, en_map in en_maps.items():
             other_map = maps.get(map_name)
             if other_map is None:

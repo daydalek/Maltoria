@@ -383,7 +383,7 @@ add_tag_chip = "+ Tag"
 edit_tags_chip = "Edit Tags"
 demo_notice = "Appearance Demo · No games launched or bottles modified"
 sort_by = "Sort by {label}"
-show_hidden_games = { zero = "Show Hidden Games", other = "Show Hidden Games ({count})" }
+show_hidden_games = { zero = "Show Hidden Games", one = "Show Hidden Games ({count})", other = "Show Hidden Games ({count})" }
 show_hidden_short = "Show Hidden ({count})"
 filter_same_studio = "More from {studio}"
 studio_count = { one = "{count} title", other = "{count} titles" }

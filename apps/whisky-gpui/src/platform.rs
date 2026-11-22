@@ -10,7 +10,13 @@ pub(crate) fn ui_font() -> &'static str {
     match crate::i18n::locale() {
         crate::i18n::Locale::Ja => "Noto Sans CJK JP",
         crate::i18n::Locale::Ko => "Noto Sans CJK KR",
-        crate::i18n::Locale::ZhHans | crate::i18n::Locale::En => "Noto Sans CJK SC",
+        crate::i18n::Locale::ZhHans
+        | crate::i18n::Locale::En
+        | crate::i18n::Locale::Fr
+        | crate::i18n::Locale::Es
+        | crate::i18n::Locale::It
+        | crate::i18n::Locale::De
+        | crate::i18n::Locale::Ru => "Noto Sans CJK SC",
     }
 }
 

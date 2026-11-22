@@ -59,7 +59,7 @@ fn classify(file: &str, key: &str, value: &toml::Value) -> Entry {
         toml::Value::Table(t) => {
             let mut cats = BTreeMap::new();
             for (cat, v) in t {
-                if !matches!(cat.as_str(), "zero" | "one" | "other") {
+                if !matches!(cat.as_str(), "zero" | "one" | "few" | "many" | "other") {
                     panic!("{file}: {key}: invalid plural category `{cat}`");
                 }
                 let s = v.as_str().unwrap_or_else(|| {
@@ -139,7 +139,7 @@ fn validate_against_en(
                     }
                 }
                 for (key, entry) in entries {
-                    check_entry(&file, &format!("{sec}.{key}"), entry, &other[key]);
+                    check_entry(&file, &format!("{sec}.{key}"), stem, entry, &other[key]);
                 }
             }
         }
@@ -173,7 +173,27 @@ fn validate_against_en(
     }
 }
 
-fn check_entry(file: &str, key: &str, en: &Entry, other: &Entry) {
+/// CLDR cardinal plural categories a locale file may (`allowed`) and must
+/// (`required`) provide in every plural table. `zero` is an optional
+/// n == 0 override wherever it is allowed. Mirrored in `scripts/i18n.py`.
+fn plural_rule(stem: &str) -> (&'static [&'static str], &'static [&'static str]) {
+    match stem {
+        // CJK locales inflect identically for every cardinal.
+        "zh-Hans" | "ja" | "ko" => (&["zero", "other"], &["other"]),
+        // n == 1 is singular (French also treats 0 as singular, same categories).
+        "en" | "de" | "es" | "it" | "fr" => (&["zero", "one", "other"], &["one", "other"]),
+        // Russian cardinals use one/few/many on mod10/mod100.
+        "ru" => (
+            &["zero", "one", "few", "many", "other"],
+            &["one", "few", "many", "other"],
+        ),
+        _ => panic!(
+            "locales/{stem}.toml: unknown locale `{stem}` — add its plural-category rules to plural_rule() in build.rs and scripts/i18n.py"
+        ),
+    }
+}
+
+fn check_entry(file: &str, key: &str, stem: &str, en: &Entry, other: &Entry) {
     match (en, other) {
         (Entry::Scalar(_), Entry::Scalar(_)) => {}
         (Entry::Array(a), Entry::Array(b)) => {
@@ -191,13 +211,18 @@ fn check_entry(file: &str, key: &str, en: &Entry, other: &Entry) {
             }
         }
         (Entry::Plural(en_cats), Entry::Plural(cats)) => {
-            if !cats.contains_key("other") {
-                panic!("{file}: {key}: plural table is missing required category `other`");
-            }
-            if cats.contains_key("one") {
-                panic!("{file}: {key}: `one` is only allowed in en.toml");
+            let (allowed, required) = plural_rule(stem);
+            for cat in required {
+                if !cats.contains_key(*cat) {
+                    panic!(
+                        "{file}: {key}: missing required plural category `{cat}` for locale `{stem}`"
+                    );
+                }
             }
             for (cat, (_, ph)) in cats {
+                if !allowed.contains(&cat.as_str()) {
+                    panic!("{file}: {key}: plural category `{cat}` not allowed for locale `{stem}`");
+                }
                 if cat == "other" && !ph.contains("count") {
                     panic!("{file}: {key}.other: plural `other` must contain {{count}}");
                 }
@@ -209,25 +234,17 @@ fn check_entry(file: &str, key: &str, en: &Entry, other: &Entry) {
                             );
                         }
                     }
+                    // `zero` is a free-form n == 0 override; other categories a
+                    // locale needs but en lacks (few/many, and `one` where en
+                    // omits it) must at least render the count.
                     None if cat != "zero" => {
-                        panic!("{file}: {key}: category `{cat}` not present in en.toml")
-                    }
-                    None => {}
-                }
-            }
-            for (cat, (_, en_ph)) in en_cats {
-                if *cat == "zero" || *cat == "one" {
-                    continue; // zero optional everywhere; one is en-only
-                }
-                match cats.get(cat) {
-                    None => panic!("{file}: {key}: missing plural category `{cat}` (present in en.toml)"),
-                    Some((_, ph)) => {
-                        if ph != en_ph {
+                        if !ph.contains("count") {
                             panic!(
-                                "{file}: {key}.{cat}: placeholder set does not match en.toml"
+                                "{file}: {key}.{cat}: category absent from en.toml must contain {{count}}"
                             );
                         }
                     }
+                    None => {}
                 }
             }
         }
@@ -235,16 +252,29 @@ fn check_entry(file: &str, key: &str, en: &Entry, other: &Entry) {
     }
 }
 
-// `other` must contain {count} in en too; `one`/`zero` rules checked above per-locale.
+// en.toml follows its own allowed/required sets from plural_rule("en");
+// `other` must additionally contain {count}.
 fn validate_en(entries: &Sections) {
+    let (allowed, required) = plural_rule("en");
     for (sec, keys) in entries {
         for (key, entry) in keys {
             if let Entry::Plural(cats) = entry {
                 let name = format!("{sec}.{key}");
-                if !cats.contains_key("other") {
-                    panic!("locales/en.toml: {name}: plural table is missing required category `other`");
+                for cat in required {
+                    if !cats.contains_key(*cat) {
+                        panic!(
+                            "locales/en.toml: {name}: missing required plural category `{cat}` for locale `en`"
+                        );
+                    }
                 }
-                if !cats.get("other").unwrap().1.contains("count") {
+                for cat in cats.keys() {
+                    if !allowed.contains(&cat.as_str()) {
+                        panic!(
+                            "locales/en.toml: {name}: plural category `{cat}` not allowed for locale `en`"
+                        );
+                    }
+                }
+                if !cats["other"].1.contains("count") {
                     panic!("locales/en.toml: {name}.other: plural `other` must contain {{count}}");
                 }
             }
@@ -294,6 +324,10 @@ fn main() {
     stems.sort();
     if !stems.iter().any(|s| s == "en") {
         panic!("locales/en.toml missing (en is the reference locale)");
+    }
+    // Every locale file needs known plural-category rules before validation.
+    for stem in &stems {
+        plural_rule(stem);
     }
 
     let mut parsed: BTreeMap<String, (Sections, Maps)> = BTreeMap::new();
@@ -369,7 +403,7 @@ fn main() {
                 .collect();
             if plural {
                 impls.push_str(&format!(
-                    "        let t = &self.__{key};\n        let template = if count.as_u64() == 0 && t.zero.is_some() {{\n            t.zero.unwrap()\n        }} else if count.as_u64() == 1 && t.one.is_some() {{\n            t.one.unwrap()\n        }} else {{\n            t.other\n        }};\n        crate::i18n::render(template, &[{}])\n",
+                    "        let template = crate::i18n::pick_plural(&self.__{key}, count);\n        crate::i18n::render(template, &[{}])\n",
                     args.join(", ")
                 ));
             } else {
@@ -428,9 +462,11 @@ fn main() {
                             None => "None".to_string(),
                         };
                         out.push_str(&format!(
-                            "        __{key}: crate::i18n::Plural {{ zero: {}, one: {}, other: {} }},\n",
+                            "        __{key}: crate::i18n::Plural {{ zero: {}, one: {}, few: {}, many: {}, other: {} }},\n",
                             get("zero"),
                             get("one"),
+                            get("few"),
+                            get("many"),
                             rust_lit(&cats["other"].0)
                         ));
                     }

@@ -59,7 +59,71 @@ class TestValidateLocales(unittest.TestCase):
         en = {"s": {"k": {"one": "{count} x", "other": "{count} xs"}}}
         ja = {"s": {"k": {"one": "{count}個", "other": "{count}個"}}}
         errors = i18n.validate_locales(self.files(en, {"ja": ja}))
-        self.assertTrue(any("`one` is only allowed in en.toml" in e for e in errors))
+        self.assertTrue(any("plural category `one` not allowed for locale `ja`" in e for e in errors))
+
+    def test_latin_locales_require_one(self):
+        en = {"s": {"k": {"one": "{count} x", "other": "{count} xs"}}}
+        fr = {"s": {"k": {"one": "{count} x", "other": "{count} xs"}}}
+        errors = i18n.validate_locales(self.files(en, {"fr": fr}))
+        self.assertEqual(errors, [])
+        for stem in ("de", "es", "it", "fr"):
+            lat = {"s": {"k": {"other": "{count} xs"}}}
+            errors = i18n.validate_locales(self.files(en, {stem: lat}))
+            self.assertTrue(
+                any(f"missing required plural category `one` for locale `{stem}`" in e for e in errors),
+                stem,
+            )
+
+    def test_ru_requires_few_and_many(self):
+        en = {"s": {"k": {"one": "{count} x", "other": "{count} xs"}}}
+        ru = {
+            "s": {
+                "k": {
+                    "one": "{count} x",
+                    "few": "{count} x",
+                    "many": "{count} x",
+                    "other": "{count} x",
+                }
+            }
+        }
+        errors = i18n.validate_locales(self.files(en, {"ru": ru}))
+        self.assertEqual(errors, [])
+        for missing in ("one", "few", "many", "other"):
+            broken = {"s": {"k": {c: v for c, v in ru["s"]["k"].items() if c != missing}}}
+            errors = i18n.validate_locales(self.files(en, {"ru": broken}))
+            self.assertTrue(
+                any(f"missing required plural category `{missing}` for locale `ru`" in e for e in errors),
+                missing,
+            )
+
+    def test_locale_extra_categories_need_count(self):
+        # fr requires `one` even where en's table lacks it; it must render {count}.
+        en = {"s": {"k": {"other": "{count} xs", "zero": "none"}}}
+        fr = {"s": {"k": {"zero": "aucun", "one": "{count} x", "other": "{count} xs"}}}
+        errors = i18n.validate_locales(self.files(en, {"fr": fr}))
+        self.assertEqual(errors, [])
+        fr2 = {"s": {"k": {"zero": "aucun", "one": "un", "other": "{count} xs"}}}
+        errors = i18n.validate_locales(self.files(en, {"fr": fr2}))
+        self.assertTrue(any("must contain" in e for e in errors))
+        # `zero` stays a free-form n == 0 override even where en lacks it.
+        en2 = {"s": {"k": {"one": "{count} x", "other": "{count} xs"}}}
+        ja = {"s": {"k": {"zero": "なし", "other": "{count}個"}}}
+        errors = i18n.validate_locales(self.files(en2, {"ja": ja}))
+        self.assertEqual(errors, [])
+
+    def test_en_forbids_few_and_many(self):
+        en = {"s": {"k": {"one": "{count} x", "few": "{count} x", "other": "{count} xs"}}}
+        errors = i18n.validate_locales(self.files(en, {}))
+        self.assertTrue(any("plural category `few` not allowed for locale `en`" in e for e in errors))
+
+    def test_invalid_and_unknown_locale_categories(self):
+        en = {"s": {"k": {"one": "{count} x", "other": "{count} xs"}}}
+        ja = {"s": {"k": {"two": "{count}", "other": "{count}個"}}}
+        errors = i18n.validate_locales(self.files(en, {"ja": ja}))
+        self.assertTrue(any("invalid plural category `two`" in e for e in errors))
+        xx = {"s": {"k": {"other": "{count} xs"}}}
+        errors = i18n.validate_locales(self.files(en, {"xx": xx}))
+        self.assertTrue(any("unknown locale `xx`" in e for e in errors))
 
     def test_plural_requires_count(self):
         en = {"s": {"k": {"other": "no placeholder"}}}

@@ -131,13 +131,14 @@ mod tests {
             assert!(!feat.is_empty());
             titles_by_locale.push((sec, opt, feat));
         }
-        // All 4 locales produce distinct section, option, and feature labels.
+        // The original four locales produce distinct section, option, and
+        // feature labels; newer locales may still share English values.
         let sections: std::collections::HashSet<_> = titles_by_locale.iter().map(|t| t.0).collect();
         let options: std::collections::HashSet<_> = titles_by_locale.iter().map(|t| t.1).collect();
         let features: std::collections::HashSet<_> = titles_by_locale.iter().map(|t| t.2).collect();
-        assert_eq!(sections.len(), 4);
-        assert_eq!(options.len(), 4);
-        assert_eq!(features.len(), 4);
+        assert!(sections.len() >= 4);
+        assert!(options.len() >= 4);
+        assert!(features.len() >= 4);
         assert_eq!(section_title("unknown_id"), section_title("other"));
         assert_eq!(
             option_title("unknownField", "unknownOpt", "Raw Fallback"),
