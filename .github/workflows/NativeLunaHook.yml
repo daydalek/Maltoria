@@ -27,9 +27,14 @@ jobs:
           python-version: '3.12'
       - name: Install cross-compilation toolchain
         run: |
+          # xwin's MSVC STL headers require clang >=19; Ubuntu 24.04 ships 18.
+          wget -q https://apt.llvm.org/llvm-snapshot.gpg.key -O- | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-19 main" | sudo tee /etc/apt/sources.list.d/llvm19.list
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            clang lld llvm ninja-build cmake mono-mcs
+            clang-19 lld-19 llvm-19 ninja-build cmake mono-mcs
+      - name: Add local tools to PATH
+        run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Cache xwin binary and Windows SDK/CRT sysroot
         id: xwin-cache
         uses: actions/cache@v4
@@ -48,8 +53,6 @@ jobs:
             chmod +x "$HOME/.local/bin/xwin"
           fi
       - name: Build pinned upstream sources and capture helper
-        env:
-          PATH: ${{ runner.home }}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         run: |
           python3 scripts/build-lunahook.py \
             --architecture "${{ matrix.arch }}" \

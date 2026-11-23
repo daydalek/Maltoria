@@ -13,7 +13,10 @@ python3 scripts/build-lunahook.py --architecture all --output /tmp/MaltoriaNativ
 ```
 
 `xwin` downloads the Microsoft CRT and Windows SDK into `~/.cache/maltoria-xwin`
-(or `$XWIN_DIR`) on first run.
+(or `$XWIN_DIR`) on first run. On Debian/Ubuntu there is no `clang-cl` binary —
+`clang` selects the MSVC frontend from argv[0], so the script links a `clang-cl`
+shim under `~/.cache/maltoria-native/bin` and searches `/usr/lib/llvm-*/bin`
+(newest first) for `lld-link`, `llvm-lib`, `llvm-mt` and `llvm-rc`.
 
 `./build.sh run <app-target>` runs this pipeline automatically when neither
 `--lunahook` nor `MALTORIA_LUNAHOOK_ARTIFACTS` is given: the plan first builds

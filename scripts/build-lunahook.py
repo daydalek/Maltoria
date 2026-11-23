@@ -12,13 +12,19 @@ import uuid
 
 ROOT = Path(__file__).resolve().parent.parent
 
-LLVM_SEARCH_DIRS = (
-    Path("/opt/homebrew/opt/llvm/bin"),
-    Path("/opt/homebrew/opt/llvm@22/bin"),
-    Path("/opt/homebrew/opt/lld/bin"),
-    Path("/usr/local/opt/llvm/bin"),
-    Path("/usr/local/opt/lld/bin"),
-)
+def llvm_search_dirs():
+    dirs = [
+        Path("/opt/homebrew/opt/llvm/bin"),
+        Path("/opt/homebrew/opt/llvm@22/bin"),
+        Path("/opt/homebrew/opt/lld/bin"),
+        Path("/usr/local/opt/llvm/bin"),
+        Path("/usr/local/opt/lld/bin"),
+    ]
+    # Debian/Ubuntu keep clang-cl & friends under /usr/lib/llvm-<ver>/bin.
+    versioned = [p for p in Path("/usr/lib").glob("llvm-*/bin") if p.is_dir()]
+    versioned.sort(key=lambda p: [int(x) for x in p.parent.name[5:].split(".") if x.isdigit()], reverse=True)
+    dirs.extend(versioned)
+    return tuple(dirs)
 
 
 def find_tool(name, extra_dirs=()):
@@ -27,7 +33,7 @@ def find_tool(name, extra_dirs=()):
     if llvm_env:
         candidates.insert(0, Path(llvm_env) / "bin")
         candidates.insert(0, Path(llvm_env))
-    candidates.extend(LLVM_SEARCH_DIRS)
+    candidates.extend(llvm_search_dirs())
 
     found = shutil.which(name)
     if found:
@@ -36,10 +42,28 @@ def find_tool(name, extra_dirs=()):
         candidate = directory / name
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return candidate
+    if name == "clang-cl":
+        # Debian/Ubuntu LLVM packages ship no clang-cl binary; clang is a
+        # multicall driver that selects the MSVC frontend from argv[0].
+        clang = shutil.which("clang")
+        if clang is None:
+            for directory in candidates:
+                candidate = directory / "clang"
+                if candidate.is_file() and os.access(candidate, os.X_OK):
+                    clang = candidate
+                    break
+        if clang is not None:
+            shim_dir = Path.home() / ".cache" / "maltoria-native" / "bin"
+            shim_dir.mkdir(parents=True, exist_ok=True)
+            shim = shim_dir / "clang-cl"
+            if shim.is_symlink() or shim.exists():
+                shim.unlink()
+            shim.symlink_to(clang)
+            return shim
     raise FileNotFoundError(
         f"Required tool '{name}' not found in PATH or standard LLVM locations. "
         f"On macOS: brew install llvm lld ninja xwin mono; "
-        f"on Ubuntu/Debian: apt-get install clang lld llvm ninja-build mono-mcs"
+        f"on Ubuntu/Debian: install LLVM >=19 (apt.llvm.org) plus lld, ninja-build, cmake and mono-mcs"
     )
 
 
