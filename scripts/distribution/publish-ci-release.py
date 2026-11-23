@@ -13,6 +13,8 @@ import subprocess
 import tempfile
 
 MARKER = '<!-- maltoria-ci-release -->'
+# Keep in sync with AppUpdateRelease.maxPackageBytes.
+MAX_UPDATE_PACKAGE_BYTES = 1_073_741_824
 
 
 def gh(*args, missing=False):
@@ -117,8 +119,13 @@ def release_inventory(version):
 def validate_release_assets(directory, version):
     inventory = release_inventory(version)
     names = set(inventory).union(*inventory.values())
-    if {path.name for path in directory.iterdir()} != names:
+    paths = {path.name: path for path in directory.iterdir()}
+    if paths.keys() != names:
         raise ValueError('Unified release inventory differs from the app update contract')
+    sizes = {name: path.lstat().st_size for name, path in paths.items()}
+    for name, size in sizes.items():
+        if name.endswith(('.zip', '.AppImage', '.deb', '.rpm')) and size > MAX_UPDATE_PACKAGE_BYTES:
+            raise ValueError('Installable package exceeds the app updater size limit: ' + name)
     for checksum_name, expected in inventory.items():
         checksum = directory / checksum_name
         if checksum.is_symlink() or not checksum.is_file():
@@ -132,7 +139,7 @@ def validate_release_assets(directory, version):
             verify_file(directory, match[2], match[1])
         if seen != expected:
             raise ValueError('Missing checksum entries in ' + checksum_name)
-    return {name: (directory / name).stat().st_size for name in names}
+    return sizes
 
 
 def validate_uploaded_assets(uploaded, directory, inventory):

@@ -135,6 +135,18 @@ class CIReleaseTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 release.validate_uploaded_assets(uploaded, output, inventory)
 
+    def test_final_contract_rejects_installable_packages_over_one_gib(self):
+        for name in ('Maltoria-0.6.0-arm64.zip', 'Maltoria-0.6.0-x86_64.AppImage',
+                     'whisky_0.6.0_amd64.deb', 'whisky-0.6.0-1.x86_64.rpm'):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                self.fixtures(root)
+                output = release.prepare_assets(root, '0.6.0', COMMIT)
+                with (output / name).open('r+b') as package:
+                    package.truncate((1 << 30) + 1)
+                with self.assertRaisesRegex(ValueError, 'Installable package exceeds the app updater size limit'):
+                    release.validate_release_assets(output, '0.6.0')
+
 
 if __name__ == '__main__':
     unittest.main()

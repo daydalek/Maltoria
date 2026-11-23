@@ -87,6 +87,8 @@ struct AppUpdateAsset: Decodable, Sendable {
 
 struct AppUpdateRelease: Decodable, Sendable {
     static let repository = "daydalek/Maltoria"
+    // Keep in sync with MAX_UPDATE_PACKAGE_BYTES in publish-ci-release.py.
+    static let maxPackageBytes: Int64 = 1_073_741_824
     let tag: String
     let draft: Bool
     let assets: [AppUpdateAsset]
@@ -117,11 +119,11 @@ struct AppUpdateRelease: Decodable, Sendable {
         guard !draft, tag.hasPrefix("v"), let version = AppUpdateVersion(String(tag.dropFirst())), version > current
         else { return nil }
         for platform: AppUpdateFormat in [.macOS, .appImage, .deb, .rpm] {
-            guard asset(platform.assetName(version: version), base: downloadBase, limit: 1_073_741_824) != nil,
+            guard asset(platform.assetName(version: version), base: downloadBase, limit: Self.maxPackageBytes) != nil,
                   asset(platform.sumsName, base: downloadBase, limit: 1_048_576) != nil
             else { return nil }
         }
-        guard let archive = asset(format.assetName(version: version), base: downloadBase, limit: 1_073_741_824),
+        guard let archive = asset(format.assetName(version: version), base: downloadBase, limit: Self.maxPackageBytes),
               let sums = asset(format.sumsName, base: downloadBase, limit: 1_048_576)
         else { return nil }
         return Candidate(version: version, asset: archive, sums: sums)
