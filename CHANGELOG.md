@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Build
+- Default distribution output now lives outside the checkout; `doctor` requires `xwin` only when the cached SDK/CRT lacks x86 or x64, uses the shared LLVM lookup including versioned Homebrew `llvm@N` installs, and the Docker menu no longer offers a local LunaHook compile.
+
 ## [0.6.3] - 2026-11-23
 
 ### Added

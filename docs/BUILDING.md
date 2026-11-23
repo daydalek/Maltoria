@@ -12,7 +12,7 @@
 ```
 
 `plan` 输出完整命令、工作目录、环境变量和产物路径；`run` 执行同一份计划。
-每次任务使用全新目录，默认 `build/distribution/<target>/<时间-任务ID>/`。
+每次任务使用全新目录，默认 `../<检出目录名>-build/distribution/<target>/<时间-任务ID>/`（位于源码检出目录之外；`scripts/build-lunahook.py` 要求本机 LunaHook 产物不在源码树内）。如果检出目录的上级不可写，则回退到 `$XDG_CACHE_HOME/maltoria-build/distribution/`，未设置 `XDG_CACHE_HOME` 时使用 `~/.cache/maltoria-build/distribution/`。
 `build-report.json` 和 `01.log` 等文件记录执行结果；Ctrl-C 保留日志与已生成文件。
 菜单提供“构建并部署到 /Applications”。部署先验证新包，替换后校验签名与可执行文件；已运行的应用需重启。
 

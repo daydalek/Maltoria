@@ -56,14 +56,21 @@ def changelog_entry(changelog, version):
     return match[1].strip() if match else ''
 
 
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with path.open('rb') as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def verify_file(directory, name, expected):
     if not name or Path(name).name != name or name in ('.', '..'):
         raise ValueError('Unsafe artifact filename')
     path = directory / name
     if path.is_symlink() or not path.is_file():
         raise ValueError('Missing regular artifact file: ' + name)
-    with path.open('rb') as stream:
-        actual = hashlib.file_digest(stream, 'sha256').hexdigest()
+    actual = sha256_file(path)
     if actual != expected:
         raise ValueError('Artifact checksum mismatch: ' + name)
     return path
@@ -96,8 +103,7 @@ def prepare_assets(root, version, commit):
         mac_names.append(destination)
     with (output / 'SHA256SUMS-macos-arm64').open('w') as checksums:
         for name in mac_names:
-            with (output / name).open('rb') as stream:
-                checksums.write(hashlib.file_digest(stream, 'sha256').hexdigest() + '  ' + name + '\n')
+            checksums.write(sha256_file(output / name) + '  ' + name + '\n')
 
     expected_linux = {'deb': f'whisky_{version}_amd64.deb',
                       'rpm': f'whisky-{version}-1.x86_64.rpm',
@@ -125,8 +131,7 @@ def prepare_assets(root, version, commit):
     linux_names = [a['name'] for a in reference['assets']] + ['packages.json', 'elf-abi.json']
     with (output / 'SHA256SUMS-linux-amd64').open('w') as checksums:
         for name in linux_names:
-            with (output / name).open('rb') as stream:
-                checksums.write(hashlib.file_digest(stream, 'sha256').hexdigest() + '  ' + name + '\n')
+            checksums.write(sha256_file(output / name) + '  ' + name + '\n')
     return output
 
 

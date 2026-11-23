@@ -4,6 +4,7 @@
 import argparse
 import csv
 import fcntl
+import importlib.util
 import io
 from datetime import datetime, timezone
 import hashlib
@@ -32,6 +33,29 @@ LINUX_APP_TARGETS = ('whisky-linux-amd64', 'whisky-linux-arm64')
 APP_TARGETS = ('whisky-macos-gpui-arm64',) + LINUX_APP_TARGETS
 LINUX_DOCKER_ARCH = {'x86_64': 'amd64', 'arm64': 'arm64'}
 LINUX_RELEASE_ARCH = {'x86_64': 'x86_64', 'arm64': 'aarch64'}
+LUNAHOOK_TOOLS = ('cmake', 'ninja', 'clang-cl', 'lld-link', 'llvm-lib', 'llvm-rc', 'llvm-mt', 'mcs')
+LUNAHOOK_ARCHES = ('x86', 'x64')
+
+
+def default_output_root():
+    # scripts/build-lunahook.py 拒绝源码树内的输出目录，默认任务目录放在检出目录之外；
+    # 检出目录的上级不可写时退回用户缓存目录。
+    sibling = ROOT.parent / f'{ROOT.name}-build'
+    if os.access(sibling if sibling.exists() else ROOT.parent, os.W_OK):
+        return sibling / 'distribution'
+    cache = Path(os.environ.get('XDG_CACHE_HOME') or Path.home() / '.cache')
+    return cache / 'maltoria-build' / 'distribution'
+
+
+def is_inside_checkout(path):
+    return Path(path).resolve().is_relative_to(ROOT)
+
+
+def lunahook_builder():
+    spec = importlib.util.spec_from_file_location('maltoria_build_lunahook', ROOT / 'scripts/build-lunahook.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def is_valid_lunahook_dir(path):
@@ -181,8 +205,11 @@ def plan(args):
     required = 'scripts/linux/build.py' if args.target == 'wine-linux-amd64' else 'scripts/ci/build-release.sh'
     if is_wine and not (repo / required).is_file():
         raise ValueError('Wine 仓库缺少配方：' + str(repo / required))
-    output = (args.output or ROOT / 'build/distribution' / args.target /
+    output = (args.output or default_output_root() / args.target /
               (datetime.now().strftime('%Y%m%d-%H%M%S') + '-' + uuid.uuid4().hex[:6])).expanduser().resolve()
+    if lunahook_build and is_inside_checkout(output):
+        raise ValueError(f'本机交叉编译 LunaHook 时输出目录必须位于源码检出目录之外：{output}；'
+                         '请改用检出目录外的 --output，或通过 --lunahook / --without-lunahook 跳过本机构建')
     env = {'WHISKY_BUILD_JOBS': str(args.jobs), 'POC_JOBS': str(args.jobs)}
     if is_app and lunahook_dir is not None:
         env['MALTORIA_LUNAHOOK_ARTIFACTS'] = str(lunahook_dir)
@@ -360,27 +387,7 @@ def doctor(args):
                                     if os.environ.get('MALTORIA_LUNAHOOK_ARTIFACTS', '').strip() else None)
             if raw is None:
                 if args.executor == 'native':
-                    # 本机交叉编译路径：scripts/build-lunahook.py 需要 LLVM
-                    # (clang-cl/lld-link/llvm-lib/rc/mt)、ninja、Mono mcs 与
-                    # xwin（或其下载授权 --accept-xwin-license）。
-                    llvm_dir = os.environ.get('LLVM_DIR', '')
-                    llvm_bins = [str(p) for p in (
-                        Path(llvm_dir) / 'bin', Path(llvm_dir),
-                        Path('/opt/homebrew/opt/llvm/bin'),
-                        Path('/opt/homebrew/opt/lld/bin')) if p.is_dir()]
-                    def has(tool):
-                        return shutil.which(tool) or any(
-                            (d / tool).is_file() and os.access(d / tool, os.X_OK)
-                            for d in map(Path, llvm_bins))
-                    missing = [t for t in ('clang-cl', 'lld-link', 'llvm-lib', 'llvm-rc',
-                                           'llvm-mt', 'ninja', 'mcs', 'cmake', 'xwin')
-                               if not has(t)]
-                    checks.append(dict(
-                        name='LunaHook 本机交叉编译工具链（缺：'
-                             + (', '.join(missing) if missing else '无')
-                             + '；macOS: brew install llvm lld ninja xwin mono，'
-                               'Ubuntu/Debian: LLVM>=19, cmake>=3.25, ninja-build, mono-mcs, xwin）',
-                        passed=not missing))
+                    checks.append(lunahook_toolchain_check())
                 else:
                     checks.append(dict(
                         name='LunaHook 捕获载荷（Docker 构建需 --lunahook PATH、MALTORIA_LUNAHOOK_ARTIFACTS 或 --without-lunahook；镜像不含交叉编译工具链）',
@@ -405,6 +412,25 @@ def doctor(args):
         checks.append(dict(name='Docker Linux 服务', passed=ready))
     return dict(target=args.target, passed=all(c['passed'] for c in checks), checks=checks,
                 scope='主机、基础工具与配方；编译过程继续校验库、源码及证书')
+
+
+def lunahook_toolchain_check(builder=None):
+    # 与 scripts/build-lunahook.py 共用工具查找与 xwin 缓存判断；SDK/CRT 缓存已覆盖
+    # x86+x64 时无需 xwin 下载器。
+    builder = builder or lunahook_builder()
+    missing = [tool for tool in LUNAHOOK_TOOLS if builder.locate_tool(tool) is None]
+    xwin_dir = builder.default_xwin_dir().expanduser()
+    if builder.xwin_sysroot_ready(xwin_dir, LUNAHOOK_ARCHES):
+        sysroot = f'SDK/CRT 缓存就绪：{xwin_dir}'
+    else:
+        sysroot = f'SDK/CRT 缓存缺 x86/x64：{xwin_dir}，需 xwin 下载'
+        if builder.locate_tool('xwin') is None:
+            missing.append('xwin')
+    return dict(
+        name='LunaHook 本机交叉编译工具链（缺：' + (', '.join(missing) if missing else '无') + '；' + sysroot
+             + '；macOS: brew install llvm lld ninja xwin mono，'
+               'Ubuntu/Debian: LLVM>=19, cmake>=3.25, ninja-build, mono-mcs, xwin）',
+        passed=not missing)
 
 
 def show(value, as_json=False):
@@ -508,6 +534,44 @@ def execute(value):
         print('构建记录：', report_path, flush=True)
 
 
+def choose_lunahook(args):
+    detected = discover_local_lunahook()
+    if args.executor == 'docker':
+        # Docker 镜像不含交叉编译工具链：不提供本机编译，检测到载荷时默认复用，
+        # 否则必须输入路径或显式 skip。
+        if detected:
+            options = {'1': 'reuse', '2': 'path'}
+            prompt = f'LunaHook 载荷（1. 复用 {detected}  2. 输入其他路径  skip. 跳过）[1]：'
+            default = '1'
+        else:
+            options = {}
+            prompt = 'LunaHook 载荷目录（Docker 构建必填，或输入 skip 跳过）：'
+            default = None
+    else:
+        if detected:
+            options = {'1': 'build', '2': 'reuse', '3': 'path'}
+            prompt = f'LunaHook 载荷（1. 本机交叉编译  2. 复用 {detected}  3. 输入其他路径  skip. 跳过）[1]：'
+        else:
+            options = {'1': 'build', '2': 'path'}
+            prompt = 'LunaHook 载荷（1. 本机交叉编译  2. 输入路径  skip. 跳过）[1]：'
+        default = '1'
+    entered = input(prompt).strip() or default
+    if not entered:
+        raise ValueError('Docker 构建需要 LunaHook 载荷目录，或输入 skip 显式跳过')
+    choice = 'skip' if entered.lower() == 'skip' else options.get(entered)
+    if choice == 'skip':
+        args.without_lunahook = True
+        print('提示：已跳过 LunaHook，打包后的应用无法使用游戏内文本捕获。')
+    elif choice == 'build':
+        print('提示：将使用 clang-cl/xwin 在本机交叉编译 LunaHook（无需 Windows）。')
+    elif choice == 'reuse':
+        args.lunahook = detected
+    elif choice == 'path':
+        args.lunahook = resolve_lunahook_dir(input('LunaHook 载荷目录：').strip())
+    else:
+        args.lunahook = resolve_lunahook_dir(entered)
+
+
 def menu(args):
     if not sys.stdin.isatty():
         raise ValueError('交互菜单需要终端；CI 使用 list、doctor、plan 或 run')
@@ -538,25 +602,7 @@ def menu(args):
             raise ValueError('请选择 1 至 5')
         args.formats = choices[format_choice]
     if args.target in APP_TARGETS and not args.lunahook and not args.without_lunahook:
-        detected = discover_local_lunahook()
-        if detected:
-            prompt = (f'LunaHook 载荷（1. 本机交叉编译  2. 复用 {detected}  '
-                      '3. 输入其他路径  skip. 跳过）[1]：')
-        else:
-            prompt = 'LunaHook 载荷（1. 本机交叉编译  2. 输入路径  skip. 跳过）[1]：'
-        entered = input(prompt).strip() or '1'
-        if entered.lower() == 'skip':
-            args.without_lunahook = True
-            print('提示：已跳过 LunaHook，打包后的应用无法使用游戏内文本捕获。')
-        elif entered == '1':
-            print('提示：将使用 clang-cl/xwin 在本机交叉编译 LunaHook（无需 Windows）。')
-        elif entered == '2':
-            if detected:
-                args.lunahook = detected
-            else:
-                args.lunahook = resolve_lunahook_dir(input('LunaHook 载荷目录：').strip())
-        else:
-            args.lunahook = resolve_lunahook_dir(entered)
+        choose_lunahook(args)
     if args.target == 'wine-linux-amd64':
         mode = input('验证：1. 运行回归  2. compile-only [1]：').strip() or '1'
         if mode not in ('1', '2'):

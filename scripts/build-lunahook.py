@@ -12,62 +12,95 @@ import uuid
 
 ROOT = Path(__file__).resolve().parent.parent
 
+def _version_key(path, prefix):
+    return [int(x) for x in path.parent.name[len(prefix):].split(".") if x.isdigit()]
+
+
 def llvm_search_dirs():
-    dirs = [
-        Path("/opt/homebrew/opt/llvm/bin"),
-        Path("/opt/homebrew/opt/llvm@22/bin"),
-        Path("/opt/homebrew/opt/lld/bin"),
-        Path("/usr/local/opt/llvm/bin"),
-        Path("/usr/local/opt/lld/bin"),
-    ]
+    dirs = []
+    for prefix in (Path("/opt/homebrew/opt"), Path("/usr/local/opt")):
+        dirs.append(prefix / "llvm/bin")
+        # Versioned Homebrew kegs (llvm@22, llvm@19, ...), newest first.
+        versioned = [p for p in prefix.glob("llvm@*/bin") if p.is_dir()]
+        versioned.sort(key=lambda p: _version_key(p, "llvm@"), reverse=True)
+        dirs.extend(versioned)
+        dirs.append(prefix / "lld/bin")
     # Debian/Ubuntu keep clang-cl & friends under /usr/lib/llvm-<ver>/bin.
     versioned = [p for p in Path("/usr/lib").glob("llvm-*/bin") if p.is_dir()]
-    versioned.sort(key=lambda p: [int(x) for x in p.parent.name[5:].split(".") if x.isdigit()], reverse=True)
+    versioned.sort(key=lambda p: _version_key(p, "llvm-"), reverse=True)
     dirs.extend(versioned)
     return tuple(dirs)
 
 
-def find_tool(name, extra_dirs=()):
+def _search_dirs(extra_dirs=()):
     candidates = [Path(d) for d in extra_dirs if d]
     llvm_env = os.environ.get("LLVM_DIR")
     if llvm_env:
         candidates.insert(0, Path(llvm_env) / "bin")
         candidates.insert(0, Path(llvm_env))
     candidates.extend(llvm_search_dirs())
+    return candidates
 
+
+def _executable(path):
+    return path.is_file() and os.access(path, os.X_OK)
+
+
+def locate_tool(name, extra_dirs=()):
+    """Return the tool path (for clang-cl: the clang driver to shim) or None, without side effects."""
+    candidates = _search_dirs(extra_dirs)
     if name == "clang-cl":
         # clang-cl is just clang's MSVC frontend selected by argv[0]; prefer the
         # newest clang driver (sorted LLVM dirs first) so an older system
         # clang-cl (e.g. LLVM 18, rejected by the xwin STL) never wins.
-        clang = None
         for directory in candidates:
-            candidate = directory / "clang"
-            if candidate.is_file() and os.access(candidate, os.X_OK):
-                clang = candidate
-                break
-        if clang is None:
-            clang = shutil.which("clang")
-        if clang is not None:
-            shim_dir = Path.home() / ".cache" / "maltoria-native" / "bin"
-            shim_dir.mkdir(parents=True, exist_ok=True)
-            shim = shim_dir / "clang-cl"
-            if shim.is_symlink() or shim.exists():
-                shim.unlink()
-            shim.symlink_to(clang)
-            return shim
-
+            if _executable(directory / "clang"):
+                return directory / "clang"
+        found = shutil.which("clang")
+        if found:
+            return Path(found)
     found = shutil.which(name)
     if found:
         return Path(found)
     for directory in candidates:
-        candidate = directory / name
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return candidate
-    raise FileNotFoundError(
-        f"Required tool '{name}' not found in PATH or standard LLVM locations. "
-        f"On macOS: brew install llvm lld ninja xwin mono; "
-        f"on Ubuntu/Debian: install LLVM >=19 (apt.llvm.org) plus lld, ninja-build, cmake and mono-mcs"
-    )
+        if _executable(directory / name):
+            return directory / name
+    return None
+
+
+def find_tool(name, extra_dirs=()):
+    found = locate_tool(name, extra_dirs)
+    if found is None:
+        raise FileNotFoundError(
+            f"Required tool '{name}' not found in PATH or standard LLVM locations. "
+            f"On macOS: brew install llvm lld ninja xwin mono; "
+            f"on Ubuntu/Debian: install LLVM >=19 (apt.llvm.org) plus lld, ninja-build, cmake and mono-mcs"
+        )
+    if name == "clang-cl" and found.name != "clang-cl":
+        shim_dir = Path.home() / ".cache" / "maltoria-native" / "bin"
+        shim_dir.mkdir(parents=True, exist_ok=True)
+        shim = shim_dir / "clang-cl"
+        if shim.is_symlink() or shim.exists():
+            shim.unlink()
+        shim.symlink_to(found)
+        return shim
+    return found
+
+
+def default_xwin_dir():
+    return Path(os.environ.get("XWIN_DIR", Path.home() / ".cache/maltoria-xwin"))
+
+
+def xwin_sysroot_ready(xwin_dir, arches):
+    """True when the splatted CRT/SDK cache already covers every requested architecture."""
+    xwin_dir = Path(xwin_dir)
+    if not ((xwin_dir / "crt/include").is_dir() and (xwin_dir / "sdk/include").is_dir()):
+        return False
+    for lib_arch in ("x86" if a == "x86" else "x86_64" for a in arches):
+        for rel in (f"crt/lib/{lib_arch}", f"sdk/lib/um/{lib_arch}", f"sdk/lib/ucrt/{lib_arch}"):
+            if not (xwin_dir / rel).is_dir():
+                return False
+    return True
 
 
 def ensure_xwin(xwin_dir, arches, accept_license):
@@ -75,16 +108,7 @@ def ensure_xwin(xwin_dir, arches, accept_license):
     needed_lib_arches = [("x86" if a == "x86" else "x86_64") for a in arches]
 
     def is_ready():
-        if not ((xwin_dir / "crt/include").is_dir() and (xwin_dir / "sdk/include").is_dir()):
-            return False
-        for lib_arch in needed_lib_arches:
-            if not (xwin_dir / f"crt/lib/{lib_arch}").is_dir():
-                return False
-            if not (xwin_dir / f"sdk/lib/um/{lib_arch}").is_dir():
-                return False
-            if not (xwin_dir / f"sdk/lib/ucrt/{lib_arch}").is_dir():
-                return False
-        return True
+        return xwin_sysroot_ready(xwin_dir, arches)
 
     if is_ready():
         return xwin_dir
@@ -321,7 +345,7 @@ def main(argv=None):
     parser.add_argument(
         "--xwin-dir",
         type=Path,
-        default=Path(os.environ.get("XWIN_DIR", Path.home() / ".cache/maltoria-xwin")),
+        default=default_xwin_dir(),
         help="Directory containing xwin-splatted Windows SDK & CRT",
     )
     parser.add_argument(
