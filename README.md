@@ -18,17 +18,17 @@
 
 目前提供面向macOS(aarch64)和Linux(x86_64)用户的安装包,点击下方链接即可直接下载最新版本
 
-当前版本：[**v0.6.3（预发布）**](https://github.com/daydalek/Maltoria/releases/tag/v0.6.3) · [官网与界面预览](https://daydalek.github.io/Maltoria/)
+当前版本：[**v0.7.0（预发布）**](https://github.com/daydalek/Maltoria/releases/tag/v0.7.0) · [官网与界面预览](https://daydalek.github.io/Maltoria/)
 
 本版新增全界面九语言国际化（中/日/韩/法/西/意/德/俄）与翻译弹窗本地化，LunaHook 构建不再依赖 Windows，并修复 Linux 文本捕获 attach 崩溃。
 
 <!-- 每次发布新版本后,请同步更新下表中的版本号与直链. -->
 | 平台 | 安装包 |
 | --- | --- |
-| macOS (Apple Silicon) | [Maltoria-0.6.3-arm64.zip](https://github.com/daydalek/Maltoria/releases/download/v0.6.3/Maltoria-0.6.3-arm64.zip) |
-| Linux · deb (Ubuntu 24.04) | [whisky_0.6.3_amd64.deb](https://github.com/daydalek/Maltoria/releases/download/v0.6.3/whisky_0.6.3_amd64.deb) |
-| Linux · rpm (Fedora 44) | [whisky-0.6.3-1.x86_64.rpm](https://github.com/daydalek/Maltoria/releases/download/v0.6.3/whisky-0.6.3-1.x86_64.rpm) |
-| Linux · AppImage | [Maltoria-0.6.3-x86_64.AppImage](https://github.com/daydalek/Maltoria/releases/download/v0.6.3/Maltoria-0.6.3-x86_64.AppImage) |
+| macOS (Apple Silicon) | [Maltoria-0.7.0-arm64.zip](https://github.com/daydalek/Maltoria/releases/download/v0.7.0/Maltoria-0.7.0-arm64.zip) |
+| Linux · deb (Ubuntu 24.04) | [whisky_0.7.0_amd64.deb](https://github.com/daydalek/Maltoria/releases/download/v0.7.0/whisky_0.7.0_amd64.deb) |
+| Linux · rpm (Fedora 44) | [whisky-0.7.0-1.x86_64.rpm](https://github.com/daydalek/Maltoria/releases/download/v0.7.0/whisky-0.7.0-1.x86_64.rpm) |
+| Linux · AppImage | [Maltoria-0.7.0-x86_64.AppImage](https://github.com/daydalek/Maltoria/releases/download/v0.7.0/Maltoria-0.7.0-x86_64.AppImage) |
 
 由于缺少Apple开发者证书,目前应用以ad-hoc方式签名,打开时会提示无法验证应用安全性,请至设置-隐私与安全性中信任应用.
 
