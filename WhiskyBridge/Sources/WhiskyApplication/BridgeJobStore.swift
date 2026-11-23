@@ -48,6 +48,10 @@ public final class BridgeJobStore {
         tasks.keys.contains { records[$0]?.name == "setup.install" }
     }
 
+    var isRunningProgram: Bool {
+        tasks.keys.contains { records[$0]?.name == "programs.run" }
+    }
+
     func cancelWineNetworkOperations() {
         for (id, task) in tasks {
             guard let record = records[id], record.status != "cancelling",

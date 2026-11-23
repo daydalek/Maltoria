@@ -359,8 +359,8 @@ extension ApplicationService {
             if params["forAppUpdate"] == .bool(true) {
                 guard try preferences?.call("preferences.read", params: [:]).object?["offlineMode"] == .bool(false)
                 else { throw BridgeFailure("offline", "App updates are disabled in offline mode") }
-                if jobs.isInstallingWine || runtime?.hasBusyContainers == true {
-                    throw BridgeFailure("busy", "A game or Wine setup is still running")
+                if jobs.isInstallingWine || jobs.isRunningProgram || runtime?.hasBusyContainers == true {
+                    throw BridgeFailure("busy", "A Wine program or setup is still running", retryable: true)
                 }
             }
             let applyPolicy = params["applyExitPolicy"] == nil ? false : try params.flag("applyExitPolicy")

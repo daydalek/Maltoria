@@ -2766,7 +2766,14 @@ fn run_with_spawner_and_backoff<F, B>(
                             return;
                         }
                         Err(error) => {
-                            emit_event(&events, BridgeEvent::ShutdownFailed { reason: error.to_string() });
+                            let update_busy = for_app_update
+                                && matches!(&error, whisky_bridge::Error::Remote(failure) if failure.code == "busy");
+                            let reason = if update_busy {
+                                crate::i18n::s().settings.app_update_wine_busy.to_owned()
+                            } else {
+                                error.to_string()
+                            };
+                            emit_event(&events, BridgeEvent::ShutdownFailed { reason });
                             if let CallFailure::Session(reason) = classify(error) {
                                 reconnect = Some(reason);
                             }
