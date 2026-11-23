@@ -286,12 +286,23 @@ def prepare(output):
         ("src/NativeImpl/LunaHook/LunaHook/engine32/lucifen.cpp", '#include "Lucifen.h"', '#include "lucifen.h"'),
         ("src/NativeImpl/LunaHook/LunaHook/enginecollection32.cpp", '#include "engine32/ApRicoT.h"', '#include "engine32/ApricoT.h"'),
         ("src/NativeImpl/LunaHook/LunaHook/enginecollection32.cpp", '#include "engine32/Lucifen.h"', '#include "engine32/lucifen.h"'),
+        ("src/NativeImpl/LunaHook/include/pch.h", '#include <Winsock2.h>', '#include <winsock2.h>'),
     ):
         inc_path = luna / rel
         inc_text = inc_path.read_text(encoding="utf-8")
         if inc_text.count(old_inc) != 1:
             raise ValueError(f"Cross-compile case-fix patch no longer matches {rel}")
         inc_path.write_text(inc_text.replace(old_inc, new_inc), encoding="utf-8")
+
+    # lld-link on Linux resolves library names case-sensitively; xwin ships
+    # lowercase version.lib/shlwapi.lib while upstream names them capitalized.
+    lh_cmake = luna / "src/NativeImpl/LunaHook/LunaHook/CMakeLists.txt"
+    lc_text = lh_cmake.read_text(encoding="utf-8")
+    lc_old = "target_link_libraries(LunaHook PRIVATE trhelper VERSION_DEF Version httpapi ws2_32 Shlwapi pch minhook commonengine emulators utils ${YY_Thunks})"
+    lc_new = "target_link_libraries(LunaHook PRIVATE trhelper VERSION_DEF version httpapi ws2_32 shlwapi pch minhook commonengine emulators utils ${YY_Thunks})"
+    if lc_text.count(lc_old) != 1:
+        raise ValueError("Cross-compile LunaHook CMakeLists link-name patch no longer matches the locked LunaTranslator source")
+    lh_cmake.write_text(lc_text.replace(lc_old, lc_new), encoding="utf-8")
 
     types_h = luna / "src/NativeImpl/LunaHook/include/types.h"
     th_text = types_h.read_text(encoding="utf-8")

@@ -6,7 +6,7 @@ checks SHA-256 before extraction, preflights every archive path/root, rejects
 unsafe members, and applies the recorded MinHook pin, process-exit, and cross-compile patches.
 No source is fetched during native builds.
 
-On macOS or Linux (cross-compiling with `clang-cl`, `lld-link`, `llvm-rc`, `llvm-lib`, `llvm-mt`, `ninja`, Mono `mcs`, and `xwin`):
+On macOS or Linux (cross-compiling with `clang-cl`, `lld-link`, `llvm-rc`, `llvm-lib`, `llvm-mt`, `ninja`, Mono `mcs`, and `xwin`). Linux needs Clang 19 or newer (the splatted Windows SDK STL rejects older versions) and CMake 3.25 or newer:
 
 ```bash
 python3 scripts/build-lunahook.py --architecture all --output /tmp/MaltoriaNative --accept-xwin-license
