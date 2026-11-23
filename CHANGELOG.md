@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-11-23
+
+### Added
+- Full UI internationalization: the GPUI app now ships 9 locales (English, 简体中文, 日本語, 한국어, Français, Español, Italiano, Deutsch, Русский) backed by per-locale TOML resources with build-time codegen, replacing all inline strings; language switching re-renders live.
+- Localized translation capture popups and HUD controls across the GPUI frontend and the native macOS windows.
+- macOS HIG-style navigation with detached Settings and Capture windows.
+- Redesigned AI translation management UI with category grouping and a setup wizard.
+- Windows-free LunaHook builds: `scripts/build-lunahook.py` cross-compiles the full x86+x64 payload on macOS and Linux with clang-cl/lld-link/xwin, and `build.sh` now defaults to a local build when no `--lunahook` payload is given, including the source/compliance bundle.
+- `scripts/i18n.py` locale validation wired into CI and `build.rs` (structure, placeholders, plural categories, unused keys, literal leaks).
+
+### Fixed
+- Linux capture attach crash: `LunaHost64.dll`'s `CheckFileHelper` threw `std::filesystem_error` iterating game working-directory entries `CreateFileW` cannot open (e.g. unix sockets), terminating the helper with `capture_disconnected` and a zombie `already_hooked` state; the upstream source is patched at build time with `error_code`-tolerant iteration plus a pipe-thread guard.
+- WhiskyBridge Linux Foundation import gaps and stale `translation.overlay.*` macOS-only documentation.
+- Self-contradicting plural-category fixture in `test_i18n.py` (en requires `one` + `other`).
+- `captureHUDExpandedAndPillTogglesSyncWithOverlay` on macOS now injects the localized strings the assertions expect instead of relying on removed hardcoded labels.
+- Pre-existing SwiftFormat and SwiftLint violations that left CI red.
+- Cleared all 169 identical-to-English i18n warnings via allowlisting legitimate cognates and filling real gaps; `i18n.py check` is now clean at 0 errors / 0 warnings.
+- Wayland launch acceptance aligned with current launch settings.
+
+### Distribution
+- `apps/whisky-gpui/version.env` bumped to 0.6.3.
+- LunaHook Linux cross-compile no longer needs case-insensitive filesystems or a Windows machine.
+
 ## [0.6.2] - 2026-11-22
 
 ### Added
