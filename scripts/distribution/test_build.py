@@ -85,7 +85,12 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(['deb', 'rpm', 'appimage'], command[command.index('--formats') + 1:])
         self.assertEqual('maltoria-linux-x86_64.tar.gz', Path(command[command.index('--archive') + 1]).name)
         raw = build.plan(self.args('whisky-linux-amd64', '--formats', 'tar'))
-        self.assertEqual(2, len(raw['steps']))
+        # tar-only skips packaging; the plan is the two local LunaHook build
+        # steps plus release and audit.
+        self.assertEqual(4, len(raw['steps']))
+        self.assertIn('build-lunahook.py', raw['steps'][0]['command'][1])
+        self.assertEqual('local-build', raw['lunahook'])
+        self.assertTrue(raw['lunahookBuild'])
         docker = build.plan(self.args('whisky-linux-amd64', '--version', '0.2.0', '--formats', 'deb', '--executor', 'docker'))
         command = docker['steps'][-1]['command']
         self.assertIn('linux/amd64', docker['steps'][0]['command'])
@@ -113,8 +118,11 @@ class BuildTests(unittest.TestCase):
         self.assertEqual([name for name in build.TARGETS if name.startswith("whisky-macos-")],
                          ["whisky-macos-gpui-arm64"])
         dev = build.plan(self.args('whisky-macos-gpui-arm64'))
-        self.assertEqual(1, len(dev['steps']))
-        self.assertIn('package-app.sh', dev['steps'][0]['command'][1])
+        # Without --lunahook the app plan builds the payload locally first.
+        self.assertEqual(3, len(dev['steps']))
+        self.assertIn('build-lunahook.py', dev['steps'][0]['command'][1])
+        self.assertIn('package-native-sources.py', dev['steps'][1]['command'][1])
+        self.assertIn('package-app.sh', dev['steps'][2]['command'][1])
         self.assertNotIn('WHISKY_VERSION', dev['environment'])
         install = build.plan(self.args('whisky-macos-gpui-arm64', '--install'))
         self.assertEqual('install-macos.py', Path(install['steps'][-1]['command'][1]).name)
@@ -123,12 +131,12 @@ class BuildTests(unittest.TestCase):
             build.plan(self.args('whisky-linux-amd64', '--install'))
 
         release = build.plan(self.args('whisky-macos-gpui-arm64', '--version', '0.4.0', '--build-number', '7'))
-        self.assertEqual(2, len(release['steps']))
+        self.assertEqual(4, len(release['steps']))
         self.assertEqual('0.4.0', release['environment']['WHISKY_VERSION'])
         self.assertEqual('7', release['environment']['BUILD_NUMBER'])
-        self.assertIn('package-macos.py', release['steps'][1]['command'][1])
-        self.assertIn('--version', release['steps'][1]['command'])
-        self.assertIn('0.4.0', release['steps'][1]['command'])
+        self.assertIn('package-macos.py', release['steps'][3]['command'][1])
+        self.assertIn('--version', release['steps'][3]['command'])
+        self.assertIn('0.4.0', release['steps'][3]['command'])
         with self.assertRaises(ValueError):
             build.plan(self.args('whisky-macos-gpui-arm64', '--version', 'invalid_version'))
 
@@ -218,10 +226,19 @@ class BuildTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             build.plan(self.args('whisky-macos-gpui-arm64', '--lunahook', str(self.root / 'missing')))
 
-        # Running without --lunahook / env / --without-lunahook exits 1 with a helpful prompt.
+        # The native executor defaults to a local LunaHook build instead of failing.
+        native = build.plan(self.args('whisky-macos-gpui-arm64'))
+        self.assertEqual('local-build', native['lunahook'])
+        self.assertTrue(native['lunahookBuild'])
+        self.assertIn('MALTORIA_LUNAHOOK_ARTIFACTS', native['environment'])
+
+        # The Docker executor has no cross toolchain in its image, so running
+        # without --lunahook / env / --without-lunahook still exits 1 with a
+        # helpful prompt.
         env_clean = {k: v for k, v in os.environ.items() if k != 'MALTORIA_LUNAHOOK_ARTIFACTS'}
         result = subprocess.run(
-            [sys.executable, str(SCRIPT), 'run', 'whisky-macos-gpui-arm64',
+            [sys.executable, str(SCRIPT), 'run', 'whisky-linux-amd64',
+             '--executor', 'docker',
              '--output', str(self.root / 'blocked-out')],
             env=env_clean, capture_output=True, text=True)
         self.assertEqual(1, result.returncode)

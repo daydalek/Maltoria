@@ -13,7 +13,17 @@ python3 scripts/build-lunahook.py --architecture all --output /tmp/MaltoriaNativ
 ```
 
 `xwin` downloads the Microsoft CRT and Windows SDK into `~/.cache/maltoria-xwin`
-(or `$XWIN_DIR`) on first run. On Windows 2022 with Visual Studio 2022 C++ and
+(or `$XWIN_DIR`) on first run.
+
+`./build.sh run <app-target>` runs this pipeline automatically when neither
+`--lunahook` nor `MALTORIA_LUNAHOOK_ARTIFACTS` is given: the plan first builds
+all architectures with `build-lunahook.py`, then stages `sources/Maltoria/` with
+`package-native-sources.py`, and finally feeds the directory to the app
+packagers through `MALTORIA_LUNAHOOK_ARTIFACTS`. `--without-lunahook` opts out
+explicitly, and the Docker executor still requires a prepared payload directory
+because its image ships no cross toolchain. Windows is never required.
+
+On Windows 2022 with Visual Studio 2022 C++ and
 .NET Framework 4.x, the native PowerShell script remains supported:
 
 ```powershell
@@ -115,7 +125,8 @@ own sockets, handles and attachment are cleaned up.
 
 ## Reproducible source payload
 
-Each Windows artifact contains `sources/Maltoria/`, a path-preserving copy of
+Each LunaHook payload (CI artifact or local `build.sh` run) contains
+`sources/Maltoria/`, a path-preserving copy of
 the helper source, build/prepare/validation scripts, workflow, dependency
 archives, all notices, and build instructions. `SOURCE-COMMIT.txt` identifies the
 exact Maltoria commit. `scripts/package-native-sources.py` validates the locked
