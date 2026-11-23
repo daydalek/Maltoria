@@ -38,8 +38,13 @@ LUNAHOOK_ARCHES = ('x86', 'x64')
 
 
 def default_output_root():
-    # scripts/build-lunahook.py 拒绝源码树内的输出目录，默认任务目录放在检出目录之外。
-    return ROOT.parent / f'{ROOT.name}-build' / 'distribution'
+    # scripts/build-lunahook.py 拒绝源码树内的输出目录，默认任务目录放在检出目录之外；
+    # 检出目录的上级不可写时退回用户缓存目录。
+    sibling = ROOT.parent / f'{ROOT.name}-build'
+    if os.access(sibling if sibling.exists() else ROOT.parent, os.W_OK):
+        return sibling / 'distribution'
+    cache = Path(os.environ.get('XDG_CACHE_HOME') or Path.home() / '.cache')
+    return cache / 'maltoria-build' / 'distribution'
 
 
 def is_inside_checkout(path):

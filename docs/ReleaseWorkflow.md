@@ -81,7 +81,7 @@ For a local package:
 ./build.sh run whisky-macos-gpui-arm64 --version X.Y.Z --build-number 123
 ```
 
-Use a suitable numeric build number. Output goes to a fresh directory under `../Maltoria-build/distribution/whisky-macos-gpui-arm64/`, outside the checkout because the local LunaHook build requires its artifacts to stay out of the source tree. Local builds use the same ad-hoc signing and ZIP verification path.
+Use a suitable numeric build number. Output goes to a fresh directory under `../Maltoria-build/distribution/whisky-macos-gpui-arm64/`, outside the checkout because the local LunaHook build requires its artifacts to stay out of the source tree. If the checkout's parent is not writable, output falls back to `$XDG_CACHE_HOME/maltoria-build/distribution/` or `~/.cache/maltoria-build/distribution/` when `XDG_CACHE_HOME` is unset. Local builds use the same ad-hoc signing and ZIP verification path.
 
 ### Signing and update behavior
 

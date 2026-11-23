@@ -67,6 +67,19 @@ class BuildTests(unittest.TestCase):
                 output = Path(lunahook_step['command'][lunahook_step['command'].index('--output') + 1])
                 self.assertFalse(output.is_relative_to(build.ROOT))
 
+    def test_default_output_root_falls_back_to_user_cache(self):
+        cache = self.root / 'xdg-cache'
+        expected = cache / 'maltoria-build' / 'distribution'
+        with mock.patch.dict(os.environ):
+            os.environ.pop('MALTORIA_LUNAHOOK_ARTIFACTS', None)
+            with mock.patch.dict(os.environ, {'XDG_CACHE_HOME': str(cache)}), \
+                    mock.patch.object(build.os, 'access', return_value=False):
+                self.assertEqual(expected, build.default_output_root())
+                args = build.parser().parse_args([
+                    'plan', 'whisky-linux-amd64', '--wine-repo', str(self.repo)])
+                value = build.plan(args)
+                self.assertTrue(Path(value['output']).is_relative_to(expected))
+
     def test_local_lunahook_build_rejects_output_inside_checkout(self):
         with mock.patch.dict(os.environ):
             os.environ.pop('MALTORIA_LUNAHOOK_ARTIFACTS', None)
