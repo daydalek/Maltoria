@@ -309,6 +309,124 @@ def prepare(output):
         raise ValueError("Cross-compile Unicorn.cpp patch no longer matches the locked LunaTranslator source")
     unicorn.write_text(uc_text.replace(uc_old, uc_new), encoding="utf-8")
 
+
+    host = luna / "src/NativeImpl/LunaHook/LunaHost/host.cpp"
+    text = host.read_text(encoding="utf-8")
+    # CheckFileHelper walks the game process's working directory with throwing
+    # std::filesystem calls. Under Wine the directory can contain entries that
+    # CreateFileW cannot open (unix sockets, device nodes, files vanishing
+    # mid-scan), and the resulting filesystem_error escapes the detached pipe
+    # thread -> std::terminate -> the whole helper dies mid-attach, leaving a
+    # zombie injection that reports already_hooked until the game restarts.
+    # Iterate with error_code so unreadable entries are skipped instead.
+    original_helper = ("\t\tfor (const auto &entry : std::filesystem::directory_iterator(currpath))\n"
+                       "\t\t{\n"
+                       "\t\t\thandler(entry.path().filename());\n"
+                       "\t\t\tif (!std::filesystem::is_directory(entry.path()))\n"
+                       "\t\t\t\tcontinue;\n"
+                       "\t\t\tfor (const auto &sub_entry : std::filesystem::directory_iterator(entry))\n"
+                       "\t\t\t\thandler(std::filesystem::relative(sub_entry.path(), currpath));\n"
+                       "\t\t}\n")
+    patched_helper = ("\t\t// Maltoria: entries CreateFileW cannot open (unix sockets, device\n"
+                      "\t\t// nodes, files removed mid-scan) make the throwing filesystem API\n"
+                      "\t\t// raise filesystem_error out of the detached pipe thread, killing\n"
+                      "\t\t// the helper. Skip unreadable entries instead of aborting.\n"
+                      "\t\tstd::error_code ec;\n"
+                      "\t\tstd::filesystem::directory_iterator it(currpath, ec), it_end;\n"
+                      "\t\twhile (!ec && it != it_end)\n"
+                      "\t\t{\n"
+                      "\t\t\tconst auto &entry = *it;\n"
+                      "\t\t\thandler(entry.path().filename());\n"
+                      "\t\t\tstd::error_code is_dir_ec;\n"
+                      "\t\t\tif (std::filesystem::is_directory(entry.path(), is_dir_ec) && !is_dir_ec)\n"
+                      "\t\t\t{\n"
+                      "\t\t\t\tstd::error_code sub_ec;\n"
+                      "\t\t\t\tstd::filesystem::directory_iterator sub(entry, sub_ec), sub_end;\n"
+                      "\t\t\t\twhile (!sub_ec && sub != sub_end)\n"
+                      "\t\t\t\t{\n"
+                      "\t\t\t\t\tstd::error_code rel_ec;\n"
+                      "\t\t\t\t\tconst auto rel = std::filesystem::relative(sub->path(), currpath, rel_ec);\n"
+                      "\t\t\t\t\tif (!rel_ec)\n"
+                      "\t\t\t\t\t\thandler(rel);\n"
+                      "\t\t\t\t\tsub.increment(sub_ec);\n"
+                      "\t\t\t\t}\n"
+                      "\t\t\t}\n"
+                      "\t\t\tit.increment(ec);\n"
+                      "\t\t}\n")
+    if text.count(original_helper) != 1:
+        raise ValueError("CheckFileHelper patch no longer matches the locked LunaTranslator source")
+    text = text.replace(original_helper, patched_helper)
+    original = ("\tvoid __handlepipethread(DWORD processId, HANDLE hookPipe, HANDLE hostPipe, HANDLE pipeAvailableEvent)\n"
+                "\t{\n"
+                "\t\tConnectNamedPipe(hookPipe, nullptr);\n"
+                "\t\tCloseHandle(pipeAvailableEvent);\n\n"
+                "\t\tVersionMatchCheck(hookPipe);\n"
+                "\t\tCheckFileHelper(hookPipe, hostPipe);\n\n"
+                "\t\tprocessRecordsByIds->try_emplace(processId, processId, hostPipe);\n"
+                "\t\tOnConnect(processId);\n"
+                "\t\tHost::AddConsoleOutput(FormatString(TR[PROC_CONN], processId));\n"
+                "\t\tif (Host::enablePCHooks)\n"
+                "\t\t{\n"
+                "\t\t\tprocessRecordsByIds->at(processId).Send<rpc::Id::InsertPCHooks>(0);\n"
+                "\t\t\tprocessRecordsByIds->at(processId).Send<rpc::Id::InsertPCHooks>(1);\n"
+                "\t\t}\n"
+                "\t\tBYTE buffer[PIPE_BUFFER_SIZE] = {};\n"
+                "\t\tDWORD bytesRead;\n"
+                "\t\twhile (ReadFile(hookPipe, buffer, PIPE_BUFFER_SIZE, &bytesRead, nullptr))\n"
+                "\t\t\trpc::dispatch(buffer, bytesRead, processId);\n\n"
+                "\t\tRemoveThreads([&](ThreadParam tp)\n"
+                "\t\t\t\t\t  { return tp.processId == processId; });\n"
+                "\t\tOnDisconnect(processId);\n"
+                "\t\tHost::AddConsoleOutput(FormatString(TR[PROC_DISCONN], processId));\n"
+                "\t\tSetEvent(processRecordsByIds->at(processId).prepareWaiter);\n"
+                "\t\tprocessRecordsByIds->erase(processId);\n"
+                "\t}")
+    patched = ("\tvoid __handlepipethread(DWORD processId, HANDLE hookPipe, HANDLE hostPipe, HANDLE pipeAvailableEvent)\n"
+               "\t{\n"
+               "\t\tConnectNamedPipe(hookPipe, nullptr);\n"
+               "\t\tCloseHandle(pipeAvailableEvent);\n\n"
+               "\t\t// Maltoria: a C++ exception escaping this detached thread called\n"
+               "\t\t// std::terminate and killed the whole helper, leaving the target\n"
+               "\t\t// with a zombie injection that reports already_hooked until the\n"
+               "\t\t// game restarts. Degrade to a clean disconnect instead.\n"
+               "\t\ttry\n"
+               "\t\t{\n"
+               "\t\t\tVersionMatchCheck(hookPipe);\n"
+               "\t\t\tCheckFileHelper(hookPipe, hostPipe);\n\n"
+               "\t\t\tprocessRecordsByIds->try_emplace(processId, processId, hostPipe);\n"
+               "\t\t\tOnConnect(processId);\n"
+               "\t\t\tHost::AddConsoleOutput(FormatString(TR[PROC_CONN], processId));\n"
+               "\t\t\tif (Host::enablePCHooks)\n"
+               "\t\t\t{\n"
+               "\t\t\t\tprocessRecordsByIds->at(processId).Send<rpc::Id::InsertPCHooks>(0);\n"
+               "\t\t\t\tprocessRecordsByIds->at(processId).Send<rpc::Id::InsertPCHooks>(1);\n"
+               "\t\t\t}\n"
+               "\t\t\tBYTE buffer[PIPE_BUFFER_SIZE] = {};\n"
+               "\t\t\tDWORD bytesRead;\n"
+               "\t\t\twhile (ReadFile(hookPipe, buffer, PIPE_BUFFER_SIZE, &bytesRead, nullptr))\n"
+               "\t\t\t\trpc::dispatch(buffer, bytesRead, processId);\n"
+               "\t\t}\n"
+               "\t\tcatch (...)\n"
+               "\t\t{\n"
+               "\t\t}\n\n"
+               "\t\ttry\n"
+               "\t\t{\n"
+               "\t\t\tRemoveThreads([&](ThreadParam tp)\n"
+               "\t\t\t\t\t\t  { return tp.processId == processId; });\n"
+               "\t\t\tOnDisconnect(processId);\n"
+               "\t\t\tHost::AddConsoleOutput(FormatString(TR[PROC_DISCONN], processId));\n"
+               "\t\t\tif (processRecordsByIds->find(processId) != processRecordsByIds->end())\n"
+               "\t\t\t\tSetEvent(processRecordsByIds->at(processId).prepareWaiter);\n"
+               "\t\t\tprocessRecordsByIds->erase(processId);\n"
+               "\t\t}\n"
+               "\t\tcatch (...)\n"
+               "\t\t{\n"
+               "\t\t}\n"
+               "\t}")
+    if text.count(original) != 1:
+        raise ValueError("Pipe-thread guard patch no longer matches the locked LunaTranslator source")
+    text = text.replace(original, patched)
+    host.write_text(text, encoding="utf-8")
     print(f"Prepared {len(packages)} pinned native source trees: {output}")
 
 

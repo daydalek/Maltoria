@@ -1,0 +1,103 @@
+--- a/src/NativeImpl/LunaHook/LunaHost/host.cpp
++++ b/src/NativeImpl/LunaHook/LunaHost/host.cpp
+@@ -110,12 +110,34 @@
+ 			WriteFile(hostPipe, fname.c_str(), 2 * size, &count, nullptr);
+ 		};
+ 
+-		for (const auto &entry : std::filesystem::directory_iterator(currpath))
++		// Maltoria: entries CreateFileW cannot open (unix sockets, device
++		// nodes, files removed mid-scan) make the throwing filesystem API
++		// raise filesystem_error out of the detached pipe thread, killing
++		// the helper. Skip unreadable entries instead of aborting.
++		std::error_code ec;
++		std::filesystem::directory_iterator it(currpath, ec), it_end;
++		while (!ec && it != it_end)
+ 		{
+-			handler(entry.path().filename());
+-			if (!std::filesystem::is_directory(entry.path()))
+-				continue;
+-			for (const auto &sub_entry : std::filesystem::directory_iterator(entry))
+-				handler(std::filesystem::relative(sub_entry.path(), currpath));
++			const auto &entry = *it;
++			handler(entry.path().filename());
++			std::error_code is_dir_ec;
++			if (std::filesystem::is_directory(entry.path(), is_dir_ec) && !is_dir_ec)
++			{
++				std::error_code sub_ec;
++				std::filesystem::directory_iterator sub(entry, sub_ec), sub_end;
++				while (!sub_ec && sub != sub_end)
++				{
++					std::error_code rel_ec;
++					const auto rel = std::filesystem::relative(sub->path(), currpath, rel_ec);
++					if (!rel_ec)
++						handler(rel);
++					sub.increment(sub_ec);
++				}
++			}
++			it.increment(ec);
+ 		}
+ 		size = -1;
+ 		WriteFile(hostPipe, &size, 4, &count, nullptr);
+@@ -250,28 +272,45 @@
+ 		ConnectNamedPipe(hookPipe, nullptr);
+ 		CloseHandle(pipeAvailableEvent);
+ 
+-		VersionMatchCheck(hookPipe);
+-		CheckFileHelper(hookPipe, hostPipe);
++		// Maltoria: a C++ exception escaping this detached thread called
++		// std::terminate and killed the whole helper, leaving the target
++		// with a zombie injection that reports already_hooked until the
++		// game restarts. Degrade to a clean disconnect instead.
++		try
++		{
++			VersionMatchCheck(hookPipe);
++			CheckFileHelper(hookPipe, hostPipe);
+ 
+-		processRecordsByIds->try_emplace(processId, processId, hostPipe);
+-		OnConnect(processId);
+-		Host::AddConsoleOutput(FormatString(TR[PROC_CONN], processId));
+-		if (Host::enablePCHooks)
++			processRecordsByIds->try_emplace(processId, processId, hostPipe);
++			OnConnect(processId);
++			Host::AddConsoleOutput(FormatString(TR[PROC_CONN], processId));
++			if (Host::enablePCHooks)
++			{
++				processRecordsByIds->at(processId).Send<rpc::Id::InsertPCHooks>(0);
++				processRecordsByIds->at(processId).Send<rpc::Id::InsertPCHooks>(1);
++			}
++			BYTE buffer[PIPE_BUFFER_SIZE] = {};
++			DWORD bytesRead;
++			while (ReadFile(hookPipe, buffer, PIPE_BUFFER_SIZE, &bytesRead, nullptr))
++				rpc::dispatch(buffer, bytesRead, processId);
++		}
++		catch (...)
+ 		{
+-			processRecordsByIds->at(processId).Send<rpc::Id::InsertPCHooks>(0);
+-			processRecordsByIds->at(processId).Send<rpc::Id::InsertPCHooks>(1);
+ 		}
+-		BYTE buffer[PIPE_BUFFER_SIZE] = {};
+-		DWORD bytesRead;
+-		while (ReadFile(hookPipe, buffer, PIPE_BUFFER_SIZE, &bytesRead, nullptr))
+-			rpc::dispatch(buffer, bytesRead, processId);
+ 
+-		RemoveThreads([&](ThreadParam tp)
+-					  { return tp.processId == processId; });
+-		OnDisconnect(processId);
+-		Host::AddConsoleOutput(FormatString(TR[PROC_DISCONN], processId));
+-		SetEvent(processRecordsByIds->at(processId).prepareWaiter);
+-		processRecordsByIds->erase(processId);
++		try
++		{
++			RemoveThreads([&](ThreadParam tp)
++						  { return tp.processId == processId; });
++			OnDisconnect(processId);
++			Host::AddConsoleOutput(FormatString(TR[PROC_DISCONN], processId));
++			if (processRecordsByIds->find(processId) != processRecordsByIds->end())
++				SetEvent(processRecordsByIds->at(processId).prepareWaiter);
++			processRecordsByIds->erase(processId);
++		}
++		catch (...)
++		{
++		}
+ 	}
+ }

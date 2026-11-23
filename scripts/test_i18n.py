@@ -97,13 +97,13 @@ class TestValidateLocales(unittest.TestCase):
             )
 
     def test_locale_extra_categories_need_count(self):
-        # fr requires `one` even where en's table lacks it; it must render {count}.
-        en = {"s": {"k": {"other": "{count} xs", "zero": "none"}}}
+        en = {"s": {"k": {"one": "{count} x", "other": "{count} xs", "zero": "none"}}}
         fr = {"s": {"k": {"zero": "aucun", "one": "{count} x", "other": "{count} xs"}}}
         errors = i18n.validate_locales(self.files(en, {"fr": fr}))
         self.assertEqual(errors, [])
-        fr2 = {"s": {"k": {"zero": "aucun", "one": "un", "other": "{count} xs"}}}
-        errors = i18n.validate_locales(self.files(en, {"fr": fr2}))
+        # Categories a locale needs but en lacks (ru `few`) must render {count}.
+        ru = {"s": {"k": {"one": "{count} x", "few": "мало", "many": "{count} xs", "other": "{count} xs"}}}
+        errors = i18n.validate_locales(self.files(en, {"ru": ru}))
         self.assertTrue(any("must contain" in e for e in errors))
         # `zero` stays a free-form n == 0 override even where en lacks it.
         en2 = {"s": {"k": {"one": "{count} x", "other": "{count} xs"}}}
