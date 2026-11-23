@@ -35,23 +35,18 @@ def find_tool(name, extra_dirs=()):
         candidates.insert(0, Path(llvm_env))
     candidates.extend(llvm_search_dirs())
 
-    found = shutil.which(name)
-    if found:
-        return Path(found)
-    for directory in candidates:
-        candidate = directory / name
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return candidate
     if name == "clang-cl":
-        # Debian/Ubuntu LLVM packages ship no clang-cl binary; clang is a
-        # multicall driver that selects the MSVC frontend from argv[0].
-        clang = shutil.which("clang")
+        # clang-cl is just clang's MSVC frontend selected by argv[0]; prefer the
+        # newest clang driver (sorted LLVM dirs first) so an older system
+        # clang-cl (e.g. LLVM 18, rejected by the xwin STL) never wins.
+        clang = None
+        for directory in candidates:
+            candidate = directory / "clang"
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                clang = candidate
+                break
         if clang is None:
-            for directory in candidates:
-                candidate = directory / "clang"
-                if candidate.is_file() and os.access(candidate, os.X_OK):
-                    clang = candidate
-                    break
+            clang = shutil.which("clang")
         if clang is not None:
             shim_dir = Path.home() / ".cache" / "maltoria-native" / "bin"
             shim_dir.mkdir(parents=True, exist_ok=True)
@@ -60,6 +55,14 @@ def find_tool(name, extra_dirs=()):
                 shim.unlink()
             shim.symlink_to(clang)
             return shim
+
+    found = shutil.which(name)
+    if found:
+        return Path(found)
+    for directory in candidates:
+        candidate = directory / name
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate
     raise FileNotFoundError(
         f"Required tool '{name}' not found in PATH or standard LLVM locations. "
         f"On macOS: brew install llvm lld ninja xwin mono; "
