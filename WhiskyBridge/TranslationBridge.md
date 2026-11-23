@@ -47,8 +47,8 @@ Profiles and settings are atomically stored in `FileTranslationRepository.defaul
 | `translation.history.include` | `{entryID,include: boolean}` | Update context inclusion for a history entry |
 | `translation.history.clear` | none | Clear current game's history and cache |
 | `translation.cache.clear` | none | Clear current session cache |
-| `translation.overlay.read` (macOS) | none | Overlay settings and platform capabilities |
-| `translation.overlay.configure` (macOS) | `{settings: partialOverlaySettings}` | Overlay settings and platform capabilities |
+| `translation.overlay.read` | none | Overlay settings and platform capabilities |
+| `translation.overlay.configure` | `{settings: partialOverlaySettings}` | Overlay settings and platform capabilities |
 
 A process record is `{guestPID,exePath,arch,creationTime}`. `creationTime` is exactly 16 hexadecimal Windows FILETIME digits. Attach accepts only a record from the last inventory, and the native helper independently revalidates the opened process identity. Selecting an x86 process automatically replaces the inventory helper with its x86 counterpart. Both helpers use the bottle's configured engine, engine lease and Wine prefix. Tokens are environment-only. Stop never terminates the game or wineserver.
 
@@ -58,6 +58,6 @@ Subtitle fields are `source`, `translation`, `speaker`, `kind`, `status`, `error
 
 Histories are isolated by a SHA-256 key of the canonical bottle path and library entry ID, with one user-only file per game under `Translation/history`. Starting without `restoreHistory` clears the previous history for that game. Restoring requires explicit selection; retention zero disables persisted history. Provider configuration changes cancel an in-flight translation and invalidate the session cache. Disabling remote access stops a remote capture session while local providers remain usable.
 
-The AppKit overlay is non-activating, floating and full-screen auxiliary. Settings include `visible`, `clickThrough`, `showSource`, `showTranslation`, `fontSize` (12–72), `opacity` (0.1–1), `width`, `height`, and optional `x`/`y` in desktop points. Disable click-through to drag or resize; saved position is recovered onto a connected display. Native overlay capability does not establish real-game full-screen compatibility, which must be tested locally.
+On macOS the AppKit overlay is non-activating, floating and full-screen auxiliary; on Linux the GPUI subtitle window serves it (`{"mode":"gpui","platform":"Linux"}` in the read result). Settings include `visible`, `clickThrough`, `showSource`, `showTranslation`, `fontSize` (12–72), `opacity` (0.1–1), `width`, `height`, and optional `x`/`y` in desktop points. Disable click-through to drag or resize; saved position is recovered onto a connected display. Native overlay capability does not establish real-game full-screen compatibility, which must be tested locally.
 
 Native payloads are resolved beside `whisky-bridge` under `LunaHook/x86` and `LunaHook/x64`. Development runs may set an absolute `MALTORIA_LUNAHOOK_ROOT`. Each architecture requires the helper EXE, matching LunaHost and LunaHook DLLs, and `LunaTmpFontLoader.dll`. Missing payloads produce `capture_payload_unavailable` rather than silently skipping capture.

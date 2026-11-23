@@ -260,6 +260,276 @@ reason = "source name, shown in English"
 [identical."maps.source_label.ymgal"]
 reason = "source name (YMGal); zh-Hans uses 月幕"
 
+[identical."bottle.diagnostics_ellipsis"]
+reason = "identical word in fr"
+
+[identical."bottle.env_key_placeholder"]
+reason = "identical cognate in de/es/fr"
+
+[identical."bottle.manual"]
+reason = "identical cognate in es"
+
+[identical."bottle.mode"]
+reason = "identical word in fr"
+
+[identical."bottle.simple"]
+reason = "identical cognate in es/fr"
+
+[identical."bottle.terminal"]
+reason = "identical cognate in de/es/fr"
+
+[identical."capture.height_minus"]
+reason = "height-unit abbreviation kept identical in de/fr"
+
+[identical."capture.height_plus"]
+reason = "height-unit abbreviation kept identical in de/fr"
+
+[identical."capture.position_label"]
+reason = "identical cognate in de/fr"
+
+[identical."capture.source_text"]
+reason = "identical word in fr"
+
+[identical."capture.status_abnormal"]
+reason = "identical cognate in es"
+
+[identical."capture.target_architecture"]
+reason = "identical word in fr"
+
+[identical."common.architecture"]
+reason = "identical word in fr"
+
+[identical."common.bytes_human"]
+reason = "byte unit label kept in English in es"
+
+[identical."common.details"]
+reason = "identical cognate in de"
+
+[identical."common.error"]
+reason = "identical cognate in es"
+
+[identical."common.name"]
+reason = "identical cognate in de"
+
+[identical."common.status"]
+reason = "identical cognate in de"
+
+[identical."dialogs.about_bridge"]
+reason = "bridge component name kept in English"
+
+[identical."dialogs.about_system"]
+reason = "identical cognate in de"
+
+[identical."dialogs.about_version"]
+reason = "identical cognate in de/fr"
+
+[identical."dialogs.character_count"]
+reason = "placeholder-only label, identical in every locale"
+
+[identical."dialogs.diagnostics"]
+reason = "identical word in fr"
+
+[identical."dialogs.file_label"]
+reason = "identical word in it"
+
+[identical."dialogs.filter_btn"]
+reason = "identical cognate in de"
+
+[identical."library.add_tag_chip"]
+reason = "tag is a standard loanword in de/fr/it"
+
+[identical."library.bottles_section"]
+reason = "'Bottle' product term kept in English"
+
+[identical."library.chip_studio"]
+reason = "Studio/Tag loanwords kept in de/it"
+
+[identical."library.chip_tag"]
+reason = "Studio/Tag loanwords kept in de/fr/it"
+
+[identical."library.container_prefix"]
+reason = "'Bottle' product term kept in English"
+
+[identical."library.demo_duration_8m"]
+reason = "duration abbreviation identical in es/fr/it"
+
+[identical."library.launchers"]
+reason = "launcher loanword used throughout the es file"
+
+[identical."library.runtime_env"]
+reason = "'Bottle' product term kept in English"
+
+[identical."library.sort_bottle"]
+reason = "'Bottle' product term kept in English"
+
+[identical."library.sort_name"]
+reason = "identical cognate in de"
+
+[identical."library.tab_studios"]
+reason = "studio loanword in de/fr"
+
+[identical."library.tab_tags"]
+reason = "tag loanword in de/fr"
+
+[identical."library.tags_section"]
+reason = "tag loanword in de/fr"
+
+[identical."library.title_studio"]
+reason = "Studio/Tag loanwords kept in de/it"
+
+[identical."library.title_tag"]
+reason = "Studio/Tag loanwords kept in de/fr/it"
+
+[identical."linux_hud.arch"]
+reason = "architecture abbreviation kept identical"
+
+[identical."linux_hud.hud_capture_badge"]
+reason = "identical word in fr"
+
+[identical."linux_hud.thread_label"]
+reason = "standard technical term in de/fr/it"
+
+[identical."maps.config_field.config.field.dxrEnabled"]
+reason = "graphics API name kept in English in es"
+
+[identical."maps.config_field.config.field.dxvkHud"]
+reason = "DXVK product term kept in English in de"
+
+[identical."maps.config_field.config.field.metalHud"]
+reason = "Metal product term kept in English in de"
+
+[identical."maps.config_field.config.field.metalTrace"]
+reason = "Metal product term kept in English in de"
+
+[identical."maps.config_option..auto"]
+reason = "identical word in fr/it"
+
+[identical."maps.config_option.asfTimestampBase.auto"]
+reason = "identical word in fr/it"
+
+[identical."maps.config_option.asfTimestampBase.legacy"]
+reason = "legacy loanword used in de/it software"
+
+[identical."maps.config_option.audioLatencyPreset.stable"]
+reason = "identical word in fr"
+
+[identical."maps.config_option.launcherLocale."]
+reason = "identical word in fr/it"
+
+[identical."maps.config_option.launcherMode.manual"]
+reason = "identical cognate in es"
+
+[identical."maps.config_section.audio"]
+reason = "identical cognate in de/es/fr/it"
+
+[identical."maps.config_section.display"]
+reason = "identical word in it"
+
+[identical."maps.config_section.performance"]
+reason = "identical word in fr"
+
+[identical."maps.config_section.upscaling"]
+reason = "upscaling loanword in de/it"
+
+[identical."maps.month_name.1"]
+reason = "month abbreviation identical in de"
+
+[identical."maps.month_name.10"]
+reason = "month abbreviation identical in es/fr"
+
+[identical."maps.month_name.11"]
+reason = "month abbreviation identical in de/es/fr/it"
+
+[identical."maps.month_name.2"]
+reason = "month abbreviation identical in de/es/it"
+
+[identical."maps.month_name.3"]
+reason = "month abbreviation identical in es/it"
+
+[identical."maps.month_name.4"]
+reason = "month abbreviation identical in de/it"
+
+[identical."maps.month_name.5"]
+reason = "month abbreviation identical in es"
+
+[identical."maps.month_name.6"]
+reason = "month abbreviation identical in de/es"
+
+[identical."maps.month_name.7"]
+reason = "month abbreviation identical in de/es"
+
+[identical."maps.month_name.8"]
+reason = "month abbreviation identical in de"
+
+[identical."maps.month_name.9"]
+reason = "month abbreviation identical in de/es"
+
+[identical."menus.zoom"]
+reason = "zoom loanword in es/fr/it"
+
+[identical."metadata.cat_cover"]
+reason = "cover loanword in de"
+
+[identical."program_settings.launch_arguments"]
+reason = "identical word in fr"
+
+[identical."program_settings.locale_label"]
+reason = "legitimate word in fr (de/es/it translated)"
+
+[identical."program_settings.upscale_algo"]
+reason = "upscaler loanword in de/it"
+
+[identical."settings.blur_max"]
+reason = "max abbreviation identical in fr/it"
+
+[identical."settings.general_title"]
+reason = "identical cognate in es"
+
+[identical."settings.section_general"]
+reason = "identical cognate in es"
+
+[identical."state.fallback_bottle"]
+reason = "'Bottle' product term kept in English"
+
+[identical."statistics.play_time_minutes"]
+reason = "minutes abbreviation identical in es/fr/it"
+
+[identical."translation.cat_local_short"]
+reason = "identical cognate in es/fr"
+
+[identical."translation.ctx_badge"]
+reason = "'ctx' context abbreviation kept in de/es/fr/it"
+
+[identical."translation.ctx_est_badge"]
+reason = "'ctx' context abbreviation kept in de/es/fr/it"
+
+[identical."translation.ctx_size_badge"]
+reason = "'ctx' context abbreviation kept in de/es/fr/it"
+
+[identical."translation.field_name"]
+reason = "identical cognate in de"
+
+[identical."translation.filter"]
+reason = "identical cognate in de"
+
+[identical."translation.service_list"]
+reason = "identical word in fr"
+
+[identical."translation.source_manual"]
+reason = "identical cognate in es"
+
+[identical."translation.wiz_nav_service"]
+reason = "identical word in fr"
+
+[identical."winetricks.cat_apps"]
+reason = "apps loanword in de"
+
+[identical."winetricks.cat_benchmarks"]
+reason = "benchmarks loanword in de/es/fr"
+
+[identical."winetricks.cat_dlls"]
+reason = "technical abbreviation in de/fr"
+
 [naming]
 # Reserved for justified exceptions to the key/placeholder naming rules
 # enforced by scripts/i18n.py (semantically named keys <= 40 chars,
