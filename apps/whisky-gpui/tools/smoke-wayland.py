@@ -177,7 +177,14 @@ def main():
             time.sleep(0.5)
             open_run_settings()
             session.snapshot('wayland-shortcut-section')
-            session.click(612, 765)
+            # The footer action drifts with localized button widths; scroll to
+            # the in-sheet Create Shortcut button like the X11 scenario does.
+            for _ in range(10):
+                session.scroll(980, 650, 10)
+                time.sleep(0.05)
+            time.sleep(0.3)
+            session.snapshot('wayland-shortcut-section-scrolled')
+            session.click(370, 647)
             shortcut = fixture / 'data/applications/game.desktop'
             wait(shortcut.exists, 'Wayland shortcut creation failed')
             assert '--container-id' in shortcut.read_text()
