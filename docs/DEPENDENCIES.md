@@ -58,9 +58,10 @@ All application dependency licenses and resolved revisions are recorded in
 the `ThirdParty` directory. `python3 scripts/check-third-party.py` validates the
 inventory and package lock revisions; `--resources PATH` also checks a built or
 extracted application's `Contents/Resources`. `native_packages` separately locks
-the LunaTranslator, MinHook, and uchardet sources used by the Windows build.
+the LunaTranslator, MinHook, and uchardet sources used by the LunaHook native
+build (cross-compiled with clang-cl/xwin; no Windows host required).
 Their exact source archives and build instructions are included in release source
-archives and the Windows CI artifact; see [LunaHook-BUILD.md](../ThirdParty/LunaHook-BUILD.md).
+archives and the NativeLunaHook CI artifact; see [LunaHook-BUILD.md](../ThirdParty/LunaHook-BUILD.md).
 
 ## Tracking cadence
 
