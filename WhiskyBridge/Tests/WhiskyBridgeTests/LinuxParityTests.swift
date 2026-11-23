@@ -326,6 +326,50 @@ struct LinuxParityTests {
         driver.stopTracking()
     }
 
+    @Test func appUpdateShutdownWaitsForDirectProgramRunBeforeApplyingExitPolicy() async throws {
+        let fixture = try ParityFixture()
+        defer { fixture.cleanup() }
+        _ = try fixture.entry("sleep.exe")
+        let executable = fixture.bottle.appendingPathComponent("drive_c/sleep.exe")
+        let preferences = PreferencesService(
+            fileURL: fixture.root.appendingPathComponent("prefs.plist"),
+            defaultBottleDirectory: fixture.root
+        )
+        let jobs = BridgeJobStore()
+        let native = LinuxApplicationServices(
+            preferences: preferences,
+            jobs: jobs,
+            shutdownContainers: { [fixture.bottle] },
+            host: fixture.host
+        )
+        let service = ApplicationService(
+            workspace: .init(containers: [fixture.bottle]), native: native, preferences: preferences, jobs: jobs
+        )
+        let started = try await service.call("programs.run", params: [
+            "container": .string(fixture.bottle.path), "executable": .string(executable.path)
+        ])
+        let job = try #require(started.object?["jobID"]?.string)
+        let marker = fixture.bottle.appendingPathComponent("program-started").path
+        for _ in 0 ..< 100 where !FileManager.default.fileExists(atPath: marker) {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(FileManager.default.fileExists(atPath: marker))
+        let quit = BridgeRequest(
+            id: "quit",
+            method: "bridge.shutdown",
+            params: ["forAppUpdate": .bool(true), "applyExitPolicy": .bool(true)]
+        )
+        let blocked = await service.respond(quit)
+        #expect(blocked.error?.code == "busy")
+        #expect(blocked.error?.retryable == true)
+        #expect(jobs.isActive(job))
+        #expect(!FileManager.default.fileExists(atPath: fixture.bottle.appendingPathComponent("killed").path))
+        _ = try jobs.call("jobs.cancel", params: ["jobID": .string(job)])
+        await jobs.shutdown()
+        let accepted = await service.respond(quit)
+        #expect(accepted.result?.object?["accepted"] == .bool(true))
+    }
+
     @Test func exitPolicyHonorsGlobalAndPerBottleSettingsAndReportsFailures() async throws {
         let fixture = try ParityFixture()
         defer { fixture.cleanup() }

@@ -659,6 +659,7 @@ impl PreviewState {
                 ("src-nextmoe", true),
                 ("offline", preferences::DEFAULT_OFFLINE_MODE),
                 ("updates", preferences::DEFAULT_CHECK_UPDATES),
+                ("app-updates", preferences::DEFAULT_CHECK_APP_UPDATES),
                 ("blur", preferences::DEFAULT_DETAIL_BLURRED_BACKGROUND),
             ]
             .into(),
@@ -749,6 +750,7 @@ pub(crate) struct WhiskyApp {
     library_revision: u64,
     /// Keys `preferences.schema` advertises. Anything else stays in memory.
     prefs_supported: BTreeSet<String>,
+    update_preferences_loaded: bool,
     prefs_pending: BTreeMap<String, serde_json::Value>,
     prefs_generation: u64,
     pub(crate) metadata_preferences: crate::onboarding::MetadataPreferences,
@@ -866,6 +868,8 @@ pub(crate) struct WhiskyApp {
     pub(crate) gptk_error: Option<String>,
     /// The one-shot WhiskyWine update check for this session.
     wine_update_checked: bool,
+    pub(crate) installed_app: Option<crate::app_update::InstalledApp>,
+    pub(crate) app_update: crate::app_update::State,
     pub(crate) setup_dialog: bool,
     pub(crate) setup_installing: bool,
     pub(crate) setup_stage: Option<String>,
@@ -1135,6 +1139,7 @@ impl WhiskyApp {
             view_cache: RefCell::new(ViewCache::default()),
             library_revision: 0,
             prefs_supported: BTreeSet::new(),
+            update_preferences_loaded: false,
             prefs_pending: BTreeMap::new(),
             prefs_generation: 0,
             metadata_preferences: crate::onboarding::MetadataPreferences::default(),
@@ -1203,6 +1208,8 @@ impl WhiskyApp {
             gptk_importing: false,
             gptk_error: None,
             wine_update_checked: false,
+            installed_app: (!demo).then(crate::app_update::InstalledApp::detect).flatten(),
+            app_update: crate::app_update::State::default(),
             setup_dialog: false,
             setup_installing: false,
             setup_stage: None,
@@ -1408,6 +1415,7 @@ impl WhiskyApp {
         match event {
             BridgeEvent::ShutdownFailed { reason } => {
                 self.quitting = false;
+                self.app_update.pending = None;
                 self.quit_error = Some(reason);
                 self.bridge_dialog = true;
                 cx.notify();
@@ -1441,6 +1449,10 @@ impl WhiskyApp {
                     cx.notify();
                 }
                 if !connected {
+                    self.update_preferences_loaded = false;
+                    self.app_update.busy = false;
+                    self.app_update.version = None;
+                    self.app_update.downloaded = None;
                     self.service_methods.clear();
                     self.setup_status = None;
                     self.gptk_status = None;
@@ -1513,6 +1525,7 @@ impl WhiskyApp {
             }
             BridgeEvent::Services(methods) => {
                 self.service_methods = methods.into_iter().collect();
+                self.maybe_check_updates();
                 self.localize_native_capture_popup();
                 if self.service_available("gameConfig.match") {
                     if let Some(page) = self.game_info.as_mut().filter(|page| page.matches.is_none() && page.config_error.is_some()) {
@@ -1885,6 +1898,8 @@ impl WhiskyApp {
                         );
                     }
                     self.apply_preferences(&values);
+                    self.update_preferences_loaded = true;
+                    self.maybe_check_updates();
                     if !self.onboarding_checked {
                         self.onboarding_checked = true;
                         if values.get(crate::onboarding::COMPLETED).and_then(serde_json::Value::as_bool) == Some(false)
@@ -1917,6 +1932,14 @@ impl WhiskyApp {
             }
             BridgeEvent::SystemInfo { info } => {
                 self.app_info = Some(info);
+            }
+            BridgeEvent::AppUpdate { action, result } => self.app_update_reply(action, result),
+            BridgeEvent::AppUpdateQuitAccepted => {
+                if let Some(pending) = self.app_update.pending.take()
+                    && let Err(error) = pending.authorize()
+                {
+                    eprintln!("maltoria: could not authorize app update: {error}");
+                }
             }
             BridgeEvent::EntryRating {
                 container,
@@ -3244,22 +3267,7 @@ impl WhiskyApp {
                                 self.setup_prompted = true;
                                 self.setup_dialog = true;
                             }
-                            // ContentView's startup flow: with the runtime in
-                            // place and update checks enabled, compare against
-                            // the published manifest once per session.
-                            if installed
-                                && self.service_available("setup.checkUpdate")
-                                && !self.wine_update_checked
-                                && self
-                                    .preview
-                                    .toggles
-                                    .get("updates")
-                                    .copied()
-                                    .unwrap_or(preferences::DEFAULT_CHECK_UPDATES)
-                            {
-                                self.wine_update_checked = true;
-                                self.bridge.check_wine_update();
-                            }
+                            self.maybe_check_updates();
                         }
                         SetupUpdate::Installing { stage, progress } => {
                             self.setup_dialog = true;
@@ -3306,7 +3314,9 @@ impl WhiskyApp {
                             self.show_notice(crate::i18n::s().state.rosetta_installed, cx);
                         }
                         SetupUpdate::WineUpdate { local, remote } => {
-                            self.show_notice(crate::i18n::s().state.notice_wine_update_available(&local, &remote), cx);
+                            if !self.offline() && self.flag("updates") {
+                                self.show_notice(crate::i18n::s().state.notice_wine_update_available(&local, &remote), cx);
+                            }
                         }
                         SetupUpdate::Failed { reason } => {
                             self.setup_installing = false;
@@ -3943,6 +3953,10 @@ impl WhiskyApp {
     /// Save the window frame, then let the helper apply the stored
     /// kill-on-terminate policy before the process exits.
     pub(crate) fn request_quit(&mut self, window: &Window, cx: &mut Context<Self>) {
+        self.request_quit_with_update(window, cx, false);
+    }
+
+    fn request_quit_with_update(&mut self, window: &Window, cx: &mut Context<Self>, for_app_update: bool) {
         if self.quitting {
             return;
         }
@@ -3969,12 +3983,13 @@ impl WhiskyApp {
         if !is_secondary {
             crate::ui_state::save_window(window.window_bounds());
         }
-        self.bridge.shutdown_application();
+        self.bridge.shutdown_application(for_app_update);
         cx.spawn(async move |this, cx| {
             cx.background_executor().timer(Duration::from_secs(65)).await;
             let _ = this.update(cx, |this, cx| {
                 if this.quitting && this.quit_generation == generation {
                     this.quitting = false;
+                    this.app_update.pending = None;
                     this.quit_error = Some(crate::i18n::s().state.quit_cleanup_timeout.into());
                     this.bridge_dialog = true;
                     cx.notify();
@@ -5004,12 +5019,13 @@ impl WhiskyApp {
             "kill" => self.service_available("runtime.stop"),
             "refresh" => self.service_available("runtime.events"),
             "updates" => self.service_available("setup.checkUpdate"),
+            "app-updates" => self.installed_app.is_some() && self.service_available("appUpdate.check"),
             _ => true,
         }
     }
 
     fn toggle_option(&mut self, key: &'static str, cx: &mut Context<Self>) {
-        if !self.toggle_available(key) {
+        if self.quitting || !self.toggle_available(key) {
             return;
         }
         let value = match key {
@@ -5063,7 +5079,15 @@ impl WhiskyApp {
             }
         };
         if let Some(preference) = Self::toggle_preference(key) {
-            self.persist(preference, json!(value), cx);
+            if matches!(key, "offline" | "updates" | "app-updates") && self.prefs_supported.contains(preference) {
+                self.bridge.set_preference(preference, json!(value));
+                if key == "offline" && value {
+                    self.app_update.message = None;
+                }
+                self.maybe_check_updates();
+            } else {
+                self.persist(preference, json!(value), cx);
+            }
         }
         if METADATA_SOURCES.iter().any(|(toggle, _)| *toggle == key) {
             self.metadata_preferences.enabled_sources = METADATA_SOURCES.iter()
@@ -5089,6 +5113,7 @@ impl WhiskyApp {
             "menubar" => Some(preferences::SHOW_MENU_BAR_EXTRA),
             "offline" => Some(preferences::OFFLINE_MODE),
             "updates" => Some(preferences::CHECK_UPDATES),
+            "app-updates" => Some(preferences::CHECK_APP_UPDATES),
             "blur" => Some(preferences::DETAIL_BLURRED_BACKGROUND),
             "mixed" => Some(preferences::MIXED_COVER_LAYOUT),
             "show-hidden" => Some(preferences::SHOW_HIDDEN),
@@ -5775,6 +5800,7 @@ impl WhiskyApp {
             (preferences::SHOW_MENU_BAR_EXTRA, "menubar"),
             (preferences::OFFLINE_MODE, "offline"),
             (preferences::CHECK_UPDATES, "updates"),
+            (preferences::CHECK_APP_UPDATES, "app-updates"),
         ] {
             if let Some(flag) = values
                 .get(preference)
@@ -6179,6 +6205,137 @@ impl WhiskyApp {
             .get("offline")
             .copied()
             .unwrap_or(preferences::DEFAULT_OFFLINE_MODE)
+    }
+
+    fn maybe_check_updates(&mut self) {
+        if !self.update_preferences_loaded || self.offline() || self.demo {
+            return;
+        }
+        if self.setup_status.as_ref().is_some_and(|status| status.installed)
+            && self.service_available("setup.checkUpdate")
+            && !self.wine_update_checked
+            && self.flag("updates")
+        {
+            self.wine_update_checked = true;
+            self.bridge.check_wine_update();
+        }
+        if !self.app_update.checked && self.flag("app-updates") {
+            self.check_app_update(true);
+        }
+    }
+
+    pub(crate) fn can_check_app_update(&self) -> bool {
+        self.update_preferences_loaded && !self.offline() && !self.app_update.busy
+            && self.service_available("appUpdate.check") && self.installed_app.is_some()
+    }
+
+    pub(crate) fn check_app_update(&mut self, automatic: bool) {
+        if !self.can_check_app_update() {
+            return;
+        }
+        let Some(installed) = &self.installed_app else { return };
+        self.app_update.checked = true;
+        self.app_update.busy = true;
+        self.app_update.version = None;
+        self.app_update.downloaded = None;
+        self.app_update.message = None;
+        self.bridge.app_update(crate::app_update::Action::Check, json!({
+            "currentVersion": installed.version, "format": installed.format.wire(), "automatic": automatic,
+        }));
+    }
+
+    pub(crate) fn download_app_update(&mut self) {
+        if self.offline() || self.app_update.busy || !self.service_available("appUpdate.download") {
+            return;
+        }
+        if let Some(version) = &self.app_update.version {
+            self.app_update.busy = true;
+            self.app_update.message = None;
+            self.bridge.app_update(crate::app_update::Action::Download, json!({ "version": version }));
+        }
+    }
+
+    fn app_update_reply(&mut self, action: crate::app_update::Action, result: Result<serde_json::Value, String>) {
+        use crate::app_update::Action;
+        let strings = &crate::i18n::s().settings;
+        self.app_update.busy = false;
+        if self.offline() {
+            return;
+        }
+        match (action, result) {
+            (Action::Check, Ok(reply)) => {
+                self.app_update.version = reply.get("availableVersion")
+                    .and_then(serde_json::Value::as_str).map(str::to_owned);
+                if self.app_update.version.is_none() && reply.get("skipped") != Some(&json!(true)) {
+                    self.app_update.message = Some(strings.app_update_current.to_owned());
+                }
+            }
+            (Action::Download, Ok(reply)) => {
+                self.app_update.downloaded = serde_json::from_value(reply).ok();
+                if self.app_update.downloaded.is_none() {
+                    self.app_update.message = Some(strings.app_update_failed.to_owned());
+                }
+            }
+            (_, Err(reason)) => {
+                eprintln!("maltoria: app update failed: {reason}");
+                self.app_update.message = Some(strings.app_update_failed.to_owned());
+            }
+        }
+    }
+
+    pub(crate) fn install_app_update(&mut self, window: &Window, cx: &mut Context<Self>) {
+        let strings = &crate::i18n::s().settings;
+        if self.offline() || self.quitting || self.app_update.busy {
+            return;
+        }
+        if self.app_update.reset_if_package_missing() {
+            cx.notify();
+            return;
+        }
+        if self.setup_installing || self.runtime.any_active() {
+            self.app_update.message = Some(strings.app_update_wine_busy.to_owned());
+            cx.notify();
+            return;
+        }
+        let (Some(installed), Some(downloaded)) = (self.installed_app.clone(), self.app_update.downloaded.clone()) else {
+            return;
+        };
+        self.app_update.busy = true;
+        self.app_update.message = None;
+        let window = window.window_handle();
+        let prepare = cx.background_executor().spawn(async move { installed.prepare(&downloaded) });
+        cx.spawn(async move |this, cx| {
+            let result = prepare.await;
+            let _ = this.update(cx, |this, cx| {
+                this.app_update.busy = false;
+                cx.notify();
+            });
+            let _ = window.update(cx, |_, window, cx| {
+                let _ = this.update(cx, |this, cx| {
+                    if this.offline() || this.quitting || !this.service_available("bridge.shutdown") {
+                        return;
+                    }
+                    if this.setup_installing || this.runtime.any_active() {
+                        this.app_update.message = Some(strings.app_update_wine_busy.to_owned());
+                        cx.notify();
+                        return;
+                    }
+                    match result.and_then(crate::app_update::PreparedReplacement::arm) {
+                        Ok(pending) => {
+                            this.app_update.pending = Some(pending);
+                            this.request_quit_with_update(window, cx, true);
+                        }
+                        Err(error) => {
+                            eprintln!("maltoria: could not stage app update: {error}");
+                            if !this.app_update.reset_if_package_missing() {
+                                this.app_update.message = Some(strings.app_update_failed.to_owned());
+                            }
+                            cx.notify();
+                        }
+                    }
+                });
+            });
+        }).detach();
     }
 
     pub(crate) fn install_wine_runtime(&mut self, cx: &mut Context<Self>) {

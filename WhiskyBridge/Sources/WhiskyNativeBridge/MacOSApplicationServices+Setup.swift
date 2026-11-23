@@ -157,6 +157,8 @@ extension MacOSApplicationServices {
                 }
             }
 
+            try Task.checkCancellation()
+            try NetworkSettings.requireNetwork()
             progress(.object(["stage": .string("installing")]))
             // Extraction is synchronous and can take a while; keep the
             // helper's actor free so `jobs.get` keeps answering.

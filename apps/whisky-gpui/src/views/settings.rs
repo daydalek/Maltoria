@@ -422,7 +422,8 @@ impl WhiskyApp {
             .into_any_element()
     }
 
-    pub(crate) fn application_settings(&self, cx: &Context<Self>) -> AnyElement {
+    pub(crate) fn application_settings(&mut self, cx: &Context<Self>) -> AnyElement {
+        let network = self.network_section(cx);
         self.form(
             "app-settings-scroll",
             vec![
@@ -431,7 +432,7 @@ impl WhiskyApp {
                 self.translation_entry_section(cx),
                 self.metadata_section(cx),
                 self.runtime_section(cx),
-                self.network_section(cx),
+                network,
                 #[cfg(not(target_os = "linux"))]
                 self.gptk_section(cx),
                 self.engines_section(cx),
@@ -440,7 +441,7 @@ impl WhiskyApp {
     }
 
     pub(crate) fn settings_section_page(
-        &self,
+        &mut self,
         section: SettingsSection,
         cx: &Context<Self>,
     ) -> AnyElement {
@@ -765,31 +766,71 @@ impl WhiskyApp {
         )
     }
 
-    fn network_section(&self, cx: &Context<Self>) -> AnyElement {
+    fn network_section(&mut self, cx: &Context<Self>) -> AnyElement {
+        if !self.app_update.busy {
+            self.app_update.reset_if_package_missing();
+        }
         let s = &crate::i18n::s().settings;
-        self.section(
-            "network",
-            s.network_title,
-            vec![
-                self.toggle(
-                    "offline",
-                    s.offline_mode,
-                    s.offline_mode_desc,
-                    cx,
-                ),
-                self.toggle(
-                    "updates",
-                    s.check_updates,
-                    if self.toggle_available("updates") {
-                        ""
+        let mut content = vec![
+            self.toggle("offline", s.offline_mode, s.offline_mode_desc, cx),
+            self.toggle(
+                "updates",
+                s.check_updates,
+                if self.toggle_available("updates") {
+                    ""
+                } else {
+                    s.check_updates_unavailable
+                },
+                cx,
+            ),
+            self.toggle("app-updates", s.check_app_updates, s.check_app_updates_desc, cx),
+            row()
+                .gap(px(8.))
+                .child(
+                    Button::new("check-app-update")
+                        .label(s.app_update_check_now)
+                        .disabled(!self.can_check_app_update())
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.check_app_update(false);
+                            cx.notify();
+                        })),
+                )
+                .into_any_element(),
+        ];
+        if self.app_update.busy && !self.offline() {
+            content.push(self.info(s.app_update_title, s.app_update_working));
+        } else if !self.offline() {
+            if let Some(version) = &self.app_update.version {
+                content.push(self.info(s.app_update_title, s.app_update_available(version)));
+                if let Some(download) = &self.app_update.downloaded {
+                    if let Some(command) = self.installed_app.as_ref().and_then(|app| app.format.package_command(&download.path)) {
+                        content.push(self.info(s.app_update_package, command));
                     } else {
-                        s.check_updates_unavailable
-                    },
-                    cx,
-                ),
-            ],
-            cx,
-        )
+                        content.push(row().child(
+                            Button::new("install-app-update")
+                                .label(s.app_update_quit_install)
+                                .on_click(cx.listener(|this, _, window, cx| this.install_app_update(window, cx))),
+                        ).into_any_element());
+                    }
+                } else {
+                    content.push(row().child(
+                        Button::new("download-app-update")
+                            .label(s.app_update_download)
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.download_app_update();
+                                cx.notify();
+                            })),
+                    ).into_any_element());
+                }
+            }
+            if let Some(message) = &self.app_update.message {
+                content.push(self.info(s.app_update_title, message.clone()));
+            }
+        }
+        if self.installed_app.is_none() {
+            content.push(self.info(s.app_update_title, s.app_update_unsupported));
+        }
+        self.section("network", s.network_title, content, cx)
     }
 
     #[cfg(not(target_os = "linux"))]

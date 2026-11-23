@@ -230,6 +230,10 @@ pub(crate) struct RuntimeTable {
 }
 
 impl RuntimeTable {
+    pub(crate) fn any_active(&self) -> bool {
+        self.entries.values().any(|entry| entry.state.is_active())
+    }
+
     pub(crate) fn apply(&mut self, update: RuntimeUpdate) {
         if update.resync {
             self.entries.clear();

@@ -31,7 +31,7 @@ public final class PreferencesService {
     private static let flags: [String: Bool] = [
         "offlineMode": false, "killOnTerminate": true, "showMenuBarExtra": false,
         "libraryOnboardingCompleted": false,
-        "checkWhiskyWineUpdates": true, "libraryRefreshAfterExit": true,
+        "checkWhiskyWineUpdates": true, "checkMaltoriaAppUpdates": false, "libraryRefreshAfterExit": true,
         "libraryDetailBlurredBackground": true, "librarySingleLineTitles": false,
         "libraryCenterWideCoverText": false, "libraryMixedCoverLayout": true, "libraryBlurredCoverFill": true,
         "libraryMetadataScrapeCharacters": true, "libraryBackdropFill": true

@@ -40,6 +40,9 @@ def verify_app(app: Path, version: str) -> None:
         raise FileNotFoundError(f"Info.plist not found in {app}")
 
     info = plistlib.loads(info_path.read_bytes())
+    if app.name != 'Maltoria.app' or info.get('CFBundleIdentifier') != 'com.daydalek.Maltoria' \
+            or info.get('CFBundleExecutable') != 'whisky-gpui':
+        raise ValueError('Unexpected Maltoria application bundle name, identifier or executable')
     app_version = info.get('CFBundleShortVersionString')
     if app_version != version:
         raise ValueError(f"Version mismatch in Info.plist: expected {version}, got {app_version}")

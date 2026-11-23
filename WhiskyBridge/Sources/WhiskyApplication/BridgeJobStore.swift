@@ -40,6 +40,29 @@ public final class BridgeJobStore {
         !tasks.isEmpty
     }
 
+    func isActive(_ id: String) -> Bool {
+        tasks[id] != nil
+    }
+
+    var isInstallingWine: Bool {
+        tasks.keys.contains { records[$0]?.name == "setup.install" }
+    }
+
+    var isRunningProgram: Bool {
+        tasks.keys.contains { records[$0]?.name == "programs.run" }
+    }
+
+    func cancelWineNetworkOperations() {
+        for (id, task) in tasks {
+            guard let record = records[id], record.status != "cancelling",
+                  record.name == "setup.checkUpdate" ||
+                  (record.name == "setup.install" && record.progress.object?["stage"] != .string("installing"))
+            else { continue }
+            records[id]?.status = "cancelling"
+            task.cancel()
+        }
+    }
+
     public var hasLifecycleOperation: Bool {
         tasks.keys.contains {
             records[$0]?.name.hasPrefix("bottle.") == true || records[$0]?.name == "workspace.recover"

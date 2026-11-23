@@ -1,5 +1,30 @@
 # Maltoria
 
+## App update release contract
+
+- The application updater reads public unified releases in `daydalek/Maltoria`,
+  including prereleases. Publish using `PublishCIRelease.yml`; do not overwrite
+  published versions. Tags are exactly `vX.Y.Z` with canonical decimal components
+  (no leading zeros, each fits a UInt32) and must match `version.env`, the
+  packaged macOS `CFBundleShortVersionString` and Linux package/payload version.
+  The split `app-v*`, `vn-v*`, and `linux-v*` streams and the separate Wine
+  repository are not app update channels.
+- Keep the exact update asset names: `Maltoria-X.Y.Z-arm64.zip`,
+  `Maltoria-X.Y.Z-x86_64.AppImage`, `whisky_X.Y.Z_amd64.deb`, and
+  `whisky-X.Y.Z-1.x86_64.rpm`. The macOS ZIP contains `Maltoria.app` with
+  bundle ID `com.daydalek.Maltoria`; ad-hoc signatures do not waive Gatekeeper.
+- Include `SHA256SUMS-macos-arm64` and `SHA256SUMS-linux-amd64` with one
+  lowercase SHA-256, two spaces, and the exact filename per line. The release
+  promotion script checks the package/report inventories and compares every
+  uploaded draft asset size and GitHub SHA-256 digest before publishing. Update
+  the updater, its fixtures and the release-contract tests together if the
+  contract changes.
+
+```bash
+python3 -m unittest discover -s scripts/distribution -p 'test_ci_release.py' -v
+python3 scripts/distribution/publish-ci-release.py --check-source apps/whisky-gpui/version.env
+```
+
 ## GPUI app (`apps/whisky-gpui`)
 
 ```bash

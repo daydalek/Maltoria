@@ -100,6 +100,7 @@ pub(crate) const PREFERRED_TERMINAL: &str = "preferredLinuxTerminal";
 pub(crate) const KILL_ON_TERMINATE: &str = "killOnTerminate";
 pub(crate) const SHOW_MENU_BAR_EXTRA: &str = "showMenuBarExtra";
 pub(crate) const OFFLINE_MODE: &str = "offlineMode";
+pub(crate) const CHECK_APP_UPDATES: &str = "checkMaltoriaAppUpdates";
 pub(crate) const CHECK_UPDATES: &str = "checkWhiskyWineUpdates";
 pub(crate) const DEFAULT_BOTTLE_LOCATION: &str = "defaultBottleLocation";
 /// The library sidebar's presentation; GPUI-only like `libraryCoverWidth`.
@@ -144,6 +145,7 @@ pub(crate) const DEFAULT_KILL_ON_TERMINATE: bool = true;
 pub(crate) const DEFAULT_SHOW_MENU_BAR_EXTRA: bool = false;
 pub(crate) const DEFAULT_OFFLINE_MODE: bool = false;
 pub(crate) const DEFAULT_CHECK_UPDATES: bool = true;
+pub(crate) const DEFAULT_CHECK_APP_UPDATES: bool = false;
 pub(crate) const DEFAULT_BACKDROP_FILL: bool = true;
 /// Mid-range: text stays legible while the art still reads as art.
 pub(crate) const DEFAULT_BACKDROP_BLUR: u8 = 2;
