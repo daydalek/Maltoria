@@ -7,8 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Opt-in Maltoria app updates from verified unified releases, with a manual check and separate automatic-check toggles for the app and Wine. AppImage and macOS installs can update after quitting; deb and rpm installs receive a verified package and a system install command.
+
+### Fixed
+- Automatic Wine checks wait for preferences to load. Offline mode blocks app and Wine update checks and downloads.
+
 ### Build
 - Default distribution output now lives outside the checkout; `doctor` requires `xwin` only when the cached SDK/CRT lacks x86 or x64, uses the shared LLVM lookup including versioned Homebrew `llvm@N` installs, and the Docker menu no longer offers a local LunaHook compile.
+- CI and release promotion enforce the updater's release format, including version tags, package names, and checksums.
 
 ## [0.6.3] - 2026-11-23
 
