@@ -101,6 +101,7 @@ pub(crate) struct PreparedReplacement {
     staged: PathBuf,
     destination: PathBuf,
     format: Format,
+    cached_package: Option<PathBuf>,
 }
 
 impl PreparedReplacement {
@@ -114,6 +115,7 @@ impl PreparedReplacement {
             .arg(self.destination)
             .arg(&self.pending.scratch)
             .arg(self.format.wire())
+            .arg(self.cached_package.unwrap_or_default())
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::inherit())
@@ -189,6 +191,7 @@ impl InstalledApp {
             staged,
             destination: destination.clone(),
             format: self.format,
+            cached_package: cache_cleanup_path(&update.path),
         })
     }
 
@@ -217,6 +220,19 @@ impl InstalledApp {
             Format::Mac => stage_mac(&package, scratch, &update.version),
             _ => Err(invalid_update()),
         }
+    }
+}
+
+fn cache_cleanup_path(path: &Path) -> Option<PathBuf> {
+    let parent = path.parent()?;
+    let directory = parent.file_name()?.to_str()?;
+    if uuid::Uuid::parse_str(directory).is_ok()
+        && parent.parent()?.ends_with("Maltoria/AppUpdates")
+        && fs::canonicalize(path).ok()?.as_path() == path
+    {
+        Some(path.to_path_buf())
+    } else {
+        None
     }
 }
 
@@ -332,7 +348,7 @@ fn stage_mac(package: &Path, scratch: &Path, version: &str) -> io::Result<PathBu
 
 const REPLACE_SCRIPT: &str = r#"
 set -eu
-pid=$1 new=$2 dest=$3 scratch=$4 format=$5
+pid=$1 new=$2 dest=$3 scratch=$4 format=$5 cached=$6
 count=0
 while kill -0 "$pid" 2>/dev/null; do
     [ -d "$scratch" ] || exit 1
@@ -359,6 +375,9 @@ if [ "$format" = macos ]; then
 else
     /bin/mv -fT "$new" "$dest"
 fi
+if [ -n "$cached" ]; then
+    /bin/rm -f "$cached" && /bin/rmdir "${cached%/*}" 2>/dev/null || :
+fi
 /bin/rm -rf "$scratch"
 "#;
 
@@ -374,5 +393,55 @@ mod tests {
             Some("sudo apt install -- '/tmp/Some user'\\''s package.deb'")
         );
         assert!(Format::AppImage.package_command(path).is_none());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn appimage_replacement_removes_cached_package_only_on_success() -> io::Result<()> {
+        let root = std::env::temp_dir()
+            .canonicalize()?
+            .join(format!("maltoria-update-test-{}", uuid::Uuid::new_v4()));
+        let cache = root.join("Maltoria/AppUpdates").join(uuid::Uuid::new_v4().to_string());
+        fs::create_dir_all(&cache)?;
+        let path = cache.join("Maltoria-0.6.4-x86_64.AppImage");
+        fs::write(&path, b"\x7fELF\0\0\0\0AI\x02new")?;
+        let destination = root.join("Maltoria.AppImage");
+        fs::write(&destination, b"\x7fELF\0\0\0\0AI\x02old")?;
+        let update = Downloaded {
+            version: "0.6.4".to_owned(),
+            sha256: sha256(&path)?,
+            path,
+        };
+        let installed = InstalledApp {
+            version: "0.6.3".to_owned(),
+            format: Format::AppImage,
+            destination: Some(destination.clone()),
+        };
+        let mut gone = Command::new("/bin/true").spawn()?;
+        let pid = gone.id();
+        assert!(gone.wait()?.success());
+        for replace in [false, true] {
+            let prepared = installed.prepare(&update)?;
+            let scratch = &prepared.pending.scratch;
+            let cached = prepared.cached_package.as_ref().unwrap();
+            File::create_new(scratch.join("approved"))?;
+            let target = if replace { &destination } else { &cache };
+            let result = Command::new("/bin/sh")
+                .arg("-c")
+                .arg(REPLACE_SCRIPT)
+                .arg("maltoria-update")
+                .arg(pid.to_string())
+                .arg(&prepared.staged)
+                .arg(target)
+                .arg(scratch)
+                .arg(Format::AppImage.wire())
+                .arg(cached)
+                .stderr(Stdio::null())
+                .status()?;
+            assert_eq!(result.success(), replace);
+            assert_eq!(cache.exists(), !replace);
+            assert_eq!(sha256(&destination)? == update.sha256, replace);
+        }
+        fs::remove_dir_all(root)
     }
 }

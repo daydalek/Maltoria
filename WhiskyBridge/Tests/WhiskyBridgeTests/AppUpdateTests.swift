@@ -83,6 +83,29 @@ struct AppUpdateTests {
         }
     }
 
+    @Test @MainActor func cachingReplacesOlderPackagesOnlyAfterSuccessfulMove() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("maltoria-update-\(UUID())")
+        let cache = root.appendingPathComponent("cache")
+        let manager = FileManager.default
+        try manager.createDirectory(at: cache, withIntermediateDirectories: true)
+        defer { try? manager.removeItem(at: root) }
+        let service = AppUpdateService(preferences: nil, jobs: BridgeJobStore(), cacheDirectory: cache)
+        let package = root.appendingPathComponent("download")
+        let unrelated = cache.appendingPathComponent("unrelated")
+        try Data().write(to: unrelated)
+        try Data("old".utf8).write(to: package)
+        let old = try service.cacheVerifiedPackage(package, named: "Maltoria-0.6.4-x86_64.AppImage")
+        #expect(throws: (any Error).self) {
+            try service.cacheVerifiedPackage(package, named: "Maltoria-0.6.5-x86_64.AppImage")
+        }
+        #expect(manager.fileExists(atPath: old.path))
+        try Data("new".utf8).write(to: package)
+        let current = try service.cacheVerifiedPackage(package, named: "Maltoria-0.6.5-x86_64.AppImage")
+        #expect(try Data(contentsOf: current) == Data("new".utf8))
+        #expect(!manager.fileExists(atPath: old.deletingLastPathComponent().path))
+        #expect(manager.fileExists(atPath: unrelated.path))
+    }
+
     @Test @MainActor func automaticChecksRequireOptInButManualChecksDoNot() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("maltoria-update-\(UUID())")
         defer { try? FileManager.default.removeItem(at: root) }

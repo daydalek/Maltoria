@@ -125,22 +125,37 @@ final class AppUpdateService {
         progress(.object(["stage": .string("verifying")]))
         try await AppUpdateTransport.verify(package, asset: candidate.asset)
         _ = try requireNetwork()
+        let destination = try cacheVerifiedPackage(package, named: candidate.asset.name)
+        return .object([
+            "path": .string(destination.path),
+            "version": .string(candidate.version.description),
+            "sha256": candidate.asset.sha256.map(JSONValue.string) ?? .null
+        ])
+    }
+
+    func cacheVerifiedPackage(_ package: URL, named filename: String) throws -> URL {
         let manager = FileManager.default
         let directory = cacheDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try manager.createDirectory(
             at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700]
         )
-        let destination = directory.appendingPathComponent(candidate.asset.name)
+        let destination = directory.appendingPathComponent(filename)
         do {
             try manager.moveItem(at: package, to: destination)
         } catch {
             try? manager.removeItem(at: directory)
             throw error
         }
-        return .object([
-            "path": .string(destination.path),
-            "version": .string(candidate.version.description),
-            "sha256": candidate.asset.sha256.map(JSONValue.string) ?? .null
-        ])
+        if let entries = try? manager.contentsOfDirectory(
+            at: cacheDirectory, includingPropertiesForKeys: [.isDirectoryKey]
+        ) {
+            for entry in entries where entry.lastPathComponent != directory.lastPathComponent {
+                guard UUID(uuidString: entry.lastPathComponent) != nil,
+                      (try? entry.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+                else { continue }
+                try? manager.removeItem(at: entry)
+            }
+        }
+        return destination
     }
 }
