@@ -4058,6 +4058,10 @@ impl WhiskyApp {
         let mut handles = self.preview.scroll_handles.borrow_mut();
         handles.remove("app-settings-scroll");
         handles.remove("translation-settings-scroll");
+        handles.remove("translation-model-list");
+        handles.remove("translation-cache-entries-scroll");
+        handles.remove("translation-wizard-scroll");
+        handles.remove("onboarding-scroll");
         for section in SettingsSection::ALL {
             handles.remove(section.scroll_id());
         }
@@ -4374,10 +4378,11 @@ impl WhiskyApp {
     pub(crate) fn close_capture_window(&mut self, cx: &mut Context<Self>) {
         self.capture.panel_open = false;
         self.capture.clear_window_inputs();
-        self.preview
-            .scroll_handles
-            .borrow_mut()
-            .remove("capture-panel-scroll");
+        {
+            let mut handles = self.preview.scroll_handles.borrow_mut();
+            handles.remove("capture-panel-scroll");
+            handles.remove("capture-cache-entries-scroll");
+        }
         let handle = self.capture_window.handle();
         self.capture_window = DetachedWindow::Closed;
         if let Some(handle) = handle {
@@ -4392,10 +4397,11 @@ impl WhiskyApp {
         self.capture.panel_open = false;
         self.capture.clear_window_inputs();
         self.capture_window = DetachedWindow::Closed;
-        self.preview
-            .scroll_handles
-            .borrow_mut()
-            .remove("capture-panel-scroll");
+        {
+            let mut handles = self.preview.scroll_handles.borrow_mut();
+            handles.remove("capture-panel-scroll");
+            handles.remove("capture-cache-entries-scroll");
+        }
         cx.notify();
     }
 
@@ -4426,10 +4432,11 @@ impl WhiskyApp {
             self.capture_window = DetachedWindow::Closed;
             self.capture.panel_open = false;
             self.capture.clear_window_inputs();
-            self.preview
-                .scroll_handles
-                .borrow_mut()
-                .remove("capture-panel-scroll");
+            {
+                let mut handles = self.preview.scroll_handles.borrow_mut();
+                handles.remove("capture-panel-scroll");
+                handles.remove("capture-cache-entries-scroll");
+            }
             changed = true;
         }
         if changed {

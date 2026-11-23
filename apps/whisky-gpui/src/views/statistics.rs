@@ -191,7 +191,19 @@ impl WhiskyApp {
                     .child(row().justify_between().flex_wrap().gap(px(8.))
                         .child(heading(strings.statistics.play_calendar))
                         .child(muted(format!("{} — {}", start.format("%Y.%m.%d"), today.format("%Y.%m.%d")))))
-                    .child(div().id("statistics-calendar-scroll").overflow_x_scroll().child(calendar))
+                    .child(
+                        div()
+                            .id("statistics-calendar-scroll")
+                            .overflow_x_scroll()
+                            .restrict_scroll_to_axis()
+                            .on_scroll_wheel(|event: &ScrollWheelEvent, window, cx| {
+                                let delta = event.delta.pixel_delta(window.line_height());
+                                if delta.x.abs() > delta.y.abs() {
+                                    cx.stop_propagation();
+                                }
+                            })
+                            .child(calendar),
+                    )
                     .child(row().justify_end().gap(px(6.)).child(muted(strings.statistics.less))
                         .children([0., 600., 1800., 3600., 7200.].map(|seconds| {
                             div().size(px(12.)).rounded(px(3.)).bg(rgb(theme::ACCENT).opacity(intensity(seconds)))

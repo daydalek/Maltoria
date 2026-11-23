@@ -3448,3 +3448,597 @@ fn language_selection_switches_locale_live_across_cjk_and_english(
         })
         .unwrap();
 }
+
+#[gpui_kit::test]
+fn nested_discovered_models_list_scrolls_inside_translation_settings_and_recovers_after_filter(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    use gpui_kit::{
+        PlatformInput, ScrollDelta, ScrollWheelEvent, TouchPhase, point, px, size,
+    };
+
+    cx.update(|app| {
+        gpui_kit::init(app);
+        crate::bind_shortcuts(app);
+    });
+    let (_events_tx, events_rx) = smol::channel::unbounded();
+    let bridge = crate::bridge::BridgeSupervisor::disconnected_for_tests();
+    let app_handle = cx.open_window(size(px(1200.), px(760.)), |window, cx| {
+        let view = cx.new(|cx| {
+            let mut app =
+                crate::state::WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, true);
+            app.settings = true;
+            app.settings_section = crate::state::SettingsSection::Translation;
+            app.translation_page.active = true;
+            app.translation_page.tab = crate::translation::TranslationTab::Providers;
+            let provider: crate::translation::ProviderDto = serde_json::from_value(
+                serde_json::json!({
+                    "id": "prov-openrouter",
+                    "name": "OpenRouter",
+                    "kind": "openrouter",
+                    "baseURL": "https://openrouter.ai/api/v1",
+                    "modelID": "model-05:free",
+                    "defaultSourceLanguage": "ja",
+                    "defaultTargetLanguage": "zh-Hans",
+                    "openAIChatTokenLimitField": "max_completion_tokens",
+                    "thinkingLevel": "default",
+                    "capabilities": {
+                        "modelDiscovery": true,
+                        "contextDiscovery": true,
+                        "streaming": true,
+                        "customPrompt": true,
+                        "context": true
+                    },
+                    "hasCredential": true
+                }),
+            )
+            .unwrap();
+            app.translation_page.providers = vec![provider.clone()];
+            app.translation_page.select(Some("prov-openrouter".into()));
+            app.translation_page.models = (0..24)
+                .map(|i| crate::translation::ModelDescriptorDto {
+                    id: format!("vendor/model-{i:02}:free"),
+                    display_name: format!("Model {i:02}"),
+                    context_window: Some(128_000),
+                    context_window_provenance: "provider".into(),
+                    capabilities: vec![],
+                })
+                .collect();
+            app
+        });
+        gpui_kit::base::Root::new(view, window, cx)
+    });
+
+    let draw = |cx: &mut gpui_kit::TestAppContext| {
+        cx.update_window(app_handle.into(), |_, window, cx| {
+            window.refresh();
+            window.draw(cx).clear(cx);
+        })
+        .unwrap();
+    };
+    let get_handles = |cx: &mut gpui_kit::TestAppContext| {
+        app_handle
+            .read_with(cx, |root, cx| {
+                let app = root
+                    .view()
+                    .clone()
+                    .downcast::<crate::state::WhiskyApp>()
+                    .unwrap()
+                    .read(cx);
+                (
+                    app.preview.form_scroll_handle("translation-settings-scroll"),
+                    app.preview.form_scroll_handle("translation-model-list"),
+                )
+            })
+            .unwrap()
+    };
+    let dispatch_wheel = |cx: &mut gpui_kit::TestAppContext,
+                          position: gpui_kit::Point<gpui_kit::Pixels>,
+                          delta: ScrollDelta| {
+        cx.update_window(app_handle.into(), |_, window, cx| {
+            window.dispatch_event(
+                PlatformInput::ScrollWheel(ScrollWheelEvent {
+                    position,
+                    delta,
+                    touch_phase: TouchPhase::Moved,
+                    ..Default::default()
+                }),
+                cx,
+            );
+        })
+        .unwrap();
+        draw(cx);
+    };
+
+    draw(cx);
+    draw(cx);
+    let (outer, inner) = get_handles(cx);
+    assert!(
+        outer.max_offset().y > px(0.),
+        "outer translation settings page should overflow; got max={:?}",
+        outer.max_offset()
+    );
+    assert!(
+        inner.max_offset().y > px(0.),
+        "discovered models list should overflow; got bounds={:?} max={:?}",
+        inner.bounds(),
+        inner.max_offset()
+    );
+
+    // Ensure the model list is within the visible outer viewport before scrolling over it.
+    let target_scroll_y = (inner.bounds().top() - outer.bounds().top() - px(40.)).max(px(0.));
+    outer.set_offset(point(px(0.), -target_scroll_y.min(outer.max_offset().y)));
+    draw(cx);
+    let outer_before = outer.offset().y;
+    let list_center = inner.bounds().center();
+
+    // Trackpad pixel scroll over the discovered models list must scroll the list, not the page.
+    dispatch_wheel(cx, list_center, ScrollDelta::Pixels(point(px(0.), px(-80.))));
+    assert!(
+        inner.offset().y < px(-10.),
+        "pixel scroll must move discovered models list; offset={:?}",
+        inner.offset()
+    );
+    assert_eq!(
+        outer.offset().y, outer_before,
+        "outer page must not scroll while scrolling discovered models list"
+    );
+
+    // Discrete mouse-wheel scroll must also move the discovered models list.
+    let inner_after_pixels = inner.offset().y;
+    dispatch_wheel(cx, list_center, ScrollDelta::Lines(point(0., -3.)));
+    assert!(
+        inner.offset().y < inner_after_pixels,
+        "mouse wheel lines scroll must move discovered models list; before={inner_after_pixels:?}, after={:?}",
+        inner.offset()
+    );
+    assert_eq!(outer.offset().y, outer_before);
+
+    // Narrow filter to 1 model (no inner overflow): scrolling over the box falls back to the outer page.
+    app_handle
+        .update(cx, |root, window, cx| {
+            let view = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap();
+            view.update(cx, |app, cx| {
+                if let Some(input) = app.translation_page.inputs.get("model-search").cloned() {
+                    input.update(cx, |state, cx| state.set_value("model-05".to_string(), window, cx));
+                }
+                cx.notify();
+            });
+        })
+        .unwrap();
+    draw(cx);
+    assert_eq!(
+        inner.max_offset().y,
+        px(0.),
+        "filtered 1-item model list must not overflow"
+    );
+    let outer_before_fallback = outer.offset().y;
+    let fallback_delta = if outer_before_fallback < px(-10.) {
+        px(40.)
+    } else {
+        px(-40.)
+    };
+    dispatch_wheel(
+        cx,
+        inner.bounds().center(),
+        ScrollDelta::Pixels(point(px(0.), fallback_delta)),
+    );
+    assert!(
+        outer.offset().y != outer_before_fallback,
+        "non-overflowing model list should yield wheel events to the enclosing page; before={outer_before_fallback:?}, after={:?}, max={:?}",
+        outer.offset(),
+        outer.max_offset()
+    );
+
+    // Clear filter back to 24 models: on the very next frame, the list must reclaim scroll immediately.
+    app_handle
+        .update(cx, |root, window, cx| {
+            let view = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap();
+            view.update(cx, |app, cx| {
+                if let Some(input) = app.translation_page.inputs.get("model-search").cloned() {
+                    input.update(cx, |state, cx| state.set_value(String::new(), window, cx));
+                }
+                cx.notify();
+            });
+        })
+        .unwrap();
+    draw(cx);
+    assert!(inner.max_offset().y > px(0.));
+    let outer_after_unfilter = outer.offset().y;
+    dispatch_wheel(
+        cx,
+        inner.bounds().center(),
+        ScrollDelta::Pixels(point(px(0.), px(-60.))),
+    );
+    assert!(
+        inner.offset().y < px(-10.),
+        "clearing filter must immediately restore nested list scrolling; offset={:?}",
+        inner.offset()
+    );
+    assert_eq!(outer.offset().y, outer_after_unfilter);
+}
+
+#[gpui_kit::test]
+fn nested_cache_entries_and_diagnostics_report_scroll_independently(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    use gpui_kit::{
+        PlatformInput, ScrollDelta, ScrollWheelEvent, TouchPhase, point, px, size,
+    };
+
+    cx.update(|app| {
+        gpui_kit::init(app);
+        crate::bind_shortcuts(app);
+    });
+    let (_events_tx, events_rx) = smol::channel::unbounded();
+    let bridge = crate::bridge::BridgeSupervisor::disconnected_for_tests();
+    let app_handle = cx.open_window(size(px(1200.), px(760.)), |window, cx| {
+        let view = cx.new(|cx| {
+            let mut app =
+                crate::state::WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, true);
+            app.settings = true;
+            app.settings_section = crate::state::SettingsSection::Translation;
+            app.translation_page.active = true;
+            app.translation_page.tab = crate::translation::TranslationTab::Settings;
+            app.translation_page.cache.total_count = 20;
+            app.translation_page.cache.entries = (0..20)
+                .map(|i| crate::translation::CacheEntryDto {
+                    id: format!("entry-{i}"),
+                    game_id: "game-1".into(),
+                    speaker: Some("Hero".into()),
+                    source_text: format!("これはテストの台詞 #{i} です。"),
+                    translated_text: format!("这是一条测试台词 #{i}。"),
+                    provider_name: "OpenRouter".into(),
+                    provider_kind: "openrouter".into(),
+                    model_id: Some("model-a".into()),
+                    source_language: "ja".into(),
+                    target_language: "zh-Hans".into(),
+                    hit_count: 1,
+                    updated_at: 1_700_000_000.0,
+                })
+                .collect();
+            app
+        });
+        gpui_kit::base::Root::new(view, window, cx)
+    });
+
+    let draw = |cx: &mut gpui_kit::TestAppContext| {
+        cx.update_window(app_handle.into(), |_, window, cx| {
+            window.refresh();
+            window.draw(cx).clear(cx);
+        })
+        .unwrap();
+    };
+    let scroll_at = |cx: &mut gpui_kit::TestAppContext,
+                     position: gpui_kit::Point<gpui_kit::Pixels>,
+                     dy: f32| {
+        cx.update_window(app_handle.into(), |_, window, cx| {
+            window.dispatch_event(
+                PlatformInput::ScrollWheel(ScrollWheelEvent {
+                    position,
+                    delta: ScrollDelta::Pixels(point(px(0.), px(dy))),
+                    touch_phase: TouchPhase::Moved,
+                    ..Default::default()
+                }),
+                cx,
+            );
+        })
+        .unwrap();
+        draw(cx);
+    };
+
+    draw(cx);
+    draw(cx);
+    let (outer_settings, cache_list) = app_handle
+        .read_with(cx, |root, cx| {
+            let app = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap()
+                .read(cx);
+            (
+                app.preview.form_scroll_handle("translation-settings-scroll"),
+                app.preview
+                    .form_scroll_handle("translation-cache-entries-scroll"),
+            )
+        })
+        .unwrap();
+    assert!(outer_settings.max_offset().y > px(0.));
+    assert!(
+        cache_list.max_offset().y > px(0.),
+        "cache entries list should overflow; bounds={:?} max={:?}",
+        cache_list.bounds(),
+        cache_list.max_offset()
+    );
+    // Scroll outer page so the cache browser is inside the visible viewport.
+    let align_y = (cache_list.bounds().top() - outer_settings.bounds().top() - px(40.)).max(px(0.));
+    outer_settings.set_offset(point(px(0.), -align_y.min(outer_settings.max_offset().y)));
+    draw(cx);
+    let outer_before = outer_settings.offset().y;
+    scroll_at(cx, cache_list.bounds().center(), -90.);
+    assert!(
+        cache_list.offset().y < px(-10.),
+        "cache entries list must scroll independently; offset={:?}",
+        cache_list.offset()
+    );
+    assert_eq!(outer_settings.offset().y, outer_before);
+
+    // Switch to Guided Diagnostics sheet with a long report inside diagnostics-scroll.
+    app_handle
+        .update(cx, |root, _, cx| {
+            let view = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap();
+            view.update(cx, |app, cx| {
+                app.preview.sheet = Some(crate::state::PreviewSheet::Diagnostics);
+                app.diagnostics_report = Some(
+                    (0..80)
+                        .map(|i| format!("Diagnostic line {i:02}: subsystem status ok"))
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                );
+                cx.notify();
+            });
+        })
+        .unwrap();
+    draw(cx);
+    draw(cx);
+    let (diag_outer, diag_report) = app_handle
+        .read_with(cx, |root, cx| {
+            let app = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap()
+                .read(cx);
+            (
+                app.preview.form_scroll_handle("diagnostics-scroll"),
+                app.preview.form_scroll_handle("diagnostics-report"),
+            )
+        })
+        .unwrap();
+    assert!(
+        diag_report.max_offset().y > px(0.),
+        "diagnostics report should overflow; bounds={:?} max={:?}",
+        diag_report.bounds(),
+        diag_report.max_offset()
+    );
+    let diag_outer_before = diag_outer.offset().y;
+    scroll_at(cx, diag_report.bounds().center(), -90.);
+    assert!(
+        diag_report.offset().y < px(-10.),
+        "diagnostics report must scroll independently; offset={:?}",
+        diag_report.offset()
+    );
+    assert_eq!(diag_outer.offset().y, diag_outer_before);
+}
+
+#[gpui_kit::test]
+fn modals_occlude_background_scroll_and_scroll_their_own_lists(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    use gpui_kit::{
+        PlatformInput, ScrollDelta, ScrollWheelEvent, TouchPhase, point, px, size,
+    };
+
+    cx.update(|app| {
+        gpui_kit::init(app);
+        crate::bind_shortcuts(app);
+    });
+    let (_events_tx, events_rx) = smol::channel::unbounded();
+    let bridge = crate::bridge::BridgeSupervisor::disconnected_for_tests();
+    let app_handle = cx.open_window(size(px(1100.), px(320.)), |window, cx| {
+        let view = cx.new(|cx| {
+            let mut app =
+                crate::state::WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, true);
+            app.settings = true;
+            app.settings_section = crate::state::SettingsSection::Translation;
+            app.translation_page.active = true;
+            app.translation_page.open_wizard(None);
+            app
+        });
+        gpui_kit::base::Root::new(view, window, cx)
+    });
+
+    let draw = |cx: &mut gpui_kit::TestAppContext| {
+        cx.update_window(app_handle.into(), |_, window, cx| {
+            window.refresh();
+            window.draw(cx).clear(cx);
+        })
+        .unwrap();
+    };
+    let scroll_at = |cx: &mut gpui_kit::TestAppContext,
+                     position: gpui_kit::Point<gpui_kit::Pixels>,
+                     dy: f32| {
+        cx.update_window(app_handle.into(), |_, window, cx| {
+            window.dispatch_event(
+                PlatformInput::ScrollWheel(ScrollWheelEvent {
+                    position,
+                    delta: ScrollDelta::Pixels(point(px(0.), px(dy))),
+                    touch_phase: TouchPhase::Moved,
+                    ..Default::default()
+                }),
+                cx,
+            );
+        })
+        .unwrap();
+        draw(cx);
+    };
+
+    // 1. Translation setup wizard modal over scrollable translation settings.
+    draw(cx);
+    draw(cx);
+    let (bg_settings, wizard_scroll) = app_handle
+        .read_with(cx, |root, cx| {
+            let app = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap()
+                .read(cx);
+            (
+                app.preview.form_scroll_handle("translation-settings-scroll"),
+                app.preview.form_scroll_handle("translation-wizard-scroll"),
+            )
+        })
+        .unwrap();
+    assert!(wizard_scroll.bounds().size.height > px(40.));
+    assert!(
+        wizard_scroll.max_offset().y > px(0.),
+        "wizard body should overflow at 420px window height; bounds={:?} max={:?}",
+        wizard_scroll.bounds(),
+        wizard_scroll.max_offset()
+    );
+    let bg_before = bg_settings.offset().y;
+    scroll_at(cx, wizard_scroll.bounds().center(), -80.);
+    assert!(
+        wizard_scroll.offset().y < px(-10.),
+        "translation wizard must scroll; offset={:?}",
+        wizard_scroll.offset()
+    );
+    assert_eq!(
+        bg_settings.offset().y, bg_before,
+        "translation wizard must occlude background scroll"
+    );
+
+    // 2. Onboarding modal over scrollable library.
+    app_handle
+        .update(cx, |root, _, cx| {
+            let view = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap();
+            view.update(cx, |app, cx| {
+                app.translation_page.wizard = None;
+                app.settings = false;
+                app.mode = 2;
+                app.onboarding = Some(crate::onboarding::Onboarding::new(
+                    crate::onboarding::MetadataPreferences::default(),
+                    true,
+                ));
+                cx.notify();
+            });
+        })
+        .unwrap();
+    draw(cx);
+    draw(cx);
+    let (bg_library, onboarding_scroll) = app_handle
+        .read_with(cx, |root, cx| {
+            let app = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap()
+                .read(cx);
+            (
+                app.library_scroll[2].clone(),
+                app.preview.form_scroll_handle("onboarding-scroll"),
+            )
+        })
+        .unwrap();
+    assert!(onboarding_scroll.bounds().size.height > px(40.));
+    assert!(onboarding_scroll.max_offset().y > px(0.));
+    let lib_before = bg_library.offset().y;
+    scroll_at(cx, onboarding_scroll.bounds().center(), -80.);
+    assert!(
+        onboarding_scroll.offset().y < px(-10.),
+        "onboarding modal must scroll; offset={:?}",
+        onboarding_scroll.offset()
+    );
+    assert_eq!(bg_library.offset().y, lib_before);
+
+    // 3. About dialog (License tab) and Import Bottles dialog over scrollable library.
+    app_handle
+        .update(cx, |root, _, cx| {
+            let view = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap();
+            view.update(cx, |app, cx| {
+                app.onboarding = None;
+                app.about = true;
+                app.about_tab = crate::state::AboutTab::License;
+                cx.notify();
+            });
+        })
+        .unwrap();
+    draw(cx);
+    draw(cx);
+    let about_license = app_handle
+        .read_with(cx, |root, cx| {
+            root.view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap()
+                .read(cx)
+                .preview
+                .form_scroll_handle("about-license-scroll")
+        })
+        .unwrap();
+    assert!(about_license.max_offset().y > px(0.));
+    scroll_at(cx, about_license.bounds().center(), -80.);
+    assert!(
+        about_license.offset().y < px(-10.),
+        "about license tab must scroll; offset={:?}",
+        about_license.offset()
+    );
+    assert_eq!(bg_library.offset().y, lib_before);
+
+    app_handle
+        .update(cx, |root, _, cx| {
+            let view = root
+                .view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap();
+            view.update(cx, |app, cx| {
+                app.about = false;
+                let mut import_state = crate::container_import::ImportState::default();
+                import_state.candidates = (0..24)
+                    .map(|i| crate::container_import::Candidate {
+                        path: format!("/tmp/bottles/bottle-{i:02}"),
+                        name: format!("Bottle {i:02}"),
+                        device: "1".into(),
+                        inode: format!("{i}"),
+                    })
+                    .collect();
+                app.import_bottles = Some(import_state);
+                cx.notify();
+            });
+        })
+        .unwrap();
+    draw(cx);
+    draw(cx);
+    let import_list = app_handle
+        .read_with(cx, |root, cx| {
+            root.view()
+                .clone()
+                .downcast::<crate::state::WhiskyApp>()
+                .unwrap()
+                .read(cx)
+                .preview
+                .form_scroll_handle("candidate-import-list")
+        })
+        .unwrap();
+    assert!(import_list.max_offset().y > px(0.));
+    scroll_at(cx, import_list.bounds().center(), -80.);
+    assert!(
+        import_list.offset().y < px(-10.),
+        "import bottles candidate list must scroll; offset={:?}",
+        import_list.offset()
+    );
+    assert_eq!(bg_library.offset().y, lib_before);
+}

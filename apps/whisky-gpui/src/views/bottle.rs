@@ -688,6 +688,7 @@ impl WhiskyApp {
                             // saved gated value can be reverted.
                             .disabled(!outer_enabled)
                             .dropdown_menu(move |mut menu, _, _| {
+                                menu = menu.scrollable(true);
                                 for (option_id, option_title) in &options {
                                     let view = view.clone();
                                     let id = id.clone();
@@ -1692,6 +1693,7 @@ impl WhiskyApp {
                         .label(crate::i18n::s().bottle.change_engine)
                         .disabled(!has_engines)
                         .dropdown_menu(move |mut menu, _, _| {
+                            menu = menu.scrollable(true);
                             if engines.is_empty() {
                                 menu = menu.item(
                                     PopupMenuItem::new(crate::i18n::s().bottle.managed_only_item).disabled(true),

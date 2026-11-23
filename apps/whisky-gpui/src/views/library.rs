@@ -747,6 +747,7 @@ impl WhiskyApp {
             })
             .collect();
         move |mut menu, window, cx| {
+            menu = menu.scrollable(true);
             let lib = &crate::i18n::s().library;
             if bottles.is_empty() {
                 menu = menu.item(PopupMenuItem::new(lib.no_bottles_menu).disabled(true));
@@ -1097,14 +1098,10 @@ impl WhiskyApp {
             .border_color(rgba(divider()))
             // The collapse button lives in the toolbar beside the traffic
             // lights, so the rows start directly under it like the rail's.
-            .child(
-                div()
-                    .id("sidebar-entries-scroll")
-                    .flex_1()
-                    .min_h_0()
-                    .overflow_y_scroll()
-                    .child(entries.px(px(5.)).pt(px(5.)).pb(px(10.))),
-            )
+            .child(self.flex_scroll(
+                "sidebar-entries-scroll",
+                entries.px(px(5.)).pt(px(5.)).pb(px(10.)),
+            ))
             .child(
                 col()
                     .gap(px(2.))
@@ -3350,7 +3347,14 @@ impl WhiskyApp {
             .id("detail-character-cards")
             .items_start()
             .gap(px(14.))
-            .overflow_x_scroll();
+            .overflow_x_scroll()
+            .restrict_scroll_to_axis()
+            .on_scroll_wheel(|event: &ScrollWheelEvent, window, cx| {
+                let delta = event.delta.pixel_delta(window.line_height());
+                if delta.x.abs() > delta.y.abs() {
+                    cx.stop_propagation();
+                }
+            });
         // Match the portrait lookup below and retain provider order within each group.
         for character in characters_in_display_order(characters, images) {
             let id = character.id.clone();
@@ -3499,6 +3503,7 @@ impl WhiskyApp {
         let untagged = crate::library_view::untagged_count(self.games(), self.show_hidden());
         let current = self.tag_filter.clone();
         move |mut menu, _, _| {
+            menu = menu.scrollable(true);
             let v = view.clone();
             menu = menu.item(
                 PopupMenuItem::new(crate::i18n::s().library.all_games)

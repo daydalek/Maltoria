@@ -21,6 +21,7 @@ use gpui_kit::component::{
     button::{Button, ButtonVariants},
     input::Input,
     menu::{DropdownMenu, PopupMenu, PopupMenuItem},
+    scroll::Scrollbar,
     switch::Switch,
 };
 use gpui_kit::{prelude::*, *};
@@ -593,6 +594,7 @@ impl WhiskyApp {
                 Button::new(key)
                     .label(format!("{}  ⌄", selected))
                     .dropdown_menu(move |mut menu, _, _| {
+                        menu = menu.scrollable(true);
                         for &option in &options {
                             let view = view.clone();
                             menu = menu.item(
@@ -641,6 +643,7 @@ impl WhiskyApp {
                 Button::new(key)
                     .label(format!("{selected_label}  ⌄"))
                     .dropdown_menu(move |mut menu, _, _| {
+                        menu = menu.scrollable(true);
                         for &(option_label, value) in &options {
                             let view = view.clone();
                             let checked = current.as_ref() == value;
@@ -732,21 +735,125 @@ impl WhiskyApp {
         content: impl IntoElement,
     ) -> AnyElement {
         let id = id.into();
-        // One follow-up frame resolves the document's initial scroll metrics.
-        if handle.bounds().size.height == px(0.) {
-            self.scroll_needs_measurement.set(true);
-        }
         let viewport = div()
             .id((id.clone(), "viewport"))
             .size_full()
             .track_scroll(handle)
             .overflow_y_scroll()
+            .restrict_scroll_to_axis()
             .child(content);
+        self.bouncing_scroll_view(id, handle, viewport)
+    }
+    pub(crate) fn bouncing_scroll_view(
+        &self,
+        id: impl Into<ElementId>,
+        handle: &ScrollHandle,
+        viewport: impl IntoElement,
+    ) -> AnyElement {
+        let id = id.into();
+        // One follow-up frame resolves the document's initial scroll metrics.
+        if handle.bounds().size.height == px(0.) {
+            self.scroll_needs_measurement.set(true);
+        }
         ScrollBounce::new((id, "bounce"), handle, viewport)
             .enabled(self.motion)
-            // Base's direct edge path also stretches documents that fit the viewport.
-            .scroll_wheel(handle.max_offset().y > px(0.))
             .motion(ScrollBounceMotion::default())
+            .into_any_element()
+    }
+    /// Bounded-height vertical scroll container that participates in `ScrollBounce`
+    /// nested scroll ownership so enclosing page scrollers never steal its wheel events.
+    pub(crate) fn bounded_scroll(
+        &self,
+        id: &'static str,
+        max_height: Pixels,
+        content: impl IntoElement,
+    ) -> AnyElement {
+        let handle = self.preview.form_scroll_handle(id);
+        let elem_id = ElementId::from(id);
+        let viewport = div()
+            .id((elem_id.clone(), "viewport"))
+            .w_full()
+            .max_h(max_height)
+            .track_scroll(&handle)
+            .overflow_y_scroll()
+            .restrict_scroll_to_axis()
+            .child(content);
+        self.bounded_scroll_view(elem_id, &handle, viewport)
+    }
+    /// Wraps a custom vertical scroll viewport (already configured with `track_scroll`,
+    /// `overflow_y_scroll`, and `restrict_scroll_to_axis`) in `ScrollBounce` plus an
+    /// overlay vertical scrollbar.
+    pub(crate) fn bounded_scroll_view(
+        &self,
+        id: impl Into<ElementId>,
+        handle: &ScrollHandle,
+        viewport: impl IntoElement,
+    ) -> AnyElement {
+        let id = id.into();
+        div()
+            .relative()
+            .w_full()
+            .child(self.bouncing_scroll_view(id.clone(), handle, viewport))
+            .child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .child(
+                        Scrollbar::vertical(handle)
+                            .id((id, "scrollbar"))
+                            .viewport_from_layout(),
+                    ),
+            )
+            .into_any_element()
+    }
+    /// Flexible vertical scroll area for `max_h`-constrained modal bodies that must
+    /// size naturally to short content while shrinking and scrolling when content overflows.
+    pub(crate) fn modal_auto_scroll(
+        &self,
+        id: &'static str,
+        viewport: impl IntoElement,
+        handle: &ScrollHandle,
+    ) -> AnyElement {
+        let elem_id = ElementId::from(id);
+        col()
+            .relative()
+            .w_full()
+            .min_h_0()
+            .overflow_hidden()
+            .child(self.bouncing_scroll_view(elem_id.clone(), handle, viewport))
+            .child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .child(
+                        Scrollbar::vertical(handle)
+                            .id((elem_id, "scrollbar"))
+                            .viewport_from_layout(),
+                    ),
+            )
+            .into_any_element()
+    }
+    /// Flex-filling vertical scroll area (`flex_1().min_h_0()`) with `ScrollBounce`
+    /// and an overlay scrollbar, for fixed-height dialogs and sidebars.
+    pub(crate) fn flex_scroll(&self, id: &'static str, content: impl IntoElement) -> AnyElement {
+        let handle = self.preview.form_scroll_handle(id);
+        let elem_id = ElementId::from(id);
+        div()
+            .relative()
+            .flex_1()
+            .min_h_0()
+            .w_full()
+            .child(self.bouncing_scroll(elem_id.clone(), &handle, content))
+            .child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .child(
+                        Scrollbar::vertical(&handle)
+                            .id((elem_id, "scrollbar"))
+                            .viewport_from_layout(),
+                    ),
+            )
             .into_any_element()
     }
     pub(crate) fn library_viewport(&self, mode: usize, content: impl IntoElement) -> AnyElement {

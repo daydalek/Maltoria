@@ -140,6 +140,7 @@ impl WhiskyApp {
                     .shadow_xl()
                     .child(
                         row()
+                            .flex_shrink_0()
                             .h(px(48.))
                             .px(px(18.))
                             .gap(px(12.))
@@ -167,6 +168,7 @@ impl WhiskyApp {
                     )
                     .child(
                         col()
+                            .flex_shrink_0()
                             .px(px(18.))
                             .py(px(12.))
                             .gap(px(9.))
@@ -241,17 +243,13 @@ impl WhiskyApp {
                                     ),
                             ),
                     )
-                    .child(
-                        col()
-                            .id("candidate-import-list")
-                            .flex_1()
-                            .min_h_0()
-                            .overflow_y_scroll()
-                            .px(px(18.))
-                            .children(rows),
-                    )
+                    .child(self.flex_scroll(
+                        "candidate-import-list",
+                        col().w_full().px(px(18.)).children(rows),
+                    ))
                     .child(
                         row()
+                            .flex_shrink_0()
                             .justify_end()
                             .gap(px(8.))
                             .px(px(18.))

@@ -378,6 +378,7 @@ impl WhiskyApp {
                     })),
             )
             .dropdown_menu_with_anchor(Anchor::TopRight, move |mut menu, _, _| {
+                menu = menu.scrollable(true);
                 let mut added_group = false;
                 for cat in ProviderCategory::ALL {
                     let group_specs: Vec<&'static ProviderSpec> = available_specs
@@ -667,6 +668,7 @@ impl WhiskyApp {
             .label(label)
             .dropdown_caret(true)
             .dropdown_menu_with_anchor(Anchor::TopRight, move |mut menu, _, _| {
+                menu = menu.scrollable(true);
                 let mut added_group = false;
                 for cat in ProviderCategory::ALL {
                     let group_specs: Vec<&'static ProviderSpec> = available_specs
@@ -1625,17 +1627,16 @@ impl WhiskyApp {
                                 .border_1()
                                 .border_color(rgba(card_border()))
                                 .child(model_search_input)
-                                .child(
-                                    div()
-                                        .id("translation-model-list")
-                                        .max_h(px(180.))
-                                        .overflow_y_scroll()
-                                        .child(if model_rows.is_empty() {
-                                            muted(crate::i18n::s().translation.no_matching_models).into_any_element()
-                                        } else {
-                                            col().gap(px(4.)).children(model_rows).into_any_element()
-                                        }),
-                                ),
+                                .child(self.bounded_scroll(
+                                    "translation-model-list",
+                                    px(180.),
+                                    if model_rows.is_empty() {
+                                        muted(crate::i18n::s().translation.no_matching_models)
+                                            .into_any_element()
+                                    } else {
+                                        col().w_full().gap(px(4.)).children(model_rows).into_any_element()
+                                    },
+                                )),
                         )
                     })
                     .when_some(tuning_row, |d, r| d.child(divider_line()).child(r)),
@@ -3200,6 +3201,7 @@ impl WhiskyApp {
         };
 
         let footer = row()
+            .flex_shrink_0()
             .justify_between()
             .gap(px(10.))
             .p(px(16.))
@@ -3258,10 +3260,23 @@ impl WhiskyApp {
                     }),
             );
 
+        let wizard_scroll = self.preview.form_scroll_handle("translation-wizard-scroll");
+        let wizard_viewport = div()
+            .id("translation-wizard-scroll")
+            .w_full()
+            .min_h_0()
+            .track_scroll(&wizard_scroll)
+            .overflow_y_scroll()
+            .restrict_scroll_to_axis()
+            .p(px(20.))
+            .child(body);
+
         div()
             .absolute()
             .inset_0()
             .size_full()
+            .occlude()
+            .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
             .bg(rgba(overlay()))
             .flex()
             .items_center()
@@ -3269,6 +3284,8 @@ impl WhiskyApp {
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .child(
                 col()
+                    .occlude()
+                    .overflow_hidden()
                     .w(px(640_f32.min(width - 32.)))
                     .max_h(px(height - 32.))
                     .bg(rgb(crate::theme::surface()))
@@ -3278,6 +3295,7 @@ impl WhiskyApp {
                     .shadow_xl()
                     .child(
                         col()
+                            .flex_shrink_0()
                             .gap(px(12.))
                             .p(px(18.))
                             .border_b_1()
@@ -3316,14 +3334,11 @@ impl WhiskyApp {
                             )
                             .child(stepper),
                     )
-                    .child(
-                        div()
-                            .id("translation-wizard-scroll")
-                            .overflow_y_scroll()
-                            .min_h_0()
-                            .p(px(20.))
-                            .child(body),
-                    )
+                    .child(self.modal_auto_scroll(
+                        "translation-wizard-scroll",
+                        wizard_viewport,
+                        &wizard_scroll,
+                    ))
                     .child(footer),
             )
             .into_any_element()
@@ -3456,6 +3471,11 @@ impl WhiskyApp {
             .map(|entry| cache_entry_row(entry, compact, delete_pending, cx))
             .collect();
         let list_max_h = if compact { px(240.) } else { px(340.) };
+        let cache_scroll_id = if compact {
+            "capture-cache-entries-scroll"
+        } else {
+            "translation-cache-entries-scroll"
+        };
         let entries_view = if entry_rows.is_empty() {
             div()
                 .p(px(12.))
@@ -3472,13 +3492,11 @@ impl WhiskyApp {
                 }))
                 .into_any_element()
         } else {
-            div()
-                .id("cache-entries-scroll")
-                .w_full()
-                .max_h(list_max_h)
-                .overflow_y_scroll()
-                .child(col().gap(px(6.)).children(entry_rows))
-                .into_any_element()
+            self.bounded_scroll(
+                cache_scroll_id,
+                list_max_h,
+                col().w_full().gap(px(6.)).children(entry_rows),
+            )
         };
 
         col()
@@ -3717,6 +3735,7 @@ fn language_preset_field(
         .label(crate::i18n::s().common.preset)
         .dropdown_caret(true)
         .dropdown_menu_with_anchor(Anchor::TopRight, move |mut menu, _, _| {
+            menu = menu.scrollable(true);
             for (code, display) in language_presets() {
                 if !allow_auto && code == "auto" {
                     continue;

@@ -298,10 +298,22 @@ impl WhiskyApp {
                 .when_focusable(!state.saving),
             );
         }
+        let scroll = self.preview.form_scroll_handle("onboarding-scroll");
+        let viewport = div()
+            .id("onboarding-scroll")
+            .w_full()
+            .min_h_0()
+            .track_scroll(&scroll)
+            .overflow_y_scroll()
+            .restrict_scroll_to_axis()
+            .p(px(24.))
+            .child(content);
         div()
             .absolute()
             .inset_0()
             .size_full()
+            .occlude()
+            .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
             .bg(rgba(crate::theme::overlay()))
             .flex()
             .items_center()
@@ -309,6 +321,8 @@ impl WhiskyApp {
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .child(
                 col()
+                    .occlude()
+                    .overflow_hidden()
                     .w(px(560_f32.min(width - 32.)))
                     .max_h(px(height - 32.))
                     .bg(rgb(surface()))
@@ -316,16 +330,10 @@ impl WhiskyApp {
                     .border_1()
                     .border_color(rgba(surface_border()))
                     .shadow_xl()
-                    .child(
-                        div()
-                            .id("onboarding-scroll")
-                            .overflow_y_scroll()
-                            .min_h_0()
-                            .p(px(24.))
-                            .child(content),
-                    )
+                    .child(self.modal_auto_scroll("onboarding-scroll", viewport, &scroll))
                     .child(
                         footer
+                            .flex_shrink_0()
                             .p(px(16.))
                             .border_t_1()
                             .border_color(rgba(surface_border())),

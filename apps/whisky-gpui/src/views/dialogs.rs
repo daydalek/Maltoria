@@ -748,6 +748,7 @@ impl WhiskyApp {
         Button::new(id)
             .label(label)
             .dropdown_menu(move |mut menu, _, _| {
+                menu = menu.scrollable(true);
                 for &(raw, display) in &options {
                     let view = view.clone();
                     let choice_policy = policy_for(raw);
@@ -1935,6 +1936,7 @@ impl WhiskyApp {
                     .label(crate::i18n::s().dialogs.move_entry)
                     .ghost()
                     .dropdown_menu(move |mut menu, _, _| {
+                        menu = menu.scrollable(true);
                         for (index, name) in other_bottles.clone() {
                             let view = view.clone();
                             let menu_root = menu_root.clone();
@@ -4023,21 +4025,27 @@ impl WhiskyApp {
                     rows.push(muted(error.clone()).into_any_element());
                 }
                 if let Some(report) = &self.diagnostics_report {
-                    rows.push(
-                        div()
-                            .id("diagnostics-report")
-                            .max_h(px(280.))
-                            .overflow_y_scroll()
-                            .p(px(10.))
-                            .rounded(px(8.))
-                            .bg(rgba(crate::theme::code_bg()))
-                            .border_1()
-                            .border_color(rgba(crate::theme::card_border()))
-                            .text_size(px(11.))
-                            .line_height(relative(1.45))
-                            .child(report.clone())
-                            .into_any_element(),
-                    );
+                    let report_scroll = self.preview.form_scroll_handle("diagnostics-report");
+                    let report_viewport = div()
+                        .id("diagnostics-report")
+                        .w_full()
+                        .max_h(px(280.))
+                        .track_scroll(&report_scroll)
+                        .overflow_y_scroll()
+                        .restrict_scroll_to_axis()
+                        .p(px(10.))
+                        .rounded(px(8.))
+                        .bg(rgba(crate::theme::code_bg()))
+                        .border_1()
+                        .border_color(rgba(crate::theme::card_border()))
+                        .text_size(px(11.))
+                        .line_height(relative(1.45))
+                        .child(report.clone());
+                    rows.push(self.bounded_scroll_view(
+                        "diagnostics-report",
+                        &report_scroll,
+                        report_viewport,
+                    ));
                     rows.push(self.action(
                         "export",
                         crate::i18n::s().dialogs.export_diagnostics_report,
@@ -5176,14 +5184,14 @@ impl WhiskyApp {
 
         let body = match self.about_tab {
             AboutTab::Overview => self.about_overview_tab(cx),
-            AboutTab::Acknowledgments => about_acknowledgments_tab(),
-            AboutTab::License => about_document_tab(
+            AboutTab::Acknowledgments => self.about_acknowledgments_tab(),
+            AboutTab::License => self.about_document_tab(
                 "about-license-scroll",
                 crate::i18n::s().dialogs.about_license_header,
                 GPL_LICENSE_TEXT,
                 false,
             ),
-            AboutTab::Notices => about_document_tab(
+            AboutTab::Notices => self.about_document_tab(
                 "about-notices-scroll",
                 crate::i18n::s().dialogs.about_notices_header,
                 THIRD_PARTY_NOTICES_TEXT,
@@ -5390,40 +5398,39 @@ impl WhiskyApp {
                     ),
             );
 
-        col()
-            .id("about-overview-scroll")
-            .flex_1()
-            .min_h_0()
-            .overflow_y_scroll()
-            .px(px(20.))
-            .py(px(18.))
-            .gap(px(14.))
-            .child(
-                col()
-                    .gap(px(4.))
-                    .child(
-                        div()
-                            .text_size(px(22.))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(rgb(crate::theme::text()))
-                            .child(name),
-                    )
-                    .child(muted(subtitle)),
-            )
-            .child(
-                col()
-                    .w_full()
-                    .rounded(px(10.))
-                    .px(px(14.))
-                    .py(px(12.))
-                    .gap(px(8.))
-                    .bg(rgba(crate::theme::section_bg()))
-                    .border_1()
-                    .border_color(rgba(crate::theme::section_border()))
-                    .children(facts),
-            )
-            .child(legal_card)
-            .into_any_element()
+        self.flex_scroll(
+            "about-overview-scroll",
+            col()
+                .w_full()
+                .px(px(20.))
+                .py(px(18.))
+                .gap(px(14.))
+                .child(
+                    col()
+                        .gap(px(4.))
+                        .child(
+                            div()
+                                .text_size(px(22.))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(rgb(crate::theme::text()))
+                                .child(name),
+                        )
+                        .child(muted(subtitle)),
+                )
+                .child(
+                    col()
+                        .w_full()
+                        .rounded(px(10.))
+                        .px(px(14.))
+                        .py(px(12.))
+                        .gap(px(8.))
+                        .bg(rgba(crate::theme::section_bg()))
+                        .border_1()
+                        .border_color(rgba(crate::theme::section_border()))
+                        .children(facts),
+                )
+                .child(legal_card),
+        )
     }
 
     pub(crate) fn bridge_status_dialog(
@@ -5833,6 +5840,7 @@ impl WhiskyApp {
                 .label(format!("{display}  ⌄"))
                 .disabled(!page.editor.loaded || page.editor.busy)
                 .dropdown_menu(move |mut menu, _, _| {
+                    menu = menu.scrollable(true);
                     if inherit {
                         let view = view.clone();
                         menu = menu.item(PopupMenuItem::new(crate::i18n::s().onboarding.follow_default).on_click(move |_, _, cx| {
@@ -5955,6 +5963,7 @@ impl WhiskyApp {
                 Button::new("create-engine")
                     .label(format!("{label}  ⌄"))
                     .dropdown_menu(move |mut menu, _, _| {
+                        menu = menu.scrollable(true);
                         for engine in &engines {
                             let view = view.clone();
                             let engine_id = engine.id.clone();
@@ -6507,9 +6516,9 @@ impl WhiskyApp {
         let mut list = col()
             .id("launch-chooser-list")
             .track_scroll(&list_scroll)
-            .flex_1()
-            .min_h_0()
+            .size_full()
             .overflow_y_scroll()
+            .restrict_scroll_to_axis()
             .px(px(18.))
             .py(px(12.))
             .gap(px(8.));
@@ -6527,6 +6536,7 @@ impl WhiskyApp {
             list = list.child(
                 row()
                     .w_full()
+                    .flex_shrink_0()
                     .gap(px(6.))
                     .items_center()
                     .child(
@@ -6663,6 +6673,27 @@ impl WhiskyApp {
             );
         }
 
+        let list_panel = div()
+            .relative()
+            .flex_1()
+            .min_h_0()
+            .w_full()
+            .child(self.bouncing_scroll_view(
+                "launch-chooser-scroll",
+                &list_scroll,
+                list,
+            ))
+            .child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .child(
+                        gpui_kit::component::scroll::Scrollbar::vertical(&list_scroll)
+                            .id("launch-chooser-scrollbar")
+                            .viewport_from_layout(),
+                    ),
+            );
+
         div()
             .absolute()
             .inset_0()
@@ -6789,7 +6820,7 @@ impl WhiskyApp {
                                     })),
                             ),
                     )
-                    .child(list)
+                    .child(list_panel)
                     .child(
                         row()
                             .flex_shrink_0()
@@ -7169,76 +7200,77 @@ fn about_ack_card(item: &AcknowledgmentItem) -> AnyElement {
         .into_any_element()
 }
 
-fn about_acknowledgments_tab() -> AnyElement {
-    col()
-        .id("about-ack-scroll")
-        .flex_1()
-        .min_h_0()
-        .overflow_y_scroll()
-        .px(px(20.))
-        .py(px(16.))
-        .gap(px(10.))
-        .child(
-            muted(crate::i18n::s().dialogs.about_ack_intro)
-                .text_size(px(11.5)),
-        )
-        .children(ACKNOWLEDGMENTS.iter().map(about_ack_card))
-        .into_any_element()
-}
-
-fn about_document_tab(
-    scroll_id: &'static str,
-    intro: &'static str,
-    body: &'static str,
-    markdown_headings: bool,
-) -> AnyElement {
-    let paragraphs = body
-        .split("\n\n")
-        .map(|block| block.trim_end_matches('\n'))
-        .filter(|block| !block.trim().is_empty())
-        .map(|block| {
-            let is_heading = markdown_headings && block.trim_start().starts_with('#');
-            div()
-                .w_full()
-                .min_w_0()
-                .text_size(px(if is_heading { 12.5 } else { 11.5 }))
-                .font_weight(if is_heading {
-                    FontWeight::SEMIBOLD
-                } else {
-                    FontWeight::NORMAL
-                })
-                .line_height(relative(1.5))
-                .text_color(rgb(if is_heading {
-                    crate::theme::text()
-                } else {
-                    crate::theme::subtext()
-                }))
-                .child(block.to_owned())
-                .into_any_element()
-        })
-        .collect::<Vec<_>>();
-
-    col()
-        .id(scroll_id)
-        .flex_1()
-        .min_h_0()
-        .overflow_y_scroll()
-        .px(px(20.))
-        .py(px(16.))
-        .gap(px(10.))
-        .child(muted(intro).text_size(px(11.5)))
-        .child(
+impl WhiskyApp {
+    fn about_acknowledgments_tab(&self) -> AnyElement {
+        self.flex_scroll(
+            "about-ack-scroll",
             col()
                 .w_full()
-                .rounded(px(10.))
-                .p(px(14.))
+                .px(px(20.))
+                .py(px(16.))
                 .gap(px(10.))
-                .bg(rgba(crate::theme::code_bg()))
-                .border_1()
-                .border_color(rgba(crate::theme::card_border()))
-                .children(paragraphs),
+                .child(
+                    muted(crate::i18n::s().dialogs.about_ack_intro)
+                        .text_size(px(11.5)),
+                )
+                .children(ACKNOWLEDGMENTS.iter().map(about_ack_card)),
         )
-        .into_any_element()
+    }
+
+    fn about_document_tab(
+        &self,
+        scroll_id: &'static str,
+        intro: &'static str,
+        body: &'static str,
+        markdown_headings: bool,
+    ) -> AnyElement {
+        let paragraphs = body
+            .split("\n\n")
+            .map(|block| block.trim_end_matches('\n'))
+            .filter(|block| !block.trim().is_empty())
+            .map(|block| {
+                let is_heading = markdown_headings && block.trim_start().starts_with('#');
+                div()
+                    .w_full()
+                    .min_w_0()
+                    .text_size(px(if is_heading { 12.5 } else { 11.5 }))
+                    .font_weight(if is_heading {
+                        FontWeight::SEMIBOLD
+                    } else {
+                        FontWeight::NORMAL
+                    })
+                    .line_height(relative(1.5))
+                    .text_color(rgb(if is_heading {
+                        crate::theme::text()
+                    } else {
+                        crate::theme::subtext()
+                    }))
+                    .child(block.to_owned())
+                    .into_any_element()
+            })
+            .collect::<Vec<_>>();
+
+        self.flex_scroll(
+            scroll_id,
+            col()
+                .w_full()
+                .px(px(20.))
+                .py(px(16.))
+                .gap(px(10.))
+                .child(muted(intro).text_size(px(11.5)))
+                .child(
+                    col()
+                        .w_full()
+                        .rounded(px(10.))
+                        .p(px(14.))
+                        .gap(px(10.))
+                        .bg(rgba(crate::theme::code_bg()))
+                        .border_1()
+                        .border_color(rgba(crate::theme::card_border()))
+                        .children(paragraphs),
+                ),
+        )
+    }
 }
 
 #[cfg(test)]
