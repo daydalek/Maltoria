@@ -427,6 +427,7 @@ final class MacOSSubtitleOverlay: NSObject, NSWindowDelegate {
         panel?.title = strings.text("overlay_title")
         refreshText()
     }
+
     private var settings = SubtitleOverlaySettings()
     private let defaults: UserDefaults
     private var panel: SubtitlePanel?

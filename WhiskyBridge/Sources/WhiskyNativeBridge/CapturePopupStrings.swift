@@ -1,3 +1,21 @@
+//
+//  CapturePopupStrings.swift
+//  WhiskyNativeBridge
+//
+//  This file is part of Whisky.
+//
+//  Whisky is free software: you can redistribute it and/or modify it under the terms
+//  of the GNU General Public License as published by the Free Software Foundation,
+//  either version 3 of the License, or (at your option) any later version.
+//
+//  Whisky is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+//  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+//  See the GNU General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License along with Whisky.
+//  If not, see https://www.gnu.org/licenses/.
+//
+
 import Foundation
 import WhiskyBridgeProtocol
 
@@ -52,7 +70,7 @@ final class CapturePopupStrings {
         "role_ignore": "Ignore",
         "translating": "Translating…",
         "translation_failed": "Translation failed",
-        "translation_cancelled": "Translation cancelled",
+        "translation_cancelled": "Translation cancelled"
     ]
 
     func update(_ strings: [String: JSONValue]) {
@@ -69,8 +87,8 @@ final class CapturePopupStrings {
         while let open = remainder.firstIndex(of: "{"),
               let close = remainder[open...].firstIndex(of: "}") {
             result += String(remainder[..<open])
-            let name = String(remainder[remainder.index(after: open)..<close])
-            result += arguments[name] ?? String(remainder[open...close])
+            let name = String(remainder[remainder.index(after: open) ..< close])
+            result += arguments[name] ?? String(remainder[open ... close])
             remainder = remainder[remainder.index(after: close)...]
         }
         return result + String(remainder)

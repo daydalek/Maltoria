@@ -137,6 +137,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
         panel?.title = strings.text("hud_title")
         if isVisible { rebuildUI(preservingScroll: true) }
     }
+
     private var lastCaptureState: String = "stopped"
     private var topRightAnchor: NSPoint?
     private var applyingFrame = false
@@ -1162,7 +1163,13 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
         nameLabel.lineBreakMode = .byTruncatingMiddle
         nameLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        let metaLabel = makeLabel(strings.text("process_metadata", ["arch": arch, "pid": String(pid)]), size: 10, weight: .regular, color: .lightGray, lines: 1)
+        let metaLabel = makeLabel(
+            strings.text("process_metadata", ["arch": arch, "pid": String(pid)]),
+            size: 10,
+            weight: .regular,
+            color: .lightGray,
+            lines: 1
+        )
         let infoStack = NSStackView(views: [nameLabel, metaLabel])
         infoStack.orientation = .vertical
         infoStack.alignment = .leading
