@@ -9,10 +9,13 @@ on:
 permissions:
   contents: read
 
+env:
+  XWIN_VERSION: '0.10.0'
+
 jobs:
   build:
     name: Build ${{ matrix.arch }}
-    runs-on: windows-2022
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -22,24 +25,61 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Build pinned upstream sources
-        shell: pwsh
-        run: ./scripts/build-lunahook.ps1 -Architecture ${{ matrix.arch }} -Output "$env:RUNNER_TEMP/MaltoriaNative"
-      - name: Capture Unicode from the authored GDI fixture
-        shell: pwsh
+      - name: Install cross-compilation toolchain
         run: |
-          $bits = if ('${{ matrix.arch }}' -eq 'x86') { '32' } else { '64' }
-          $payload = "$env:RUNNER_TEMP/MaltoriaNative/${{ matrix.arch }}"
-          python scripts/windows/smoke_native_host.py `
-            --host "$payload/MaltoriaLunaHost$bits.exe" `
-            --fixture "$payload/MaltoriaUnicodeFixture.exe" `
-            --architecture "${{ matrix.arch }}"
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang lld llvm ninja-build cmake mono-mcs
+      - name: Cache xwin binary and Windows SDK/CRT sysroot
+        id: xwin-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/bin/xwin
+            ~/.cache/maltoria-xwin
+          key: xwin-${{ env.XWIN_VERSION }}-x86-x86_64-v1
+      - name: Install xwin if not cached
+        if: steps.xwin-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          if [ ! -x "$HOME/.local/bin/xwin" ]; then
+            curl -fsSL "https://github.com/Jake-Shadle/xwin/releases/download/${XWIN_VERSION}/xwin-${XWIN_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+              | tar -xz --strip-components=1 -C "$HOME/.local/bin" "xwin-${XWIN_VERSION}-x86_64-unknown-linux-musl/xwin"
+            chmod +x "$HOME/.local/bin/xwin"
+          fi
+      - name: Build pinned upstream sources and capture helper
+        env:
+          PATH: ${{ runner.home }}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        run: |
+          python3 scripts/build-lunahook.py \
+            --architecture "${{ matrix.arch }}" \
+            --output "$RUNNER_TEMP/MaltoriaNative" \
+            --xwin-dir "$HOME/.cache/maltoria-xwin" \
+            --accept-xwin-license
+      - name: Verify PE architectures of built outputs
+        run: |
+          python3 - <<'PY'
+          import importlib.util
+          from pathlib import Path
+          import os
+
+          spec = importlib.util.spec_from_file_location('stage', 'scripts/stage-lunahook-payload.py')
+          stage = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(stage)
+
+          arch = '${{ matrix.arch }}'
+          payload = Path(os.environ['RUNNER_TEMP']) / 'MaltoriaNative' / arch
+          for name in stage.expected_files(arch) + ('MaltoriaUnicodeFixture.exe',):
+              path = payload / name
+              assert path.is_file(), f'Missing {path}'
+              machine = stage.pe_machine(path)
+              assert stage.machine_allowed(arch, name, machine), f'PE machine mismatch for {name}: {hex(machine)}'
+          print(f'Verified PE headers for {arch} payload in {payload}')
+          PY
       - name: Assemble source and compliance payload
-        shell: pwsh
         run: |
-          python scripts/check-third-party.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python scripts/package-native-sources.py --output "$env:RUNNER_TEMP/MaltoriaNative/sources"
+          python3 scripts/check-third-party.py
+          python3 scripts/package-native-sources.py --output "$RUNNER_TEMP/MaltoriaNative/sources"
       - uses: actions/upload-artifact@v4
         with:
           name: Maltoria-LunaHook-${{ matrix.arch }}

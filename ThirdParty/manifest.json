@@ -98,7 +98,7 @@
     }
   ],
   "files": {
-    "LunaHook-BUILD.md": "2503cf7a5461a61e28d369ddc5789be35b9409f672fc9e436376cf5042defa6b",
+    "LunaHook-BUILD.md": "de7240840edaccedda3cf76b106c0989285a90f2f1061ae5e59be2c573735822",
     "THIRD-PARTY-NOTICES.md": "ea4062e6fda4225332b42de1ec1fab7994191f091cfb6e1502afc0d6268e0492",
     "cabextract-BUILD.md": "9c4874855a932273e8ae22e1c47e1498869c1526a5d2c5ccc8ec3a20c2c13403",
     "licenses/Anime4K.txt": "8c5948e4aba1b19d1c78b098813ebf1854fb91f52821bb4e4d7b40b2fcc0cb4f",
@@ -128,13 +128,14 @@
     "licenses/swift-docc-symbolkit.txt": "11875c32f8de06e40b25b9e1dc78776baad9810032601c5325db6234c86d71e9",
     "licenses/uchardet-COPYING.txt": "107a29ccdd2d778aa2df5462f85dddfa099059abd22e064e07ec2cc9bafc37cd",
     "licenses/uchardet-license-options.txt": "69c2083f4fb6b1be7d7e1049595d314d6e6e9e99f6306de9d1e78a1c375fe37c",
+    "lunahook-cross-compile.patch": "e7e2f9fbcd05d41729d159026f626ce32778a43ba818cb03258a0f69e57e8df5",
     "lunahook-minhook-pin.patch": "d6b2d3dc6a8301ff30505388145df03835e848df564424c2a2483d144d0f1da2",
+    "lunahook-process-exit.patch": "ef96be95a34e7b56b9698a5f54beff7d7808365731cdfeb1a5ad60c33dbe0909",
     "sources/cabextract-1.11.tar.gz": "b5546db1155e4c718ff3d4b278573604f30dd64c3c5bfd4657cd089b823a3ac6",
     "sources/native/lunatranslator-178b4372c4ed7ac0f67aa2e217007916e937250d.tar.gz": "bd16b8241b293c4165dcd49eb76d89902916fe21be150827fca24cd3049f9f60",
     "sources/native/minhook-c3fcafdc10146beb5919319d0683e44e3c30d537.tar.gz": "31757833475be039c16359d4e276e718db6ba2ba61a6b870053a112106015822",
     "sources/native/nlohmann-json-55f93686c01528224f448c19128836e7df245f72.tar.gz": "67f4cdd9ca930c9c1e130af4a437c7fc98fab77a2846fc2d2a14b4943831f8ef",
-    "sources/native/uchardet-06029ec3340cdf6bf9a6a537dafb3f39eda0560e.tar.gz": "c1113a8b7fbaa31d840765c16b13b697140444d20b93a7e45a9a9484f47dac47",
-    "lunahook-process-exit.patch": "ef96be95a34e7b56b9698a5f54beff7d7808365731cdfeb1a5ad60c33dbe0909"
+    "sources/native/uchardet-06029ec3340cdf6bf9a6a537dafb3f39eda0560e.tar.gz": "c1113a8b7fbaa31d840765c16b13b697140444d20b93a7e45a9a9484f47dac47"
   },
   "repository_files": {
     "Libraries/cabextract": "28aa6f9a89db20a42e6482dcdf592f5e0370bb86042d91da2bb44cc4c4568371",

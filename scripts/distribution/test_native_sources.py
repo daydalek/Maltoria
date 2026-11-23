@@ -35,6 +35,10 @@ class NativeSourceTests(unittest.TestCase):
             self.assertIn("LPVOID reserved)", main)
             self.assertIn("if (reserved) return TRUE;", main)
             self.assertIn("detachall();", main)
+            py_cpp = (output / "LunaTranslator/src/NativeImpl/LunaHook/LunaHook/engines/python/python.cpp").read_text()
+            self.assertIn("__has_include(<atlbase.h>)", py_cpp)
+            engines_cmake = (output / "LunaTranslator/src/NativeImpl/LunaHook/LunaHook/engines/CMakeLists.txt").read_text()
+            self.assertIn("if(DEFINED LUNA_CSC_COMMAND)", engines_cmake)
 
     def test_traversal_archive_is_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -109,6 +113,7 @@ class NativeSourceTests(unittest.TestCase):
             self.assertEqual(revision + "\n", (source / "SOURCE-COMMIT.txt").read_text())
             required = [
                 "scripts/build-lunahook.ps1",
+                "scripts/build-lunahook.py",
                 "scripts/prepare-native-sources.py",
                 "Native/MaltoriaLunaHost/CMakeLists.txt",
                 "Native/MaltoriaLunaHost/src/main.cpp",

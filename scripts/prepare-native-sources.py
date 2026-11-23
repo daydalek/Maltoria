@@ -143,6 +143,172 @@ def prepare(output):
         raise ValueError("Process-exit patch no longer matches the locked LunaTranslator source")
     text = text.replace(signature, signature[:-1] + " reserved)").replace(detach, replacement)
     main.write_text(text, encoding="utf-8")
+
+    # Maltoria: cross-compile compatibility (ATL-free CComPtr fallback + configurable C# compiler).
+    python_cpp = luna / "src/NativeImpl/LunaHook/LunaHook/engines/python/python.cpp"
+    py_text = python_cpp.read_text(encoding="utf-8")
+    atl_old = "#include <atlbase.h>"
+    atl_new = (
+        "#if defined(__has_include) && __has_include(<atlbase.h>)\n"
+        "#include <atlbase.h>\n"
+        "#else\n"
+        "// Maltoria: minimal CComPtr fallback so cross-compilation with xwin does not require ATL.\n"
+        "template <class T>\n"
+        "struct CComPtr\n"
+        "{\n"
+        "    T *p = nullptr;\n"
+        "    CComPtr() = default;\n"
+        "    ~CComPtr()\n"
+        "    {\n"
+        "        if (p)\n"
+        "            p->Release();\n"
+        "    }\n"
+        "    CComPtr(const CComPtr &) = delete;\n"
+        "    CComPtr &operator=(const CComPtr &) = delete;\n"
+        "    T **operator&() { return &p; }\n"
+        "    T *operator->() const { return p; }\n"
+        "    void Attach(T *ptr)\n"
+        "    {\n"
+        "        if (p)\n"
+        "            p->Release();\n"
+        "        p = ptr;\n"
+        "    }\n"
+        "    template <class Q>\n"
+        "    HRESULT QueryInterface(Q **pp) const\n"
+        "    {\n"
+        "        return p ? p->QueryInterface(__uuidof(Q), reinterpret_cast<void **>(pp)) : E_POINTER;\n"
+        "    }\n"
+        "};\n"
+        "#endif"
+    )
+    if py_text.count(atl_old) != 1:
+        raise ValueError("Cross-compile ATL patch no longer matches the locked LunaTranslator source")
+    python_cpp.write_text(py_text.replace(atl_old, atl_new), encoding="utf-8")
+
+    engines_cmake = luna / "src/NativeImpl/LunaHook/LunaHook/engines/CMakeLists.txt"
+    ec_text = engines_cmake.read_text(encoding="utf-8")
+    csc_old = (
+        'add_custom_command(\n'
+        '    OUTPUT "${_lunatmp_dll}"\n'
+        '    COMMAND ${CMAKE_COMMAND} -E make_directory "${binary_out_putpath}"\n'
+        '    COMMAND "${csc}" /nologo /nostdlib /target:library /out:${_lunatmp_dll} /reference:${mscorlib} LunaTmpFontLoader.cs\n'
+        '    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/unity"\n'
+        '    DEPENDS "${_lunatmp_src}"\n'
+        '    VERBATIM\n'
+        ')'
+    )
+    csc_new = (
+        'if(DEFINED LUNA_CSC_COMMAND)\n'
+        'add_custom_command(\n'
+        '    OUTPUT "${_lunatmp_dll}"\n'
+        '    COMMAND ${CMAKE_COMMAND} -E make_directory "${binary_out_putpath}"\n'
+        '    COMMAND ${LUNA_CSC_COMMAND} -out:${_lunatmp_dll} LunaTmpFontLoader.cs\n'
+        '    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/unity"\n'
+        '    DEPENDS "${_lunatmp_src}"\n'
+        '    VERBATIM\n'
+        ')\n'
+        'else()\n'
+        + csc_old + '\n'
+        'endif()'
+    )
+    if ec_text.count(csc_old) != 1:
+        raise ValueError("Cross-compile C# patch no longer matches the locked LunaTranslator source")
+    engines_cmake.write_text(ec_text.replace(csc_old, csc_new), encoding="utf-8")
+
+    # Avoid POSIX shell brace expansion of -DLUNA_VERSION_={a,b,c,d} under Ninja on macOS/Linux.
+    version_cmake = luna / "src/NativeImpl/version.cmake"
+    vc_text = version_cmake.read_text(encoding="utf-8")
+    vc_old = "target_compile_definitions(VERSION_DEF PRIVATE\n    LUNA_VERSION_=${LUNA_VERSION})"
+    vc_new = (
+        "target_compile_definitions(VERSION_DEF PRIVATE\n"
+        "    LUNA_VERSION_0=${VERSION_MAJOR}\n"
+        "    LUNA_VERSION_1=${VERSION_MINOR}\n"
+        "    LUNA_VERSION_2=${VERSION_PATCH}\n"
+        "    LUNA_VERSION_3=${VERSION_REVISION})"
+    )
+    if vc_text.count(vc_old) != 1:
+        raise ValueError("Cross-compile version.cmake patch no longer matches the locked LunaTranslator source")
+    version_cmake.write_text(vc_text.replace(vc_old, vc_new), encoding="utf-8")
+
+    version_def = luna / "src/NativeImpl/version_def.cpp"
+    vd_text = version_def.read_text(encoding="utf-8")
+    vd_old = "WORD LUNA_VERSION[4] = LUNA_VERSION_;"
+    vd_new = "WORD LUNA_VERSION[4] = {LUNA_VERSION_0, LUNA_VERSION_1, LUNA_VERSION_2, LUNA_VERSION_3};"
+    if vd_text.count(vd_old) != 1:
+        raise ValueError("Cross-compile version_def.cpp patch no longer matches the locked LunaTranslator source")
+    version_def.write_text(vd_text.replace(vd_old, vd_new), encoding="utf-8")
+
+    # Standard C++17 rvalue overloads for helper functions called with temporaries under MSVC /permissive.
+    stringutils = luna / "src/NativeImpl/LunaHook/include/stringutils.h"
+    su_text = stringutils.read_text(encoding="utf-8")
+    sr_old = 'std::u32string &strReplace(std::u32string &str, const std::u32string &oldStr, const std::u32string &newStr = U"");'
+    sr_new = (
+        sr_old + "\n"
+        'inline std::string strReplace(std::string &&str, const std::string &oldStr, const std::string &newStr = "") { return std::move(strReplace(str, oldStr, newStr)); }\n'
+        'inline std::wstring strReplace(std::wstring &&str, const std::wstring &oldStr, const std::wstring &newStr = L"") { return std::move(strReplace(str, oldStr, newStr)); }\n'
+        'inline std::u32string strReplace(std::u32string &&str, const std::u32string &oldStr, const std::u32string &newStr = U"") { return std::move(strReplace(str, oldStr, newStr)); }'
+    )
+    trim_old = "template <class ST>\ninline ST &Trim(ST &text)\n{\n  text.erase(text.begin(), std::find_if_not(text.begin(), text.end(), iswspace));\n  text.erase(std::find_if_not(text.rbegin(), text.rend(), iswspace).base(), text.end());\n  return text;\n}"
+    trim_new = (
+        trim_old + "\n"
+        "template <class ST, std::enable_if_t<!std::is_lvalue_reference_v<ST>, int> = 0>\n"
+        "inline ST Trim(ST &&text) { return std::move(Trim(text)); }"
+    )
+    if su_text.count(sr_old) != 1 or su_text.count(trim_old) != 1:
+        raise ValueError("Cross-compile stringutils.h patch no longer matches the locked LunaTranslator source")
+    stringutils.write_text(su_text.replace(sr_old, sr_new).replace(trim_old, trim_new), encoding="utf-8")
+
+    stringfilters = luna / "src/NativeImpl/LunaHook/LunaHook/util/stringfilters.h"
+    sf_text = stringfilters.read_text(encoding="utf-8")
+    rk_old = "std::wstring &remapkatakana(std::wstring &);"
+    rk_new = (
+        rk_old + "\n"
+        "#ifndef MALTORIA_REMAPKATAKANA_RVAL_DEFINED\n"
+        "#define MALTORIA_REMAPKATAKANA_RVAL_DEFINED\n"
+        "inline std::wstring remapkatakana(std::wstring &&s) { return std::move(remapkatakana(s)); }\n"
+        "#endif"
+    )
+    if sf_text.count(rk_old) != 1:
+        raise ValueError("Cross-compile stringfilters.h patch no longer matches the locked LunaTranslator source")
+    stringfilters.write_text(sf_text.replace(rk_old, rk_new), encoding="utf-8")
+
+    # Fix MSVC-only rvalue-to-non-const-ref binding in KiriKiri.cpp and case-sensitive include paths for Linux.
+    kirikiri = luna / "src/NativeImpl/LunaHook/LunaHook/engine32/KiriKiri.cpp"
+    kk_text = kirikiri.read_text(encoding="utf-8")
+    kk_old = "  auto filterkrkrz(std::wstring &ws)"
+    kk_new = "  auto filterkrkrz(std::wstring ws)"
+    if kk_text.count(kk_old) != 1:
+        raise ValueError("Cross-compile KiriKiri.cpp patch no longer matches the locked LunaTranslator source")
+    kirikiri.write_text(kk_text.replace(kk_old, kk_new), encoding="utf-8")
+
+    for rel, old_inc, new_inc in (
+        ("src/NativeImpl/LunaHook/LunaHook/engine32/ApricoT.cpp", '#include "ApRicoT.h"', '#include "ApricoT.h"'),
+        ("src/NativeImpl/LunaHook/LunaHook/engine32/lucifen.cpp", '#include "Lucifen.h"', '#include "lucifen.h"'),
+        ("src/NativeImpl/LunaHook/LunaHook/enginecollection32.cpp", '#include "engine32/ApRicoT.h"', '#include "engine32/ApricoT.h"'),
+        ("src/NativeImpl/LunaHook/LunaHook/enginecollection32.cpp", '#include "engine32/Lucifen.h"', '#include "engine32/lucifen.h"'),
+    ):
+        inc_path = luna / rel
+        inc_text = inc_path.read_text(encoding="utf-8")
+        if inc_text.count(old_inc) != 1:
+            raise ValueError(f"Cross-compile case-fix patch no longer matches {rel}")
+        inc_path.write_text(inc_text.replace(old_inc, new_inc), encoding="utf-8")
+
+    types_h = luna / "src/NativeImpl/LunaHook/include/types.h"
+    th_text = types_h.read_text(encoding="utf-8")
+    th_old = "template <typename StringT, typename = std::enable_if_t<!std::is_pointer_v<StringT>>>"
+    th_new = "template <typename StringT, typename = std::enable_if_t<!std::is_pointer_v<StringT> && !std::is_array_v<StringT>>>"
+    if th_text.count(th_old) != 1:
+        raise ValueError("Cross-compile types.h patch no longer matches the locked LunaTranslator source")
+    types_h.write_text(th_text.replace(th_old, th_new), encoding="utf-8")
+
+    unicorn = luna / "src/NativeImpl/LunaHook/LunaHook/engine32/Unicorn.cpp"
+    uc_text = unicorn.read_text(encoding="utf-8")
+    uc_old = "        enum\n        {\n          role = Engine::OtherRole\n        };"
+    uc_new = "        // enum { role = Engine::OtherRole };"
+    if uc_text.count(uc_old) != 1:
+        raise ValueError("Cross-compile Unicorn.cpp patch no longer matches the locked LunaTranslator source")
+    unicorn.write_text(uc_text.replace(uc_old, uc_new), encoding="utf-8")
+
     print(f"Prepared {len(packages)} pinned native source trees: {output}")
 
 

@@ -1,0 +1,138 @@
+--- a/src/NativeImpl/LunaHook/LunaHook/engines/python/python.cpp
++++ b/src/NativeImpl/LunaHook/LunaHook/engines/python/python.cpp
+@@ -1,4 +1,33 @@
+ #include "python.h"
+ #include <dwrite.h>
++#if defined(__has_include) && __has_include(<atlbase.h>)
+ #include <atlbase.h>
++#else
++// Maltoria: minimal CComPtr fallback so cross-compilation with xwin does not require ATL.
++template <class T>
++struct CComPtr
++{
++    T *p = nullptr;
++    CComPtr() = default;
++    ~CComPtr()
++    {
++        if (p)
++            p->Release();
++    }
++    CComPtr(const CComPtr &) = delete;
++    CComPtr &operator=(const CComPtr &) = delete;
++    T **operator&() { return &p; }
++    T *operator->() const { return p; }
++    void Attach(T *ptr)
++    {
++        if (p)
++            p->Release();
++        p = ptr;
++    }
++    template <class Q>
++    HRESULT QueryInterface(Q **pp) const
++    {
++        return p ? p->QueryInterface(__uuidof(Q), reinterpret_cast<void **>(pp)) : E_POINTER;
++    }
++};
++#endif
+--- a/src/NativeImpl/LunaHook/LunaHook/engines/CMakeLists.txt
++++ b/src/NativeImpl/LunaHook/LunaHook/engines/CMakeLists.txt
+@@ -19,12 +19,23 @@
+ set(_lunatmp_dll "${binary_out_putpath}/LunaTmpFontLoader.dll")
++if(DEFINED LUNA_CSC_COMMAND)
++add_custom_command(
++    OUTPUT "${_lunatmp_dll}"
++    COMMAND ${CMAKE_COMMAND} -E make_directory "${binary_out_putpath}"
++    COMMAND ${LUNA_CSC_COMMAND} -out:${_lunatmp_dll} LunaTmpFontLoader.cs
++    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/unity"
++    DEPENDS "${_lunatmp_src}"
++    VERBATIM
++)
++else()
+ add_custom_command(
+     OUTPUT "${_lunatmp_dll}"
+     COMMAND ${CMAKE_COMMAND} -E make_directory "${binary_out_putpath}"
+     COMMAND "${csc}" /nologo /nostdlib /target:library /out:${_lunatmp_dll} /reference:${mscorlib} LunaTmpFontLoader.cs
+     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/unity"
+     DEPENDS "${_lunatmp_src}"
+     VERBATIM
+ )
++endif()
+ add_custom_target(LunaTmpFontLoader ALL DEPENDS "${_lunatmp_dll}")
+--- a/src/NativeImpl/version.cmake
++++ b/src/NativeImpl/version.cmake
+@@ -16,5 +16,9 @@
+ set(LUNA_VERSION "{${VERSION_MAJOR},${VERSION_MINOR},${VERSION_PATCH},${VERSION_REVISION}}")
+ add_library(VERSION_DEF ${CMAKE_CURRENT_LIST_DIR}/version_def.cpp)
+ target_compile_definitions(VERSION_DEF PRIVATE
+-    LUNA_VERSION_=${LUNA_VERSION})
++    LUNA_VERSION_0=${VERSION_MAJOR}
++    LUNA_VERSION_1=${VERSION_MINOR}
++    LUNA_VERSION_2=${VERSION_PATCH}
++    LUNA_VERSION_3=${VERSION_REVISION})
+--- a/src/NativeImpl/version_def.cpp
++++ b/src/NativeImpl/version_def.cpp
+@@ -1,2 +1,2 @@
+ #include <Windows.h>
+-WORD LUNA_VERSION[4] = LUNA_VERSION_;
++WORD LUNA_VERSION[4] = {LUNA_VERSION_0, LUNA_VERSION_1, LUNA_VERSION_2, LUNA_VERSION_3};
+--- a/src/NativeImpl/LunaHook/include/stringutils.h
++++ b/src/NativeImpl/LunaHook/include/stringutils.h
+@@ -78,3 +78,6 @@
+ std::string &strReplace(std::string &str, const std::string &oldStr, const std::string &newStr = "");
+ std::wstring &strReplace(std::wstring &str, const std::wstring &oldStr, const std::wstring &newStr = L"");
+ std::u32string &strReplace(std::u32string &str, const std::u32string &oldStr, const std::u32string &newStr = U"");
++inline std::string strReplace(std::string &&str, const std::string &oldStr, const std::string &newStr = "") { return std::move(strReplace(str, oldStr, newStr)); }
++inline std::wstring strReplace(std::wstring &&str, const std::wstring &oldStr, const std::wstring &newStr = L"") { return std::move(strReplace(str, oldStr, newStr)); }
++inline std::u32string strReplace(std::u32string &&str, const std::u32string &oldStr, const std::u32string &newStr = U"") { return std::move(strReplace(str, oldStr, newStr)); }
+@@ -175,3 +178,5 @@
+   return text;
+ }
++template <class ST, std::enable_if_t<!std::is_lvalue_reference_v<ST>, int> = 0>
++inline ST Trim(ST &&text) { return std::move(Trim(text)); }
+--- a/src/NativeImpl/LunaHook/LunaHook/util/stringfilters.h
++++ b/src/NativeImpl/LunaHook/LunaHook/util/stringfilters.h
+@@ -33,2 +33,6 @@
+ extern std::map<wchar_t, wchar_t> katakanaMap;
+ std::wstring &remapkatakana(std::wstring &);
++#ifndef MALTORIA_REMAPKATAKANA_RVAL_DEFINED
++#define MALTORIA_REMAPKATAKANA_RVAL_DEFINED
++inline std::wstring remapkatakana(std::wstring &&s) { return std::move(remapkatakana(s)); }
++#endif
+--- a/src/NativeImpl/LunaHook/LunaHook/engine32/KiriKiri.cpp
++++ b/src/NativeImpl/LunaHook/LunaHook/engine32/KiriKiri.cpp
+@@ -1263,1 +1263,1 @@
+-  auto filterkrkrz(std::wstring &ws)
++  auto filterkrkrz(std::wstring ws)
+--- a/src/NativeImpl/LunaHook/LunaHook/engine32/ApricoT.cpp
++++ b/src/NativeImpl/LunaHook/LunaHook/engine32/ApricoT.cpp
+@@ -1,1 +1,1 @@
+-#include "ApRicoT.h"
++#include "ApricoT.h"
+--- a/src/NativeImpl/LunaHook/LunaHook/engine32/lucifen.cpp
++++ b/src/NativeImpl/LunaHook/LunaHook/engine32/lucifen.cpp
+@@ -1,1 +1,1 @@
+-#include "Lucifen.h"
++#include "lucifen.h"
+--- a/src/NativeImpl/LunaHook/LunaHook/enginecollection32.cpp
++++ b/src/NativeImpl/LunaHook/LunaHook/enginecollection32.cpp
+@@ -1,1 +1,1 @@
+-#include "engine32/ApRicoT.h"
++#include "engine32/ApricoT.h"
+-#include "engine32/Lucifen.h"
++#include "engine32/lucifen.h"
+--- a/src/NativeImpl/LunaHook/include/types.h
++++ b/src/NativeImpl/LunaHook/include/types.h
+@@ -309,1 +309,1 @@
+-	template <typename StringT, typename = std::enable_if_t<!std::is_pointer_v<StringT>>>
++	template <typename StringT, typename = std::enable_if_t<!std::is_pointer_v<StringT> && !std::is_array_v<StringT>>>
+--- a/src/NativeImpl/LunaHook/LunaHook/engine32/Unicorn.cpp
++++ b/src/NativeImpl/LunaHook/LunaHook/engine32/Unicorn.cpp
+@@ -559,4 +559,4 @@
+-        enum
+-        {
+-          role = Engine::OtherRole
+-        };
++        // enum
++        // {
++        //   role = Engine::OtherRole
++        // };

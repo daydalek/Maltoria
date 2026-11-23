@@ -24,6 +24,7 @@ SOURCE_PATHS = (
     Path("Whisky.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"),
     Path("WhiskyKit/Package.resolved"),
     Path("scripts/build-lunahook.ps1"),
+    Path("scripts/build-lunahook.py"),
     Path("scripts/check-third-party.py"),
     Path("scripts/distribution/native_host_protocol.py"),
     Path("scripts/distribution/test_native_host_protocol.py"),

@@ -3,10 +3,18 @@
 The native source lock is in `manifest.json`; archives are committed under
 `sources/native/`. `python3 scripts/prepare-native-sources.py --output <empty-dir>`
 checks SHA-256 before extraction, preflights every archive path/root, rejects
-unsafe members, and applies the recorded MinHook pin and process-exit patches. No source is
-fetched during Windows builds.
+unsafe members, and applies the recorded MinHook pin, process-exit, and cross-compile patches.
+No source is fetched during native builds.
 
-On Windows 2022 with Visual Studio 2022 C++ and .NET Framework 4.x:
+On macOS or Linux (cross-compiling with `clang-cl`, `lld-link`, `llvm-rc`, `llvm-lib`, `llvm-mt`, `ninja`, Mono `mcs`, and `xwin`):
+
+```bash
+python3 scripts/build-lunahook.py --architecture all --output /tmp/MaltoriaNative --accept-xwin-license
+```
+
+`xwin` downloads the Microsoft CRT and Windows SDK into `~/.cache/maltoria-xwin`
+(or `$XWIN_DIR`) on first run. On Windows 2022 with Visual Studio 2022 C++ and
+.NET Framework 4.x, the native PowerShell script remains supported:
 
 ```powershell
 pwsh -File scripts/build-lunahook.ps1 -Architecture x86 -Output $env:RUNNER_TEMP\MaltoriaNative
