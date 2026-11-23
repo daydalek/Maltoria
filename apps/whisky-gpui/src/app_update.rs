@@ -239,14 +239,12 @@ impl InstalledApp {
 fn cache_cleanup_path(path: &Path) -> Option<PathBuf> {
     let parent = path.parent()?;
     let directory = parent.file_name()?.to_str()?;
-    if uuid::Uuid::parse_str(directory).is_ok()
-        && parent.parent()?.ends_with("Maltoria/AppUpdates")
-        && fs::canonicalize(path).ok()?.as_path() == path
-    {
-        Some(path.to_path_buf())
-    } else {
-        None
+    let cache = parent.parent()?;
+    if uuid::Uuid::parse_str(directory).is_err() || !cache.ends_with("Maltoria/AppUpdates") {
+        return None;
     }
+    let expected = cache.canonicalize().ok()?.join(directory).join(path.file_name()?);
+    (path.canonicalize().ok()? == expected).then_some(expected)
 }
 
 fn is_appimage(path: &Path) -> io::Result<bool> {
@@ -432,6 +430,27 @@ mod tests {
             Some("sudo apt install -- '/tmp/Some user'\\''s package.deb'")
         );
         assert!(Format::AppImage.package_command(path).is_none());
+    }
+
+    #[test]
+    fn cache_cleanup_accepts_symlinked_cache_root_not_package_symlinks() -> io::Result<()> {
+        use std::os::unix::fs::symlink;
+
+        let root = std::env::temp_dir()
+            .canonicalize()?
+            .join(format!("maltoria-update-test-{}", uuid::Uuid::new_v4()));
+        let generation = uuid::Uuid::new_v4().to_string();
+        let cache = root.join("real/Maltoria/AppUpdates").join(&generation);
+        fs::create_dir_all(&cache)?;
+        let alias = root.join("alias");
+        symlink(root.join("real"), &alias)?;
+        let package = cache.join("package.deb");
+        fs::write(&package, b"verified")?;
+        symlink(&package, cache.join("redirect.deb"))?;
+        let alias_cache = alias.join("Maltoria/AppUpdates").join(generation);
+        assert_eq!(cache_cleanup_path(&alias_cache.join("package.deb")), Some(package));
+        assert!(cache_cleanup_path(&alias_cache.join("redirect.deb")).is_none());
+        fs::remove_dir_all(root)
     }
 
     #[cfg(target_os = "linux")]
