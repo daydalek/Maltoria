@@ -422,7 +422,8 @@ impl WhiskyApp {
             .into_any_element()
     }
 
-    pub(crate) fn application_settings(&self, cx: &Context<Self>) -> AnyElement {
+    pub(crate) fn application_settings(&mut self, cx: &Context<Self>) -> AnyElement {
+        let network = self.network_section(cx);
         self.form(
             "app-settings-scroll",
             vec![
@@ -431,7 +432,7 @@ impl WhiskyApp {
                 self.translation_entry_section(cx),
                 self.metadata_section(cx),
                 self.runtime_section(cx),
-                self.network_section(cx),
+                network,
                 #[cfg(not(target_os = "linux"))]
                 self.gptk_section(cx),
                 self.engines_section(cx),
@@ -440,7 +441,7 @@ impl WhiskyApp {
     }
 
     pub(crate) fn settings_section_page(
-        &self,
+        &mut self,
         section: SettingsSection,
         cx: &Context<Self>,
     ) -> AnyElement {
@@ -765,7 +766,10 @@ impl WhiskyApp {
         )
     }
 
-    fn network_section(&self, cx: &Context<Self>) -> AnyElement {
+    fn network_section(&mut self, cx: &Context<Self>) -> AnyElement {
+        if !self.app_update.busy {
+            self.app_update.reset_if_package_missing();
+        }
         let s = &crate::i18n::s().settings;
         let mut content = vec![
             self.toggle("offline", s.offline_mode, s.offline_mode_desc, cx),

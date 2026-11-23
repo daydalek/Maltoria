@@ -75,6 +75,19 @@ pub(crate) struct State {
     pub(crate) pending: Option<PendingReplacement>,
 }
 
+impl State {
+    pub(crate) fn reset_if_package_missing(&mut self) -> bool {
+        if self.downloaded.as_ref().is_some_and(|package| !package.path.is_file()) {
+            self.downloaded = None;
+            self.version = None;
+            self.message = None;
+            true
+        } else {
+            false
+        }
+    }
+}
+
 pub(crate) struct PendingReplacement {
     scratch: PathBuf,
     authorized: bool,
@@ -384,6 +397,32 @@ fi
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_cached_package_returns_to_check_again() -> io::Result<()> {
+        let path = std::env::temp_dir().join(format!("maltoria-update-test-{}", uuid::Uuid::new_v4()));
+        fs::write(&path, b"verified")?;
+        let mut state = State {
+            checked: true,
+            version: Some("0.6.4".to_owned()),
+            downloaded: Some(Downloaded {
+                version: "0.6.4".to_owned(),
+                path: path.clone(),
+                sha256: sha256(&path)?,
+            }),
+            message: Some("old status".to_owned()),
+            ..State::default()
+        };
+        let reset_while_present = state.reset_if_package_missing();
+        fs::remove_file(&path)?;
+        assert!(!reset_while_present);
+        assert!(state.reset_if_package_missing());
+        assert!(state.downloaded.is_none());
+        assert!(state.version.is_none());
+        assert!(state.message.is_none());
+        assert!(state.checked);
+        Ok(())
+    }
 
     #[test]
     fn native_package_handoff_quotes_paths_and_never_applies_to_appimage() {

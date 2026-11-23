@@ -6288,6 +6288,10 @@ impl WhiskyApp {
         if self.offline() || self.quitting || self.app_update.busy {
             return;
         }
+        if self.app_update.reset_if_package_missing() {
+            cx.notify();
+            return;
+        }
         if self.setup_installing || self.runtime.any_active() {
             self.app_update.message = Some(strings.app_update_wine_busy.to_owned());
             cx.notify();
@@ -6323,7 +6327,9 @@ impl WhiskyApp {
                         }
                         Err(error) => {
                             eprintln!("maltoria: could not stage app update: {error}");
-                            this.app_update.message = Some(strings.app_update_failed.to_owned());
+                            if !this.app_update.reset_if_package_missing() {
+                                this.app_update.message = Some(strings.app_update_failed.to_owned());
+                            }
                             cx.notify();
                         }
                     }
