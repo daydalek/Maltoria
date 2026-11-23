@@ -132,14 +132,14 @@ def main():
             time.sleep(0.4)
             session.snapshot('wayland-settings')
             report['steps'].append('native-keyboard-shortcut-and-pointer-preference-write')
-            session.click(1200, 295)
+            session.click(1200, 350)
             desktop = fixture / 'data/applications/com.daydalek.Maltoria.desktop'
             wait(desktop.exists, 'Wayland desktop installation failed')
             assert desktop.stem == window['app_id']
             report['steps'].append('desktop-entry-identity-matches-native-wayland-app-id')
             selected = fixture / 'Selected 容器目录 %f'
             selected.mkdir()
-            session.click(1200, 373)
+            session.click(1200, 421)
             chooser_base = runpy.run_path(str(TOOLS / 'smoke-pickers.py'))['GtkChooser']
             class WaylandChooser(chooser_base):
                 def window(self):
