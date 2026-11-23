@@ -202,7 +202,7 @@ private actor SpyKeychainCredentialStore: CredentialStore {
     let settings = try await service.call("translation.settings/get", params: [:])
     #expect(settings.object?["settings"] != nil)
 
-    let repaired = String(decoding: try Data(contentsOf: fileURL), as: UTF8.self)
+    let repaired = try String(decoding: Data(contentsOf: fileURL), as: UTF8.self)
     #expect(!repaired.contains("chatGPTPlan"))
     #expect(!repaired.contains("Insecure"))
 
