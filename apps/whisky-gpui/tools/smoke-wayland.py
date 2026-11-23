@@ -126,7 +126,7 @@ def main():
             time.sleep(0.4)
             session.snapshot('wayland-settings-scrolled')
             # Mixed cover layout follows the studio grouping and tag-bar rows.
-            session.click(1215, 351)
+            session.click(1215, 400)
             wait(lambda: preferences().get('libraryMixedCoverLayout') is False, 'Wayland pointer toggle did not persist')
             session.scroll(1215, 600, -10)
             time.sleep(0.4)
