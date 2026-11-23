@@ -54,6 +54,10 @@ public final class RuntimeService {
         Set(configured.values.map(\.bottleURL))
     }
 
+    var hasBusyContainers: Bool {
+        containerURLs.contains { containerIsBusy($0) }
+    }
+
     /// True while anything under `container` is preparing, launching or
     /// running — or while its process state cannot be determined
     /// (`queryFailureBottles`, fail-closed). Callers use this to refuse

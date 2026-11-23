@@ -91,6 +91,50 @@ class CIReleaseTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     release.verify_file(root, name, hashlib.sha256(b'fixture').hexdigest())
 
+    def test_source_version_matches_canonical_release_tag(self):
+        declaration = 'WHISKY_DEFAULT_VERSION=0.6.0\n'
+        self.assertEqual('0.6.0', release.source_version(declaration, 'refs/tags/v0.6.0'))
+        for ref in ('refs/tags/v0.6.1', 'refs/tags/v00.6.0', 'refs/tags/linux-v0.6.0'):
+            with self.assertRaises(ValueError):
+                release.source_version(declaration, ref)
+        for version in ('0.06.0', '0.6.4294967296', '0.6.0-rc.1'):
+            with self.assertRaises(ValueError):
+                release.source_version('WHISKY_DEFAULT_VERSION=' + version)
+
+    def test_final_contract_rejects_missing_duplicate_tampered_and_wrong_version_assets(self):
+        for mutation in ('missing', 'duplicate', 'tampered', 'wrong_version'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                self.fixtures(root)
+                output = release.prepare_assets(root, '0.6.0', COMMIT)
+                checksums = output / 'SHA256SUMS-linux-amd64'
+                package = output / 'whisky_0.6.0_amd64.deb'
+                if mutation == 'missing':
+                    package.unlink()
+                elif mutation == 'duplicate':
+                    line, *_ = checksums.read_text().splitlines()
+                    checksums.write_text(checksums.read_text() + line + '\n')
+                elif mutation == 'tampered':
+                    package.write_bytes(b'tampered')
+                else:
+                    package.rename(output / 'whisky_0.7.0_amd64.deb')
+                with self.assertRaises(ValueError):
+                    release.validate_release_assets(output, '0.6.0')
+
+    def test_uploaded_draft_must_agree_with_verified_local_assets(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self.fixtures(root)
+            output = release.prepare_assets(root, '0.6.0', COMMIT)
+            inventory = release.validate_release_assets(output, '0.6.0')
+            uploaded = [dict(name=name, state='uploaded', size=size,
+                             digest='sha256:' + release.sha256_file(output / name))
+                        for name, size in inventory.items()]
+            release.validate_uploaded_assets(uploaded, output, inventory)
+            uploaded[0]['digest'] = 'sha256:' + '0' * 64
+            with self.assertRaises(ValueError):
+                release.validate_uploaded_assets(uploaded, output, inventory)
+
 
 if __name__ == '__main__':
     unittest.main()

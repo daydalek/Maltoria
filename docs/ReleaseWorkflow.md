@@ -87,7 +87,16 @@ Use a suitable numeric build number. Output goes to a fresh directory under `../
 
 Current ZIP releases use ad-hoc signatures and require the user's Gatekeeper approval where applicable. Apple notarization is a separate distribution step.
 
-The current app upgrade path is manual download from [app Releases](https://github.com/daydalek/Maltoria/releases). `dist/pages/appcast.xml` is an empty feed for this fork.
+Maltoria can check the unified GitHub Releases stream, including prereleases,
+once per launch when online. Automatic app checks are off by default; users can
+enable them or check manually in Network & Updates. Wine checks have their own
+toggle. Offline mode blocks both.
+The updater verifies GitHub and published SHA-256 checksums. On macOS and
+AppImage it replaces the app after quitting; Gatekeeper may still require the
+user's approval on macOS. For deb and rpm it provides the verified file and
+package-manager command rather than taking administrator privileges. Manual
+downloads remain available at [app Releases](https://github.com/daydalek/Maltoria/releases).
+The empty Sparkle appcast is not used.
 
 `UpdateHomebrewTap.yml` is scoped to `github.repository == 'frankea/Whisky'` and updates the upstream maintainer's tap. This fork distributes its app through GitHub Releases.
 

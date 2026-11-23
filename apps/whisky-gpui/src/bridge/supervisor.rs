@@ -369,12 +369,17 @@ pub(crate) enum BottleCreateUpdate {
 #[derive(Debug)]
 pub(crate) enum BridgeEvent {
     ShutdownFailed { reason: String },
+    AppUpdateQuitAccepted,
     ImportCandidates { request: u64, candidates: Vec<crate::container_import::Candidate> },
     ImportCandidatesFailed { request: u64, reason: String },
     CandidatesImported { request: u64, paths: Vec<String>, count: usize },
     Status(BridgeStatus),
     /// Advertised methods for the current connected helper session.
     Services(Vec<String>),
+    AppUpdate {
+        action: crate::app_update::Action,
+        result: Result<serde_json::Value, String>,
+    },
     TranslationReply { request: u64, method: String, result: Result<serde_json::Value, String> },
     /// The container catalogue, emitted once per connected session.
     Containers(Vec<Container>),
@@ -756,7 +761,11 @@ enum Command {
     Shutdown,
     /// Quit the application: the helper applies the stored kill-on-terminate
     /// policy before the session closes.
-    ShutdownApplication,
+    ShutdownApplication { for_app_update: bool },
+    AppUpdate {
+        action: crate::app_update::Action,
+        params: serde_json::Value,
+    },
     TranslationCall { request: u64, method: String, params: serde_json::Value },
     LoadSystemInfo,
     LoadEntries(String),
@@ -1170,6 +1179,10 @@ impl BridgeSupervisor {
             .map_err(|_| "Translation bridge supervisor is disconnected".to_owned())
     }
 
+    pub(crate) fn app_update(&self, action: crate::app_update::Action, params: serde_json::Value) {
+        let _ = self.commands.send(Command::AppUpdate { action, params });
+    }
+
     /// Test seam: a supervisor whose command channel has no worker behind it.
     /// Sends fail silently and no helper is spawned; headless UI tests pair
     /// this with an empty `BridgeEvent` channel they retain.
@@ -1343,8 +1356,8 @@ impl BridgeSupervisor {
 
     /// Quit with the stored exit policy. The worker emits `Stopped` when the
     /// session is closed, which is when the UI may call `cx.quit()`.
-    pub(crate) fn shutdown_application(&self) {
-        let _ = self.commands.send(Command::ShutdownApplication);
+    pub(crate) fn shutdown_application(&self, for_app_update: bool) {
+        let _ = self.commands.send(Command::ShutdownApplication { for_app_update });
     }
 
     /// `configuration.schema` + `configuration.read` for one bottle.
@@ -2090,6 +2103,7 @@ fn run_with_spawner_and_backoff<F, B>(
         let mut tricks: Option<LiveWinetricks> = None;
         // At most one WhiskyWine update-check job.
         let mut update_check: Option<LiveUpdateCheck> = None;
+        let mut app_update: Option<(crate::app_update::Action, LiveUpdateCheck)> = None;
         // At most one bottle lifecycle job (move, duplicate, export, …).
         let mut bottle_op: Option<LiveBottleOperation> = None;
         // At most one diagnostics or audio job.
@@ -2110,7 +2124,7 @@ fn run_with_spawner_and_backoff<F, B>(
         loop {
             #[cfg(target_os = "linux")]
             if wine_restart_pending && scan.is_none() && create.is_none() && tricks.is_none()
-                && update_check.is_none() && bottle_op.is_none() && diagnostic.is_none()
+                && update_check.is_none() && app_update.is_none() && bottle_op.is_none() && diagnostic.is_none()
                 && metadata_search.is_none() && metadata_sync.is_none() && metadata_records.is_empty()
                 && program_run.is_none()
             {
@@ -2158,6 +2172,9 @@ fn run_with_spawner_and_backoff<F, B>(
                 wait_for = wait_for.min(job.due.saturating_duration_since(now));
             }
             if let Some(job) = &update_check {
+                wait_for = wait_for.min(job.due.saturating_duration_since(now));
+            }
+            if let Some((_, job)) = &app_update {
                 wait_for = wait_for.min(job.due.saturating_duration_since(now));
             }
             let command = match commands.recv_timeout(wait_for) {
@@ -2601,6 +2618,22 @@ fn run_with_spawner_and_backoff<F, B>(
                             Err(CallFailure::Session(reason)) => reconnect = Some(reason),
                         }
                     }
+                    if let Some((action, job)) = app_update.as_mut()
+                        && job.due <= Instant::now()
+                    {
+                        match poll_app_update(&mut client, job) {
+                            Ok(Some(result)) => {
+                                emit_event(&events, BridgeEvent::AppUpdate { action: *action, result });
+                                app_update = None;
+                            }
+                            Ok(None) => {}
+                            Err(CallFailure::Remote(reason)) => {
+                                emit_event(&events, BridgeEvent::AppUpdate { action: *action, result: Err(reason) });
+                                app_update = None;
+                            }
+                            Err(CallFailure::Session(reason)) => reconnect = Some(reason),
+                        }
+                    }
                     if let Some(active) = metadata_sync.as_mut() {
                         match poll_metadata_sync(&mut client, active) {
                             Ok((None, entry)) => {
@@ -2720,10 +2753,15 @@ fn run_with_spawner_and_backoff<F, B>(
                     emit(&events, BridgeStatus::Stopped);
                     return;
                 }
-                Some(Command::ShutdownApplication) => {
-                    match client.call_with_timeout("bridge.shutdown", json!({"applyExitPolicy": true}), Duration::from_secs(60)) {
+                Some(Command::ShutdownApplication { for_app_update }) => {
+                    match client.call_with_timeout("bridge.shutdown", json!({
+                        "applyExitPolicy": true, "forAppUpdate": for_app_update,
+                    }), Duration::from_secs(60)) {
                         Ok(_) => {
                             client.close();
+                            if for_app_update {
+                                emit_event(&events, BridgeEvent::AppUpdateQuitAccepted);
+                            }
                             emit(&events, BridgeStatus::Stopped);
                             return;
                         }
@@ -2746,6 +2784,28 @@ fn run_with_spawner_and_backoff<F, B>(
                     // frame after activation is not stale by up to a cadence.
                     if active && let Some(session) = live.as_mut() {
                         session.due = Instant::now();
+                    }
+                }
+                Some(Command::AppUpdate { action, params }) => {
+                    if app_update.is_none() {
+                        match client.call(action.method(), params).map_err(classify) {
+                            Ok(reply) if reply.get("skipped").and_then(serde_json::Value::as_bool) == Some(true) => {
+                                emit_event(&events, BridgeEvent::AppUpdate { action, result: Ok(reply) });
+                            }
+                            Ok(reply) => match serde_json::from_value::<JobStartDto>(reply) {
+                                Ok(start) => app_update = Some((action, LiveUpdateCheck {
+                                    job_id: start.job_id,
+                                    due: Instant::now() + SCAN_POLL,
+                                })),
+                                Err(error) => emit_event(&events, BridgeEvent::AppUpdate {
+                                    action, result: Err(error.to_string()),
+                                }),
+                            },
+                            Err(CallFailure::Remote(reason)) => emit_event(&events, BridgeEvent::AppUpdate {
+                                action, result: Err(reason),
+                            }),
+                            Err(CallFailure::Session(reason)) => reconnect = Some(reason),
+                        }
                     }
                 }
                 Some(Command::TranslationCall { request, method, params }) => {
@@ -5876,6 +5936,21 @@ struct LiveUpdateCheck {
     due: Instant,
 }
 
+fn poll_app_update(
+    client: &mut Client,
+    job: &mut LiveUpdateCheck,
+) -> Result<Option<Result<serde_json::Value, String>>, CallFailure> {
+    let reply = client.call("jobs.get", json!({ "jobID": job.job_id })).map_err(classify)?;
+    let reply: JobDto = serde_json::from_value(reply)
+        .map_err(|error| CallFailure::Remote(error.to_string()))?;
+    job.due = Instant::now() + SCAN_POLL;
+    match JobStatus::from_wire(&reply.status) {
+        Some(JobStatus::Queued | JobStatus::Running | JobStatus::Cancelling) => Ok(None),
+        Some(JobStatus::Completed) => Ok(Some(reply.result.ok_or_else(|| reply.status))),
+        _ => Ok(Some(Err(reply.error.as_ref().map(BridgeFailureDto::reason).unwrap_or(reply.status)))),
+    }
+}
+
 enum UpdateCheckTerminal {
     Available { local: String, remote: String },
     Current,
@@ -6906,7 +6981,7 @@ fn wait(events: &smol::channel::Sender<BridgeEvent>, commands: &CommandReceiver<
         let remaining = deadline.saturating_duration_since(Instant::now());
         match commands.recv_timeout(remaining) {
             Ok(Command::Retry) => return Wake::Retry,
-            Ok(Command::Shutdown) | Ok(Command::ShutdownApplication) | Err(RecvTimeoutError::Disconnected) => {
+            Ok(Command::Shutdown) | Ok(Command::ShutdownApplication { .. }) | Err(RecvTimeoutError::Disconnected) => {
                 return Wake::Stop;
             }
             // Activation is the only command that outlives the session.

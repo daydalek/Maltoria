@@ -8,6 +8,7 @@ use std::time::Duration;
 use gpui_kit::base::{Presence, Spring, spring};
 use gpui_kit::{prelude::*, *};
 
+mod app_update;
 mod artwork;
 mod bridge;
 mod capture;

@@ -81,6 +81,7 @@ public final class ApplicationService {
     private let preferences: PreferencesService?
     let lifecycleService: ContainerLifecycleService
     private let metadataService: LibraryMetadataService
+    private let appUpdate: AppUpdateService
     let diagnosticsService: FileDiagnosticsService
     private var closed = false
     private var catalogues: [String: [EntryRecord]] = [:]
@@ -143,7 +144,7 @@ public final class ApplicationService {
         "environment.read",
         "environment.set"
     ] + LibraryMetadataService.methods + GameReferenceService.methods + ApplicationTranslationService
-        .methods + ApplicationCaptureService.methods
+        .methods + ApplicationCaptureService.methods + AppUpdateService.methods
     public init(
         workspace: ApplicationWorkspace,
         native: (any NativeApplicationServices)? = nil,
@@ -161,6 +162,7 @@ public final class ApplicationService {
         self.preferences = preferences
         let jobStore = jobs ?? BridgeJobStore()
         self.jobs = jobStore
+        appUpdate = AppUpdateService(preferences: preferences, jobs: jobStore)
         translation = translationService ?? ApplicationTranslationService(jobs: jobStore)
         translation.networkAccess = { [weak preferences] in
             let values = try preferences?.call("preferences.read", params: [:])
@@ -224,6 +226,7 @@ public final class ApplicationService {
         let lease = try acquireWorkspaceLease(for: method)
         defer { if let lease { ContainerRegistry.release(lease) } }
         switch scope {
+        case "appUpdate": return try appUpdate.call(method, params: params)
         case "bridge": return try await bridgeCall(method, params: params)
         case "library", "workspace": return try await libraryCall(method, params: params)
         case "folders": return try await foldersCall(method, params: params)
@@ -353,6 +356,13 @@ extension ApplicationService {
         case "bridge.describe":
             return describe()
         case "bridge.shutdown":
+            if params["forAppUpdate"] == .bool(true) {
+                guard try preferences?.call("preferences.read", params: [:]).object?["offlineMode"] == .bool(false)
+                else { throw BridgeFailure("offline", "App updates are disabled in offline mode") }
+                if jobs.isInstallingWine || runtime?.hasBusyContainers == true {
+                    throw BridgeFailure("busy", "A game or Wine setup is still running")
+                }
+            }
             let applyPolicy = params["applyExitPolicy"] == nil ? false : try params.flag("applyExitPolicy")
             try await native?.prepareShutdown(applyExitPolicy: applyPolicy)
             await shutdown(applyExitPolicy: applyPolicy)
@@ -413,7 +423,13 @@ extension ApplicationService {
         case "preferences.read", "preferences.set", "preferences.setMany", "preferences.schema":
             guard let preferences else { throw BridgeFailure("method_unavailable", "Preferences store is unavailable") }
             let result = try preferences.call(method, params: params)
-            if method == "preferences.set" || method == "preferences.setMany" { await capture.settingsChanged() }
+            if method == "preferences.set" || method == "preferences.setMany" {
+                try appUpdate.preferencesChanged()
+                if try preferences.call("preferences.read", params: [:]).object?["offlineMode"] == .bool(true) {
+                    jobs.cancelWineNetworkOperations()
+                }
+                await capture.settingsChanged()
+            }
             return result
         default:
             return try await nativeCall(method, params: params)

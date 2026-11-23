@@ -359,7 +359,7 @@ public class WhiskyWineInstaller {
     ///   - A boolean indicating whether an update is available.
     ///   - The remote version if an update is available, or `0.0.0` otherwise.
     public static func shouldUpdateWhiskyWine(
-        defaults: UserDefaults = .standard, session: URLSession = .shared
+        defaults: UserDefaults = WhiskyPreferences.userDefaults, session: URLSession = .shared
     ) async -> (Bool, SemanticVersion) {
         guard NetworkSettings.shouldCheckWineUpdates(defaults: defaults) else {
             return (false, SemanticVersion(0, 0, 0))
