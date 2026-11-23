@@ -201,6 +201,16 @@ import WhiskyBridgeProtocol
     }
     let workspace = ApplicationWorkspace(containers: [])
     hud.configure(capture: capture, translation: translation, workspace: workspace)
+    // The GPUI frontend delivers localized popup strings via hud/localize;
+    // inject the zh-Hans set the assertions below expect.
+    hud.localize([
+        "sub_off": .string("字幕关"),
+        "sub_on": .string("字幕开"),
+        "locked": .string("锁定"),
+        "draggable": .string("可拖动"),
+        "collapse": .string("收起"),
+        "expand": .string("展开")
+    ])
 
     _ = try await hud.show(params: [:], workspace: workspace)
     let panel = try #require(hud.panelForTesting)
