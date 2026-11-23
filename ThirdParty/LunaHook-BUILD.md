@@ -25,6 +25,7 @@ all architectures with `build-lunahook.py`, then stages `sources/Maltoria/` with
 packagers through `MALTORIA_LUNAHOOK_ARTIFACTS`. `--without-lunahook` opts out
 explicitly, and the Docker executor still requires a prepared payload directory
 because its image ships no cross toolchain. Windows is never required.
+Local build output must be outside the checkout; the Docker menu reuses a detected payload or requires a payload path or an explicit skip.
 
 On Windows 2022 with Visual Studio 2022 C++ and
 .NET Framework 4.x, the native PowerShell script remains supported:

@@ -81,7 +81,7 @@ For a local package:
 ./build.sh run whisky-macos-gpui-arm64 --version X.Y.Z --build-number 123
 ```
 
-Use a suitable numeric build number. Output goes to a fresh directory under `build/distribution/whisky-macos-gpui-arm64/`. Local builds use the same ad-hoc signing and ZIP verification path.
+Use a suitable numeric build number. Output goes to a fresh directory under `../Maltoria-build/distribution/whisky-macos-gpui-arm64/`, outside the checkout because the local LunaHook build requires its artifacts to stay out of the source tree. Local builds use the same ad-hoc signing and ZIP verification path.
 
 ### Signing and update behavior
 

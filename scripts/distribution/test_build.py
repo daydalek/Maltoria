@@ -14,7 +14,9 @@ import signal
 import sys
 import tempfile
 import time
+from types import SimpleNamespace
 import unittest
+from unittest import mock
 
 SCRIPT = Path(__file__).with_name('build.py')
 spec = importlib.util.spec_from_file_location('distribution_build', SCRIPT)
@@ -50,6 +52,34 @@ class BuildTests(unittest.TestCase):
             build.plan(self.args('whisky-linux-arm64', '--compile-only'))
         with self.assertRaises(ValueError):
             build.plan(self.args('whisky-macos-gpui-arm64', '--version', '1.2;touch /tmp/x'))
+
+    def test_default_output_is_outside_checkout(self):
+        with mock.patch.dict(os.environ):
+            os.environ.pop('MALTORIA_LUNAHOOK_ARTIFACTS', None)
+            for target in ('whisky-linux-amd64', 'whisky-macos-gpui-arm64'):
+                args = build.parser().parse_args([
+                    'plan', target, '--wine-repo', str(self.repo)])
+                value = build.plan(args)
+                self.assertTrue(value['lunahookBuild'])
+                self.assertFalse(Path(value['output']).is_relative_to(build.ROOT))
+                lunahook_step = next(step for step in value['steps']
+                                     if 'build-lunahook.py' in step['command'][1])
+                output = Path(lunahook_step['command'][lunahook_step['command'].index('--output') + 1])
+                self.assertFalse(output.is_relative_to(build.ROOT))
+
+    def test_local_lunahook_build_rejects_output_inside_checkout(self):
+        with mock.patch.dict(os.environ):
+            os.environ.pop('MALTORIA_LUNAHOOK_ARTIFACTS', None)
+            output = str(build.ROOT / 'build/x')
+            args = build.parser().parse_args([
+                'plan', 'whisky-linux-amd64', '--wine-repo', str(self.repo), '--output', output])
+            with self.assertRaisesRegex(ValueError, '源码检出目录之外'):
+                build.plan(args)
+
+            args = build.parser().parse_args([
+                'plan', 'whisky-linux-amd64', '--wine-repo', str(self.repo), '--output', output,
+                '--without-lunahook'])
+            self.assertEqual(str(Path(output).resolve()), build.plan(args)['output'])
 
     def test_runtime_validation_follows_packaging_and_recipe_cache_changes(self):
         before = build.plan(self.args('wine-linux-amd64'))
@@ -245,6 +275,117 @@ class BuildTests(unittest.TestCase):
         self.assertIn('--lunahook', result.stderr)
         self.assertIn('--without-lunahook', result.stderr)
         self.assertFalse((self.root / 'blocked-out').exists())
+
+    def test_doctor_toolchain_skips_xwin_when_sysroot_cached(self):
+        builder_module = build.lunahook_builder()
+        xwin_dir = self.root / 'xwin'
+
+        def populate_sysroot():
+            for relative in ('crt/include', 'sdk/include', 'crt/lib/x86', 'crt/lib/x86_64',
+                             'sdk/lib/um/x86', 'sdk/lib/um/x86_64',
+                             'sdk/lib/ucrt/x86', 'sdk/lib/ucrt/x86_64'):
+                (xwin_dir / relative).mkdir(parents=True, exist_ok=True)
+
+        def fake_builder(has_xwin=False):
+            return SimpleNamespace(
+                locate_tool=lambda name: Path('/fake/' + name) if name != 'xwin' or has_xwin else None,
+                default_xwin_dir=lambda: xwin_dir,
+                xwin_sysroot_ready=builder_module.xwin_sysroot_ready,
+            )
+
+        populate_sysroot()
+        ready = build.lunahook_toolchain_check(fake_builder())
+        self.assertTrue(ready['passed'])
+
+        (xwin_dir / 'sdk/lib/ucrt/x86').rmdir()
+        missing = build.lunahook_toolchain_check(fake_builder())
+        self.assertFalse(missing['passed'])
+        self.assertIn('xwin', missing['name'])
+
+        available = build.lunahook_toolchain_check(fake_builder(has_xwin=True))
+        self.assertTrue(available['passed'])
+
+    def test_locate_tool_checks_versioned_homebrew_llvm(self):
+        builder = build.lunahook_builder()
+        homebrew_opt = Path('/opt/homebrew/opt')
+        llvm19 = homebrew_opt / 'llvm@19/bin'
+        llvm22 = homebrew_opt / 'llvm@22/bin'
+
+        def fake_glob(path, pattern):
+            if path == homebrew_opt and pattern == 'llvm@*/bin':
+                return [llvm19, llvm22]
+            return []
+
+        with mock.patch.object(builder.Path, 'glob', fake_glob), \
+                mock.patch.object(builder.Path, 'is_dir', lambda _path: True):
+            directories = builder.llvm_search_dirs()
+
+        self.assertLess(directories.index(llvm22), directories.index(llvm19))
+        self.assertIn(llvm22, directories)
+        self.assertIn(llvm19, directories)
+
+    def test_locate_tool_uses_llvm_dir_without_side_effects(self):
+        builder = build.lunahook_builder()
+        llvm_dir = self.root / 'llvm'
+        llvm_dir.mkdir()
+        tool = llvm_dir / 'maltoria-fake-tool'
+        tool.write_text('fixture\n')
+        tool.chmod(0o755)
+        with mock.patch.dict(os.environ, {'LLVM_DIR': str(llvm_dir)}):
+            self.assertEqual(tool, builder.locate_tool('maltoria-fake-tool'))
+            self.assertIsNone(builder.locate_tool('definitely-missing-tool-xyz'))
+
+    def test_menu_docker_hides_local_build(self):
+        payload = self.root / 'payload'
+        (payload / 'x86').mkdir(parents=True)
+        (payload / 'x64').mkdir()
+        (payload / 'sources/Maltoria').mkdir(parents=True)
+        (payload / 'sources/Maltoria/SOURCE-COMMIT.txt').write_text('abc123\n')
+
+        def args(executor='docker'):
+            return build.parser().parse_args([
+                'plan', 'whisky-linux-amd64', '--executor', executor,
+                '--wine-repo', str(self.repo), '--output', str(self.root / f'{executor}-menu-output')])
+
+        def choose(value, detected=None, expect_error=False):
+            prompts = []
+            with mock.patch.object(build, 'discover_local_lunahook', return_value=detected), \
+                    mock.patch('builtins.input', side_effect=lambda prompt: prompts.append(prompt) or value):
+                if expect_error:
+                    with self.assertRaises(ValueError):
+                        build.choose_lunahook(args_under_test)
+                else:
+                    build.choose_lunahook(args_under_test)
+            return prompts
+
+        args_under_test = args()
+        prompts = choose('', expect_error=True)
+        self.assertNotIn('本机交叉编译', prompts[0])
+
+        args_under_test = args()
+        prompts = choose('skip')
+        self.assertTrue(args_under_test.without_lunahook)
+        self.assertNotIn('本机交叉编译', prompts[0])
+
+        args_under_test = args()
+        prompts = choose(str(payload))
+        self.assertEqual(payload.resolve(), args_under_test.lunahook)
+        self.assertNotIn('本机交叉编译', prompts[0])
+        docker_plan = build.plan(args_under_test)
+        run_command = docker_plan['steps'][1]['command']
+        self.assertIn(f'type=bind,src={payload.resolve()},dst=/lunahook,readonly', run_command)
+        self.assertIn('/lunahook', run_command)
+
+        args_under_test = args()
+        prompts = choose('', detected=payload)
+        self.assertEqual(payload.resolve(), args_under_test.lunahook)
+        self.assertNotIn('本机交叉编译', prompts[0])
+
+        args_under_test = args('native')
+        prompts = choose('', detected=None)
+        self.assertIsNone(args_under_test.lunahook)
+        self.assertFalse(args_under_test.without_lunahook)
+        self.assertIn('本机交叉编译', prompts[0])
 
     def test_cancellation_terminates_child_and_keeps_report(self):
         marker = self.root / 'child.pid'
