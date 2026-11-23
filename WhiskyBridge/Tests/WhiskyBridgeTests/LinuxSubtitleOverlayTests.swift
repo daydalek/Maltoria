@@ -35,9 +35,11 @@ struct LinuxSubtitleOverlayTests {
         #expect(initial.object?["platform"] == .string("Linux"))
         #expect(initial.object?["mode"] == .string("gpui"))
         let configured = try await native.call("translation.overlay.configure", params: ["settings": .object([
-            "visible": .bool(true), "width": .integer(720), "x": .integer(42), "textColor": .string("#12ABef")
+            "visible": .bool(true), "width": .integer(720), "x": .integer(42), "textColor": .string("#12ABef"),
+            "maxEntries": .integer(5)
         ])], workspace: workspace)
         #expect(configured.object?["settings"]?.object?["visible"] == .bool(true))
+        #expect(configured.object?["settings"]?.object?["maxEntries"] == .integer(5))
         let file = directory.appendingPathComponent("subtitle-overlay.json")
         let permissions = try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int
         #expect(permissions == 0o600)
@@ -45,6 +47,14 @@ struct LinuxSubtitleOverlayTests {
         #expect(restored.settings.visible == false)
         #expect(restored.settings.width == 720 && restored.settings.x == 42)
         #expect(restored.settings.textColor == "#12ABef")
+        #expect(restored.settings.maxEntries == 5)
+        #expect(throws: (any Error).self) {
+            try restored.call("translation.overlay.configure", params: ["maxEntries": .integer(0)])
+        }
+        #expect(throws: (any Error).self) {
+            try restored.call("translation.overlay.configure", params: ["maxEntries": .integer(11)])
+        }
+        #expect(restored.settings.maxEntries == 5)
         #expect(throws: (any Error).self) {
             try restored.call("translation.overlay.configure", params: ["opacity": .integer(2)])
         }

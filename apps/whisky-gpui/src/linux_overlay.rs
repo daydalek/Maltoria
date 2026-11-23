@@ -308,6 +308,27 @@ impl Render for SubtitleWindow {
         let color = |hex: &str| {
             rgb(u32::from_str_radix(hex.trim_start_matches('#'), 16).unwrap_or(0xFFFFFF))
         };
+        let dimmed_color = |hex: &str| {
+            let value = u32::from_str_radix(hex.trim_start_matches('#'), 16).unwrap_or(0xFFFFFF);
+            rgba((value << 8) | 0xB8)
+        };
+        let max_entries = settings.max_entries.clamp(1, 10) as usize;
+        let history_entries: Vec<_> = if max_entries > 1 && self.subtitle.entries.len() > 1 {
+            let prior = &self.subtitle.entries[..self.subtitle.entries.len() - 1];
+            let keep = prior.len().min(max_entries - 1);
+            prior[prior.len() - keep..]
+                .iter()
+                .filter(|entry| {
+                    (settings.show_source && !entry.source.is_empty())
+                        || (settings.show_translation && !entry.translation.is_empty())
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let has_history = !history_entries.is_empty();
+        let source_size = px((settings.font_size * 0.75).max(12.) as f32);
+        let translation_size = px(settings.font_size as f32);
         div()
             .size_full()
             .overflow_hidden()
@@ -320,12 +341,42 @@ impl Render for SubtitleWindow {
             .py(px(12.))
             .flex()
             .flex_col()
+            .when(has_history, |d| d.justify_end())
             .gap(px(8.))
             .font_family("Noto Sans CJK SC")
+            .children(history_entries.into_iter().map(|entry| {
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(4.))
+                    .when(settings.show_source && !entry.source.is_empty(), |d| {
+                        d.child(
+                            div()
+                                .text_size(source_size)
+                                .text_color(dimmed_color(&settings.source_text_color))
+                                .child(entry.source.chars().take(4096).collect::<String>()),
+                        )
+                    })
+                    .when(
+                        settings.show_translation && !entry.translation.is_empty(),
+                        |d| {
+                            d.child(
+                                div()
+                                    .text_size(translation_size)
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(dimmed_color(&settings.text_color))
+                                    .child(
+                                        entry.translation.chars().take(4096).collect::<String>(),
+                                    ),
+                            )
+                        },
+                    )
+                    .child(div().h(px(1.)).w_full().mt(px(4.)).bg(rgba(0xFFFFFF24)))
+            }))
             .when(settings.show_source, |d| {
                 d.child(
                     div()
-                        .text_size(px((settings.font_size * 0.75).max(12.) as f32))
+                        .text_size(source_size)
                         .text_color(color(&settings.source_text_color))
                         .child(self.subtitle.source.chars().take(4096).collect::<String>()),
                 )
@@ -335,7 +386,7 @@ impl Render for SubtitleWindow {
                 |d| {
                     d.child(
                         div()
-                            .text_size(px(settings.font_size as f32))
+                            .text_size(translation_size)
                             .font_weight(FontWeight::MEDIUM)
                             .text_color(color(&settings.text_color))
                             .child(

@@ -107,7 +107,8 @@ public actor TranslationSession {
     private let providerDisplayName: String
     private var entries: [TranslationHistoryEntry]
     private var activeEntryID: UUID?
-    private var activeTask: Task<Void, Never>?
+    private var activeTasks: [UUID: Task<Void, Never>] = [:]
+    private var activeTaskOrder: [UUID] = []
     private var requestEpoch: UInt64 = 0
     private var requestEpochByEntry: [UUID: UInt64] = [:]
     private var latestSourceVersions: [UUID: SourceVersion] = [:]
@@ -188,7 +189,7 @@ public actor TranslationSession {
         return session
     }
 
-    public func submit(_ source: FinalizedTranslationSource) async throws -> UUID {
+    public func submit(_ source: FinalizedTranslationSource, retainActiveCount: Int = 1) async throws -> UUID {
         try settings.validate()
         guard !gameID.isEmpty, gameID.utf8.count <= 256,
               !source.text.isEmpty, source.text.utf8.count <= 1_048_576,
@@ -214,13 +215,15 @@ public actor TranslationSession {
             return previous.entryID
         }
 
+        let maxConcurrent = max(1, min(10, retainActiveCount))
         advanceRequestEpoch()
         let epoch = requestEpoch
-        cancelCurrentResponse(markCancelled: true, invalidateActiveRequest: true)
+        evictActiveResponses(keepingAtMost: maxConcurrent - 1)
         let entry = TranslationHistoryEntry(source: source)
         entries.append(entry)
         activeEntryID = entry.id
         requestEpochByEntry[entry.id] = epoch
+        activeTaskOrder.append(entry.id)
         recordSourceVersion(version, eventID: source.eventID)
         lastDeduplicated = (
             source.streamID,
@@ -237,19 +240,19 @@ public actor TranslationSession {
         let service = self.service
         let configuration = self.configuration
         try await persistHistory()
-        guard isCurrentRequest(epoch, entryID: entry.id) else { throw CancellationError() }
+        guard isEntryRequestValid(epoch, entryID: entry.id) else { throw CancellationError() }
 
         if let cached = await cache.value(for: key) {
-            guard isCurrentRequest(epoch, entryID: entry.id) else { throw CancellationError() }
+            guard isEntryRequestValid(epoch, entryID: entry.id) else { throw CancellationError() }
             updateEntry(entry.id) { $0.translatedText = cached
                 $0.status = .completed
             }
-            requestEpochByEntry.removeValue(forKey: entry.id)
+            finishActiveTracking(entryID: entry.id)
             try await persistHistory()
-            guard requestEpoch == epoch, activeEntryID == entry.id else { throw CancellationError() }
+            guard isEntryRetained(entryID: entry.id) else { throw CancellationError() }
             return entry.id
         }
-        guard isCurrentRequest(epoch, entryID: entry.id) else { throw CancellationError() }
+        guard isEntryRequestValid(epoch, entryID: entry.id) else { throw CancellationError() }
 
         if settings.sentenceCacheEnabled,
            let sentenceCache,
@@ -263,21 +266,21 @@ public actor TranslationSession {
                modelID: configuration.modelID ?? "",
                customPrompt: request.customPrompt
            ) {
-            guard isCurrentRequest(epoch, entryID: entry.id) else { throw CancellationError() }
+            guard isEntryRequestValid(epoch, entryID: entry.id) else { throw CancellationError() }
             updateEntry(entry.id) {
                 $0.translatedText = persistentHit.translatedText
                 $0.status = .completed
                 $0.failureDescription = nil
             }
             await cache.insert(persistentHit.translatedText, for: key)
-            requestEpochByEntry.removeValue(forKey: entry.id)
+            finishActiveTracking(entryID: entry.id)
             try await persistHistory()
-            guard requestEpoch == epoch, activeEntryID == entry.id else { throw CancellationError() }
+            guard isEntryRetained(entryID: entry.id) else { throw CancellationError() }
             return entry.id
         }
-        guard isCurrentRequest(epoch, entryID: entry.id) else { throw CancellationError() }
+        guard isEntryRequestValid(epoch, entryID: entry.id) else { throw CancellationError() }
 
-        activeTask = Task { [weak self] in
+        activeTasks[entry.id] = Task { [weak self] in
             do {
                 for try await event in service.translate(request, using: configuration) {
                     await self?.accept(event, entryID: entry.id, requestEpoch: epoch, cacheKey: key)
@@ -292,6 +295,11 @@ public actor TranslationSession {
     }
 
     public func history() -> [TranslationHistoryEntry] { entries }
+
+    public func entries(for ids: Set<UUID>) -> [TranslationHistoryEntry] {
+        guard !ids.isEmpty else { return [] }
+        return entries.filter { ids.contains($0.id) }
+    }
 
     public func activeEntry() -> TranslationHistoryEntry? {
         guard let activeEntryID else { return nil }
@@ -441,8 +449,7 @@ public actor TranslationSession {
                 guard requestEpochByEntry[entryID] == eventEpoch,
                       entries.contains(where: { $0.id == entryID })
                 else { return }
-                requestEpochByEntry.removeValue(forKey: entryID)
-                if requestEpoch == eventEpoch, activeEntryID == entryID { activeTask = nil }
+                finishActiveTracking(entryID: entryID)
             }
         case .usage: return
         }
@@ -454,32 +461,57 @@ public actor TranslationSession {
         updateEntry(entryID) { $0.status = .failed
             $0.failureDescription = Self.safeFailureDescription(error)
         }
-        requestEpochByEntry.removeValue(forKey: entryID)
-        if requestEpoch == eventEpoch, activeEntryID == entryID { activeTask = nil }
+        finishActiveTracking(entryID: entryID)
         try? await persistHistory()
     }
 
     private func markCancelled(entryID: UUID, requestEpoch eventEpoch: UInt64) async {
         guard requestEpochByEntry[entryID] == eventEpoch, entries.contains(where: { $0.id == entryID }) else { return }
         updateEntry(entryID) { if $0.status == .pending { $0.status = .cancelled } }
-        requestEpochByEntry.removeValue(forKey: entryID)
-        if requestEpoch == eventEpoch, activeEntryID == entryID { activeTask = nil }
+        finishActiveTracking(entryID: entryID)
         try? await persistHistory()
     }
 
+    private func evictActiveResponses(keepingAtMost limit: Int) {
+        while activeTaskOrder.count > limit {
+            let oldID = activeTaskOrder.removeFirst()
+            activeTasks.removeValue(forKey: oldID)?.cancel()
+            updateEntry(oldID) { if $0.status == .pending { $0.status = .cancelled } }
+            requestEpochByEntry.removeValue(forKey: oldID)
+        }
+    }
+
     private func cancelCurrentResponse(markCancelled: Bool, invalidateActiveRequest: Bool) {
-        activeTask?.cancel()
-        activeTask = nil
+        let trackedIDs = Set(activeTaskOrder).union(activeTasks.keys)
+        for task in activeTasks.values {
+            task.cancel()
+        }
+        activeTasks.removeAll()
+        activeTaskOrder.removeAll()
+        for id in trackedIDs {
+            if markCancelled { updateEntry(id) { if $0.status == .pending { $0.status = .cancelled } } }
+            if invalidateActiveRequest { requestEpochByEntry.removeValue(forKey: id) }
+        }
         if let activeEntryID {
             if markCancelled { updateEntry(activeEntryID) { if $0.status == .pending { $0.status = .cancelled } } }
             if invalidateActiveRequest { requestEpochByEntry.removeValue(forKey: activeEntryID) }
         }
     }
 
+    private func finishActiveTracking(entryID: UUID) {
+        requestEpochByEntry.removeValue(forKey: entryID)
+        activeTasks.removeValue(forKey: entryID)
+        activeTaskOrder.removeAll { $0 == entryID }
+    }
+
     private func advanceRequestEpoch() { requestEpoch &+= 1 }
 
-    private func isCurrentRequest(_ epoch: UInt64, entryID: UUID) -> Bool {
-        requestEpoch == epoch && activeEntryID == entryID && requestEpochByEntry[entryID] == epoch
+    private func isEntryRequestValid(_ epoch: UInt64, entryID: UUID) -> Bool {
+        requestEpochByEntry[entryID] == epoch && entries.contains(where: { $0.id == entryID })
+    }
+
+    private func isEntryRetained(entryID: UUID) -> Bool {
+        entries.contains(where: { $0.id == entryID })
     }
 
     private func recordSourceVersion(_ version: SourceVersion, eventID: UUID) {
@@ -504,6 +536,11 @@ public actor TranslationSession {
         }
         let retained = Set(entries.map(\.id))
         requestEpochByEntry = requestEpochByEntry.filter { retained.contains($0.key) }
+        for (id, task) in activeTasks where !retained.contains(id) {
+            task.cancel()
+            activeTasks.removeValue(forKey: id)
+        }
+        activeTaskOrder.removeAll { !retained.contains($0) }
     }
 
     private func persistHistory() async throws {

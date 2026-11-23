@@ -91,6 +91,7 @@ public final class ApplicationCaptureService {
     public typealias ClientFactory = @MainActor (String, String) throws -> HookClientBootstrap
     public var onSubtitle: ((JSONValue) -> Void)?
     public var onStateUpdate: ((JSONValue) -> Void)?
+    public var visibleEntryLimit: () -> Int = { 1 }
     private let profiles: ApplicationTranslationService
     private let launcher: Launcher
     private let clientFactory: ClientFactory
@@ -123,16 +124,31 @@ public final class ApplicationCaptureService {
     private var autoBoundCount = 0
     private var lastActivity: [String: UInt64] = [:]
     private var nextActivityCounter: UInt64 = 0
+    private struct SubtitleEntryRecord: Equatable {
+        var sourceID: UUID
+        var entryID: UUID?
+        var streamID: String
+        var source: String
+        var translation: String
+        var speaker: String?
+        var status: String
+        var error: String?
+    }
+
+    private static let maxSubtitleHistoryEntries = 10
+
     private var speaker: String?
     private var activeSourceID: UUID?
     private var activeEntryID: UUID?
     private var selectionEpoch = 0
     private var captureState = "stopped"
     private var lastError: String?
+    private var subtitleEntries: [SubtitleEntryRecord] = []
     private var subtitle: JSONValue = .object([
         "source": .string(""),
         "translation": .string(""),
-        "status": .string("idle")
+        "status": .string("idle"),
+        "entries": .array([])
     ])
     private var cursor: Int64 = 0
     private var eventBuffer: [JSONValue] = []
@@ -242,7 +258,11 @@ public final class ApplicationCaptureService {
             selectionEpoch += 1
             activeSourceID = nil
             activeEntryID = nil
-            subtitle = .object(["source": .string(""), "translation": .string(""), "status": .string("idle")])
+            subtitleEntries = []
+            subtitle = .object([
+                "source": .string(""), "translation": .string(""), "status": .string("idle"),
+                "entries": .array([])
+            ])
             emit("subtitle", subtitle)
             onSubtitle?(subtitle)
             try await session?.clearHistory()
@@ -295,7 +315,11 @@ public final class ApplicationCaptureService {
         providerID = selectedProvider
         captureState = "connecting"
         lastError = nil
-        subtitle = .object(["source": .string(""), "translation": .string(""), "status": .string("idle")])
+        subtitleEntries = []
+        subtitle = .object([
+            "source": .string(""), "translation": .string(""), "status": .string("idle"),
+            "entries": .array([])
+        ])
         activeSourceID = nil
         activeEntryID = nil
         onSubtitle?(subtitle)
@@ -314,6 +338,32 @@ public final class ApplicationCaptureService {
                 restoreHistory: restoreHistory
             )
             guard captureID == id else { throw CancellationError() }
+            if restoreHistory, let restored = await session?.history(), !restored.isEmpty {
+                subtitleEntries = restored.suffix(Self.maxSubtitleHistoryEntries).map { item in
+                    SubtitleEntryRecord(
+                        sourceID: item.source.eventID,
+                        entryID: item.id,
+                        streamID: item.source.streamID,
+                        source: item.source.text,
+                        translation: item.translatedText ?? "",
+                        speaker: item.source.speaker,
+                        status: item.status.rawValue,
+                        error: item.failureDescription
+                    )
+                }
+                if let last = subtitleEntries.last {
+                    subtitle = .object([
+                        "source": .string(last.source),
+                        "translation": .string(String(last.translation.prefix(16_384))),
+                        "speaker": last.speaker.map(JSONValue.string) ?? .null,
+                        "status": .string(last.status),
+                        "error": last.error.map(JSONValue.string) ?? .null,
+                        "entries": encodedSubtitleEntries()
+                    ])
+                    emit("subtitle", subtitle)
+                    onSubtitle?(subtitle)
+                }
+            }
             captureState = "selecting"
             updates = Task { [weak self] in
                 while !Task.isCancelled {
@@ -602,18 +652,31 @@ public final class ApplicationCaptureService {
             }
             guard let session, let providerID else { return }
             let hookCode = record["hookCode"]?.string ?? ""
-            let nextText = coalescedText(for: text, key: key, hookCode: hookCode)
+            let coalesced = coalescedText(for: text, key: key, hookCode: hookCode)
+            let nextText = coalesced.text
             cancelDebounce()
             let generation = debounceGeneration
+            let previousSourceID = activeSourceID
             let sourceID = UUID()
             let selectedAt = selectionEpoch
             let currentSpeaker = speaker
             activeSourceID = sourceID
             activeEntryID = nil
+            let visibleLimit = max(1, min(Self.maxSubtitleHistoryEntries, visibleEntryLimit()))
+            recordIncomingSubtitleEntry(
+                sourceID: sourceID,
+                previousSourceID: previousSourceID,
+                streamID: key,
+                merged: coalesced.merged,
+                source: nextText,
+                speaker: currentSpeaker,
+                visibleLimit: visibleLimit
+            )
             subtitle = .object([
                 "source": .string(nextText), "translation": .string(""),
                 "speaker": currentSpeaker.map(JSONValue.string) ?? .null,
-                "kind": .string(role), "status": .string("pending"), "error": .null
+                "kind": .string(role), "status": .string("pending"), "error": .null,
+                "entries": encodedSubtitleEntries()
             ])
             emit("subtitle", subtitle)
             onSubtitle?(subtitle)
@@ -673,7 +736,7 @@ public final class ApplicationCaptureService {
 
     private static let maxCoalescedDebounceChars = 2_000
 
-    private func coalescedText(for text: String, key: String, hookCode: String) -> String {
+    private func coalescedText(for text: String, key: String, hookCode: String) -> (text: String, merged: Bool) {
         guard Self.isCharByCharHook(hookCode),
               debounceTask != nil,
               pendingDebounceKey == key,
@@ -681,15 +744,15 @@ public final class ApplicationCaptureService {
               !pending.hasSuffix("\n"),
               !pending.hasSuffix("\r")
         else {
-            return text
+            return (text, false)
         }
         if text.hasPrefix(pending) {
-            return text
+            return (text, true)
         }
         guard pending.count + text.count <= Self.maxCoalescedDebounceChars else {
-            return text
+            return (text, false)
         }
-        return pending + text
+        return (pending + text, true)
     }
 
     /// Returns `true` only when `hookCode` matches a LunaHook character-by-character hook
@@ -760,20 +823,35 @@ public final class ApplicationCaptureService {
                   activeSourceID == sourceID,
                   debounceGeneration == generation
             else { return }
-            let entryID = try await session.submit(FinalizedTranslationSource(
-                eventID: sourceID,
-                revision: 0,
-                streamID: key,
-                generation: 1,
-                text: text,
-                speaker: speaker
-            ))
-            guard channel == channelID,
-                  selectedAt == selectionEpoch,
-                  activeSourceID == sourceID,
-                  debounceGeneration == generation
-            else { return }
-            activeEntryID = entryID
+            let retainCount = max(1, min(Self.maxSubtitleHistoryEntries, visibleEntryLimit()))
+            let visibleStart = max(0, subtitleEntries.count - retainCount)
+            let pendingToSubmit = subtitleEntries[visibleStart...].filter {
+                $0.entryID == nil && $0.status == "pending"
+            }
+            for item in pendingToSubmit {
+                guard channel == channelID,
+                      selectedAt == selectionEpoch,
+                      activeSourceID == sourceID,
+                      debounceGeneration == generation
+                else { return }
+                let entryID = try await session.submit(FinalizedTranslationSource(
+                    eventID: item.sourceID,
+                    revision: 0,
+                    streamID: item.streamID,
+                    generation: 1,
+                    text: item.source,
+                    speaker: item.speaker
+                ), retainActiveCount: retainCount)
+                guard channel == channelID,
+                      selectedAt == selectionEpoch,
+                      activeSourceID == sourceID,
+                      debounceGeneration == generation
+                else { return }
+                linkSubtitleEntry(sourceID: item.sourceID, entryID: entryID)
+                if item.sourceID == sourceID {
+                    activeEntryID = entryID
+                }
+            }
             await refreshSubtitle()
         } catch is CancellationError {
             return
@@ -784,9 +862,15 @@ public final class ApplicationCaptureService {
                   debounceGeneration == generation
             else { return }
             setError(error)
+            for index in subtitleEntries.indices
+                where subtitleEntries[index].entryID == nil && subtitleEntries[index].status == "pending" {
+                subtitleEntries[index].status = "failed"
+                subtitleEntries[index].error = lastError
+            }
             if var display = subtitle.object {
                 display["status"] = .string("failed")
                 display["error"] = .string(lastError!)
+                display["entries"] = encodedSubtitleEntries()
                 subtitle = .object(display)
                 emit("subtitle", subtitle)
                 onSubtitle?(subtitle)
@@ -795,19 +879,94 @@ public final class ApplicationCaptureService {
     }
 
     private func refreshSubtitle() async {
-        guard let session, let id = captureID, let active = await session.activeEntry(), captureID == id,
-              active.id == activeEntryID
-        else { return }
+        guard let session, let id = captureID else { return }
+        let linkedIDs = Set(subtitleEntries.compactMap(\.entryID))
+        guard !linkedIDs.isEmpty else { return }
+        let fetched = await session.entries(for: linkedIDs)
+        guard captureID == id else { return }
+        let byID = Dictionary(uniqueKeysWithValues: fetched.map { ($0.id, $0) })
+        for index in subtitleEntries.indices {
+            guard let entryID = subtitleEntries[index].entryID, let item = byID[entryID] else { continue }
+            subtitleEntries[index].translation = String((item.translatedText ?? "").prefix(16_384))
+            subtitleEntries[index].status = item.status.rawValue
+            subtitleEntries[index].error = item.failureDescription
+        }
         var display = subtitle.object ?? [:]
-        display["translation"] = .string(String((active.translatedText ?? "").prefix(16_384)))
-        display["translationTruncated"] = .bool((active.translatedText?.count ?? 0) > 16_384)
-        display["status"] = .string(active.status.rawValue)
-        display["error"] = active.failureDescription.map(JSONValue.string) ?? .null
+        if let activeEntryID, let active = byID[activeEntryID] {
+            let translationText = String((active.translatedText ?? "").prefix(16_384))
+            display["translation"] = .string(translationText)
+            display["translationTruncated"] = .bool((active.translatedText?.count ?? 0) > 16_384)
+            display["status"] = .string(active.status.rawValue)
+            display["error"] = active.failureDescription.map(JSONValue.string) ?? .null
+        }
+        display["entries"] = encodedSubtitleEntries()
         let next = JSONValue.object(display)
         if next != subtitle { subtitle = next
             emit("subtitle", next)
             onSubtitle?(next)
         }
+    }
+
+    private func recordIncomingSubtitleEntry(
+        sourceID: UUID,
+        previousSourceID: UUID?,
+        streamID: String,
+        merged: Bool,
+        source: String,
+        speaker: String?,
+        visibleLimit: Int
+    ) {
+        if merged,
+           let previousSourceID,
+           let index = subtitleEntries.lastIndex(where: { $0.sourceID == previousSourceID }) {
+            subtitleEntries[index].sourceID = sourceID
+            subtitleEntries[index].streamID = streamID
+            subtitleEntries[index].source = source
+            subtitleEntries[index].speaker = speaker
+            subtitleEntries[index].status = "pending"
+            subtitleEntries[index].error = nil
+            return
+        }
+        subtitleEntries.append(SubtitleEntryRecord(
+            sourceID: sourceID,
+            entryID: nil,
+            streamID: streamID,
+            source: source,
+            translation: "",
+            speaker: speaker,
+            status: "pending",
+            error: nil
+        ))
+        if subtitleEntries.count > Self.maxSubtitleHistoryEntries {
+            subtitleEntries.removeFirst(subtitleEntries.count - Self.maxSubtitleHistoryEntries)
+        }
+        let visibleStart = max(0, subtitleEntries.count - max(1, visibleLimit))
+        for index in 0 ..< visibleStart
+            where subtitleEntries[index].entryID == nil && subtitleEntries[index].status == "pending" {
+            subtitleEntries[index].status = "cancelled"
+        }
+    }
+
+    private func linkSubtitleEntry(sourceID: UUID, entryID: UUID) {
+        guard let currentIndex = subtitleEntries.lastIndex(where: { $0.sourceID == sourceID }) else { return }
+        if let existingIndex = subtitleEntries.firstIndex(where: { $0.entryID == entryID }),
+           existingIndex != currentIndex {
+            subtitleEntries.remove(at: currentIndex)
+            return
+        }
+        subtitleEntries[currentIndex].entryID = entryID
+    }
+
+    private func encodedSubtitleEntries() -> JSONValue {
+        .array(subtitleEntries.map { entry in
+            .object([
+                "source": .string(String(entry.source.prefix(4_096))),
+                "translation": .string(String(entry.translation.prefix(4_096))),
+                "speaker": entry.speaker.map(JSONValue.string) ?? .null,
+                "status": .string(entry.status),
+                "error": entry.error.map(JSONValue.string) ?? .null
+            ])
+        })
     }
 
     public func preset(container: URL, entryID: String) async -> CapturePreset? {
@@ -985,8 +1144,12 @@ public final class ApplicationCaptureService {
     }
 
     private func markSubtitleCancelled() {
+        for index in subtitleEntries.indices where subtitleEntries[index].status == "pending" {
+            subtitleEntries[index].status = "cancelled"
+        }
         if var value = subtitle.object, value["status"] == .string("pending") {
             value["status"] = .string("cancelled")
+            value["entries"] = encodedSubtitleEntries()
             subtitle = .object(value)
             emit("subtitle", subtitle)
             onSubtitle?(subtitle)

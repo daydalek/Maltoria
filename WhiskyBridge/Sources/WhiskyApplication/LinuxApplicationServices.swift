@@ -44,6 +44,8 @@ public final class LinuxApplicationServices: NativeApplicationServices {
     private let finalObservation: (() async -> Void)?
     private let subtitleOverlay: LinuxSubtitleOverlay
 
+    public var translationOverlayMaxEntries: Int { subtitleOverlay.settings.maxEntries }
+
     public init(
         runtime: RuntimeService? = nil,
         searchPaths: [URL]? = nil,

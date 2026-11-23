@@ -25,6 +25,7 @@ public struct SubtitleOverlaySettings: Codable, Equatable, Sendable {
     public var clickThrough = true
     public var showSource = true
     public var showTranslation = true
+    public var maxEntries: Int = 1
     public var fontSize: Double = 28
     public var opacity: Double = 0.85
     public var textColor: String = "#FFFFFF"
@@ -39,7 +40,7 @@ public struct SubtitleOverlaySettings: Codable, Equatable, Sendable {
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case visible, clickThrough, showSource, showTranslation, fontSize, opacity,
+        case visible, clickThrough, showSource, showTranslation, maxEntries, fontSize, opacity,
              // swiftlint:disable:next identifier_name
              textColor, sourceTextColor, width, height, x, y
     }
@@ -50,6 +51,7 @@ public struct SubtitleOverlaySettings: Codable, Equatable, Sendable {
         clickThrough = try values.decodeIfPresent(Bool.self, forKey: .clickThrough) ?? true
         showSource = try values.decodeIfPresent(Bool.self, forKey: .showSource) ?? true
         showTranslation = try values.decodeIfPresent(Bool.self, forKey: .showTranslation) ?? true
+        maxEntries = try values.decodeIfPresent(Int.self, forKey: .maxEntries) ?? 1
         fontSize = try values.decodeIfPresent(Double.self, forKey: .fontSize) ?? 28
         opacity = try values.decodeIfPresent(Double.self, forKey: .opacity) ?? 0.85
         textColor = try values.decodeIfPresent(String.self, forKey: .textColor) ?? "#FFFFFF"
@@ -61,7 +63,8 @@ public struct SubtitleOverlaySettings: Codable, Equatable, Sendable {
     }
 
     public func validate() throws {
-        guard fontSize.isFinite, (12 ... 72).contains(fontSize),
+        guard (1 ... 10).contains(maxEntries),
+              fontSize.isFinite, (12 ... 72).contains(fontSize),
               opacity.isFinite, (0.0 ... 1.0).contains(opacity),
               Self.isValidHexColor(textColor),
               Self.isValidHexColor(sourceTextColor),

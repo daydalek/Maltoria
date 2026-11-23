@@ -106,6 +106,16 @@ pub(crate) struct CaptureThread {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct SubtitleEntry {
+    pub(crate) source: String,
+    pub(crate) translation: String,
+    pub(crate) speaker: Option<String>,
+    pub(crate) status: String,
+    pub(crate) error: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct Subtitle {
     pub(crate) source: String,
     pub(crate) translation: String,
@@ -115,6 +125,8 @@ pub(crate) struct Subtitle {
     pub(crate) error: Option<String>,
     #[serde(default)]
     pub(crate) translation_truncated: bool,
+    #[serde(default)]
+    pub(crate) entries: Vec<SubtitleEntry>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -321,6 +333,10 @@ fn default_overlay_source_text_color() -> String {
     "#D4D4D8".into()
 }
 
+fn default_overlay_max_entries() -> u32 {
+    1
+}
+
 pub(crate) fn is_valid_hex_color(value: &str) -> bool {
     let bytes = value.as_bytes();
     bytes.len() == 7 && bytes[0] == b'#' && bytes[1..].iter().all(u8::is_ascii_hexdigit)
@@ -333,6 +349,8 @@ pub(crate) struct OverlaySettings {
     pub(crate) click_through: bool,
     pub(crate) show_source: bool,
     pub(crate) show_translation: bool,
+    #[serde(default = "default_overlay_max_entries")]
+    pub(crate) max_entries: u32,
     pub(crate) font_size: f64,
     pub(crate) opacity: f64,
     pub(crate) width: f64,
@@ -352,6 +370,7 @@ impl Default for OverlaySettings {
             click_through: true,
             show_source: true,
             show_translation: true,
+            max_entries: default_overlay_max_entries(),
             font_size: 28.0,
             opacity: 0.85,
             width: 900.0,
@@ -366,7 +385,8 @@ impl Default for OverlaySettings {
 
 impl OverlaySettings {
     pub(crate) fn validate(&self) -> bool {
-        self.font_size.is_finite()
+        (1..=10).contains(&self.max_entries)
+            && self.font_size.is_finite()
             && (12.0..=72.0).contains(&self.font_size)
             && self.opacity.is_finite()
             && (0.0..=1.0).contains(&self.opacity)
@@ -392,6 +412,8 @@ pub(crate) fn apply_overlay_action(s: &mut OverlaySettings, action: &str) {
         "clickThrough" => s.click_through = !s.click_through,
         "showSource" => s.show_source = !s.show_source,
         "showTranslation" => s.show_translation = !s.show_translation,
+        "maxEntries-" => s.max_entries = s.max_entries.saturating_sub(1).max(1),
+        "maxEntries+" => s.max_entries = (s.max_entries + 1).min(10),
         "font-" => s.font_size -= 1.0,
         "font+" => s.font_size += 1.0,
         "opacity-" => s.opacity = step_overlay_opacity(s.opacity, -0.05),
@@ -2650,17 +2672,36 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(legacy.opacity, 0.0);
+        assert_eq!(legacy.max_entries, 1);
         assert_eq!(legacy.text_color, "#FFFFFF");
         assert_eq!(legacy.source_text_color, "#D4D4D8");
         assert!(legacy.validate());
 
+        settings.max_entries = 6;
         settings.text_color = "#FDE047".into();
         settings.source_text_color = "#BAE6FD".into();
         let encoded = serde_json::to_value(&settings).unwrap();
+        assert_eq!(encoded["maxEntries"], 6);
         assert_eq!(encoded["textColor"], "#FDE047");
         assert_eq!(encoded["sourceTextColor"], "#BAE6FD");
         let decoded: OverlaySettings = serde_json::from_value(encoded).unwrap();
         assert_eq!(decoded, settings);
+
+        // maxEntries bounds & clamping actions
+        settings.max_entries = 0;
+        assert!(!settings.validate());
+        settings.max_entries = 11;
+        assert!(!settings.validate());
+        settings.max_entries = 1;
+        assert!(settings.validate());
+        apply_overlay_action(&mut settings, "maxEntries-");
+        assert_eq!(settings.max_entries, 1);
+        for _ in 0..12 {
+            apply_overlay_action(&mut settings, "maxEntries+");
+        }
+        assert_eq!(settings.max_entries, 10);
+        apply_overlay_action(&mut settings, "maxEntries-");
+        assert_eq!(settings.max_entries, 9);
 
         // Opacity bounds
         settings.opacity = -0.01;

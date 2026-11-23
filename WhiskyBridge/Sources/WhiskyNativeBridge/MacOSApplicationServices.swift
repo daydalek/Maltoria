@@ -174,6 +174,8 @@ public final class MacOSApplicationServices: NativeApplicationServices {
 
     public func updateTranslationSubtitle(_ value: JSONValue) { subtitleOverlay.update(value) }
 
+    public var translationOverlayMaxEntries: Int { subtitleOverlay.maxEntries }
+
     public func registerCaptureContext(
         capture: ApplicationCaptureService,
         translation: ApplicationTranslationService,

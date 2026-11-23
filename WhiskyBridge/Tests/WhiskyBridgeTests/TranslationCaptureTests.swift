@@ -993,3 +993,77 @@ private func threadWithHookCode(_ hookCode: String) -> JSONValue {
     let alreadyStopped = await harness.service.stopIfMatching(gameIDs: [gameID])
     #expect(!alreadyStopped)
 }
+
+@Test @MainActor func captureSubtitleEntriesRetainUpToTenLinesIncludingDisplacedSentences() async throws {
+    let harness = try await CaptureHarness()
+    defer { harness.fixture.remove() }
+
+    let fullThread = threadWithHookCode("HS-4@401000:game.exe")
+    try await harness.attach(thread: fullThread)
+    try await harness.select()
+
+    for idx in 1 ... 12 {
+        await harness.clients.last!.text("台詞\(idx)", sequence: Int64(idx), thread: fullThread)
+    }
+
+    try await harness.wait {
+        await (harness.service.snapshot()).object?["subtitle"]?.object?["status"] == .string("completed")
+    }
+
+    let snapshot = await harness.service.snapshot()
+    let entries = snapshot.object?["subtitle"]?.object?["entries"]?.array ?? []
+    #expect(entries.count == 10)
+    #expect(entries.first?.object?["source"] == .string("台詞3"))
+    #expect(entries.last?.object?["source"] == .string("台詞12"))
+    #expect(entries.last?.object?["status"] == .string("completed"))
+
+    _ = try await harness.call("translation.history.clear")
+    let cleared = await harness.service.snapshot()
+    let clearedEntries = cleared.object?["subtitle"]?.object?["entries"]?.array ?? []
+    #expect(clearedEntries.isEmpty)
+
+    await harness.service.stop()
+}
+
+@Test @MainActor func captureTranslatesVisibleWindowWithoutCancellingWhilePreservingFastForwardDebounce() async throws {
+    let harness = try await CaptureHarness()
+    defer { harness.fixture.remove() }
+
+    _ = try await harness.profiles.call("translation.settings/save", params: [
+        "settings": .encoded(TranslationSettings(translationDebounceMs: 80, sentenceCacheEnabled: false))
+    ])
+    harness.service.visibleEntryLimit = { 3 }
+
+    let fullThread = threadWithHookCode("HS-4@401000:game.exe")
+    try await harness.attach(thread: fullThread)
+    try await harness.select()
+
+    // Fast-forward 5 lines within debounce: 0 requests during burst, then only the 3 visible lines translate
+    for idx in 1 ... 5 {
+        await harness.clients.last!.text("快進\(idx)", sequence: Int64(idx), thread: fullThread)
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(await harness.http.calls == 0)
+
+    try await harness.wait {
+        let entries = await (harness.service.snapshot()).object?["subtitle"]?.object?["entries"]?.array ?? []
+        guard entries.count == 5 else { return false }
+        let visible = entries.suffix(3)
+        return visible.allSatisfy {
+            $0.object?["status"] == .string("completed")
+                && !($0.object?["translation"]?.string ?? "").isEmpty
+        }
+    }
+
+    #expect(await harness.http.calls == 3)
+    let afterFastForward = await harness.service.snapshot()
+    let ffEntries = afterFastForward.object?["subtitle"]?.object?["entries"]?.array ?? []
+    #expect(ffEntries.count == 5)
+    #expect(ffEntries[0].object?["status"] == .string("cancelled"))
+    #expect(ffEntries[1].object?["status"] == .string("cancelled"))
+    #expect(ffEntries[2].object?["status"] == .string("completed"))
+    #expect(ffEntries[3].object?["status"] == .string("completed"))
+    #expect(ffEntries[4].object?["status"] == .string("completed"))
+
+    await harness.service.stop()
+}

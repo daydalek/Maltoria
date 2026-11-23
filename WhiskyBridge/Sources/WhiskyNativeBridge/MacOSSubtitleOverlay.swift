@@ -45,6 +45,11 @@ private final class PassthroughStackView: NSStackView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
+private final class PassthroughDividerView: NSView {
+    override var mouseDownCanMoveWindow: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
 private final class PassthroughLabel: NSTextField {
     override var mouseDownCanMoveWindow: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
@@ -431,6 +436,11 @@ final class MacOSSubtitleOverlay: NSObject, NSWindowDelegate {
     private var settings = SubtitleOverlaySettings()
     private let defaults: UserDefaults
     private var panel: SubtitlePanel?
+    private var historyStack: PassthroughStackView?
+    private var historyLabels: [NSTextField] = []
+    private var stackTopConstraint: NSLayoutConstraint?
+    private var stackBottomLessOrEqualConstraint: NSLayoutConstraint?
+    private var stackBottomEqualConstraint: NSLayoutConstraint?
     private var source: NSTextField?
     private var translation: NSTextField?
     private var status: NSTextField?
@@ -443,10 +453,12 @@ final class MacOSSubtitleOverlay: NSObject, NSWindowDelegate {
     var onSettingsChanged: ((SubtitleOverlaySettings) -> Void)?
     var isVisible: Bool { settings.visible }
     var clickThrough: Bool { settings.clickThrough }
+    var maxEntries: Int { settings.maxEntries }
     var panelForTesting: NSPanel? { panel }
     var sourceLabelForTesting: NSTextField? { source }
     var translationLabelForTesting: NSTextField? { translation }
     var statusLabelForTesting: NSTextField? { status }
+    var historyLabelsForTesting: [NSTextField] { historyLabels }
     var resizeHandleForTesting: OverlayResizeHandleView? { resizeHandle }
 
     init(domain: String) {
@@ -540,28 +552,28 @@ final class MacOSSubtitleOverlay: NSObject, NSWindowDelegate {
         stack.spacing = 8
         stack.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(stack)
+        let topConstraint = stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 12)
+        let bottomLessOrEqual = stack.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor, constant: -12)
+        let bottomEqual = stack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -12)
+        stackTopConstraint = topConstraint
+        stackBottomLessOrEqualConstraint = bottomLessOrEqual
+        stackBottomEqualConstraint = bottomEqual
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 18),
             stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -18),
-            stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 12),
-            stack.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor, constant: -12)
+            topConstraint,
+            bottomLessOrEqual
         ])
+        let history = PassthroughStackView()
+        history.orientation = .vertical
+        history.alignment = .leading
+        history.spacing = 6
+        history.isHidden = true
+        stack.addArrangedSubview(history)
+        history.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        historyStack = history
         func label() -> NSTextField {
-            let value = PassthroughLabel(wrappingLabelWithString: "")
-            value.isBezeled = false
-            value.isEditable = false
-            value.isSelectable = false
-            value.drawsBackground = false
-            value.textColor = .white
-            value.usesSingleLineMode = false
-            value.cell?.wraps = true
-            value.cell?.isScrollable = false
-            value.maximumNumberOfLines = 0
-            value.lineBreakMode = .byWordWrapping
-            value.cell?.truncatesLastVisibleLine = true
-            value.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-            value.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
-            value.setContentHuggingPriority(.required, for: .vertical)
+            let value = makeWrappingLabel()
             stack.addArrangedSubview(value)
             value.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
             return value
@@ -605,6 +617,25 @@ final class MacOSSubtitleOverlay: NSObject, NSWindowDelegate {
         return frame
     }
 
+    private func makeWrappingLabel() -> NSTextField {
+        let value = PassthroughLabel(wrappingLabelWithString: "")
+        value.isBezeled = false
+        value.isEditable = false
+        value.isSelectable = false
+        value.drawsBackground = false
+        value.textColor = .white
+        value.usesSingleLineMode = false
+        value.cell?.wraps = true
+        value.cell?.isScrollable = false
+        value.maximumNumberOfLines = 0
+        value.lineBreakMode = .byWordWrapping
+        value.cell?.truncatesLastVisibleLine = true
+        value.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        value.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        value.setContentHuggingPriority(.required, for: .vertical)
+        return value
+    }
+
     private func updateWrappingWidths(for panelWidth: CGFloat) {
         let wrappingWidth = max(120, panelWidth - 36)
         let widthChanged = lastWrappingWidth != wrappingWidth
@@ -612,6 +643,9 @@ final class MacOSSubtitleOverlay: NSObject, NSWindowDelegate {
         source?.preferredMaxLayoutWidth = wrappingWidth
         translation?.preferredMaxLayoutWidth = wrappingWidth
         status?.preferredMaxLayoutWidth = wrappingWidth
+        for label in historyLabels {
+            label.preferredMaxLayoutWidth = wrappingWidth
+        }
         if widthChanged {
             panel?.contentView?.layoutSubtreeIfNeeded()
         }
@@ -686,6 +720,16 @@ final class MacOSSubtitleOverlay: NSObject, NSWindowDelegate {
 
     private func refreshText() {
         let display = latest.object ?? [:]
+        let allEntries = display["entries"]?.array?.compactMap(\.object) ?? []
+        let visibleCount = max(1, min(10, settings.maxEntries))
+        let historySlice: ArraySlice<[String: JSONValue]> = if visibleCount > 1, allEntries.count > 1 {
+            allEntries.dropLast().suffix(visibleCount - 1)
+        } else {
+            []
+        }
+
+        rebuildHistoryViews(for: Array(historySlice))
+
         source?.stringValue = String((display["source"]?.string ?? "").prefix(4_096))
         translation?.stringValue = String((display["translation"]?.string ?? "").prefix(4_096))
         source?.isHidden = !settings.showSource
@@ -698,6 +742,73 @@ final class MacOSSubtitleOverlay: NSObject, NSWindowDelegate {
         }
         status?.stringValue = message
         status?.isHidden = message.isEmpty
+    }
+
+    private func rebuildHistoryViews(for entries: [[String: JSONValue]]) {
+        guard let historyStack else { return }
+        for view in historyStack.arrangedSubviews {
+            historyStack.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+        historyLabels.removeAll(keepingCapacity: true)
+
+        let sourceFont = NSFont.systemFont(ofSize: max(12, settings.fontSize * 0.75))
+        let sourceColor = Self.color(
+            fromHex: settings.sourceTextColor,
+            fallback: NSColor(srgbRed: 0.831, green: 0.831, blue: 0.847, alpha: 1.0)
+        ).withAlphaComponent(0.72)
+        let translationFont = NSFont.systemFont(ofSize: settings.fontSize, weight: .medium)
+        let translationColor = Self.color(fromHex: settings.textColor, fallback: .white).withAlphaComponent(0.72)
+        let wrappingWidth = lastWrappingWidth ?? max(120, CGFloat(settings.width) - 36)
+
+        var renderedAny = false
+        for entry in entries {
+            let sourceText = String((entry["source"]?.string ?? "").prefix(4_096))
+            let translationText = String((entry["translation"]?.string ?? "").prefix(4_096))
+            let showSrc = settings.showSource && !sourceText.isEmpty
+            let showTr = settings.showTranslation && !translationText.isEmpty
+            guard showSrc || showTr else { continue }
+            renderedAny = true
+
+            if showSrc {
+                let label = makeWrappingLabel()
+                label.font = sourceFont
+                label.textColor = sourceColor
+                label.stringValue = sourceText
+                label.preferredMaxLayoutWidth = wrappingWidth
+                historyStack.addArrangedSubview(label)
+                label.widthAnchor.constraint(equalTo: historyStack.widthAnchor).isActive = true
+                historyLabels.append(label)
+            }
+            if showTr {
+                let label = makeWrappingLabel()
+                label.font = translationFont
+                label.textColor = translationColor
+                label.stringValue = translationText
+                label.preferredMaxLayoutWidth = wrappingWidth
+                historyStack.addArrangedSubview(label)
+                label.widthAnchor.constraint(equalTo: historyStack.widthAnchor).isActive = true
+                historyLabels.append(label)
+            }
+
+            let divider = PassthroughDividerView()
+            divider.wantsLayer = true
+            divider.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.14).cgColor
+            divider.translatesAutoresizingMaskIntoConstraints = false
+            historyStack.addArrangedSubview(divider)
+            NSLayoutConstraint.activate([
+                divider.widthAnchor.constraint(equalTo: historyStack.widthAnchor),
+                divider.heightAnchor.constraint(equalToConstant: 1)
+            ])
+        }
+
+        historyStack.isHidden = !renderedAny
+        stackTopConstraint?.isActive = !renderedAny
+        stackBottomLessOrEqualConstraint?.isActive = !renderedAny
+        stackBottomEqualConstraint?.isActive = renderedAny
+        if renderedAny {
+            panel?.contentView?.layoutSubtreeIfNeeded()
+        }
     }
 
     func windowDidMove(_ notification: Notification) { rememberFrame() }

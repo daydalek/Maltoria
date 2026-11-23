@@ -45,6 +45,7 @@ public protocol NativeApplicationServices: AnyObject {
     func launchTranslationHelper(executable: URL, container: URL, environment: [String: String]) throws
         -> TranslationHelperHandle
     func updateTranslationSubtitle(_ value: JSONValue)
+    var translationOverlayMaxEntries: Int { get }
     func registerCaptureContext(
         capture: ApplicationCaptureService,
         translation: ApplicationTranslationService,
@@ -66,6 +67,7 @@ public extension NativeApplicationServices {
     }
 
     func updateTranslationSubtitle(_ value: JSONValue) {}
+    var translationOverlayMaxEntries: Int { 1 }
     func registerCaptureContext(
         capture: ApplicationCaptureService,
         translation: ApplicationTranslationService,
@@ -105,6 +107,7 @@ public final class ApplicationService {
                 )
             }
         capture.onSubtitle = { [weak self] value in self?.native?.updateTranslationSubtitle(value) }
+        capture.visibleEntryLimit = { [weak self] in max(1, min(10, self?.native?.translationOverlayMaxEntries ?? 1)) }
         return capture
     }()
 

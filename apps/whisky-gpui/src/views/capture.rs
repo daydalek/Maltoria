@@ -1190,6 +1190,17 @@ impl WhiskyApp {
                     )
                     .child(divider_line())
                     .child(overlay_adjust_row(
+                        crate::i18n::s().capture.overlay_history_lines,
+                        if s.max_entries == 1 {
+                            crate::i18n::s().capture.overlay_history_single.to_owned()
+                        } else {
+                            crate::i18n::s().capture.overlay_history_multi(s.max_entries)
+                        },
+                        &[("maxEntries-", "−"), ("maxEntries+", "+")],
+                        overlay_disabled,
+                        cx,
+                    ))
+                    .child(overlay_adjust_row(
                         crate::i18n::s().capture.font_size,
                         format!("{:.0} pt", s.font_size),
                         &[("font-", "−"), ("font+", "+")],

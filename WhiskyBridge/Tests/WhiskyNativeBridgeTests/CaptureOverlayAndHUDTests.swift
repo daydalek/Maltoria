@@ -704,3 +704,48 @@ import WhiskyBridgeProtocol
     #expect(hud.panelForTesting?.isVisible != true)
     #expect(!overlay.isVisible)
 }
+
+@Test @MainActor func subtitleOverlayRendersConfigurableHistoryEntryCount() throws {
+    let domain = "com.daydalek.Maltoria.overlay.history.test.\(UUID().uuidString)"
+    defer { UserDefaults(suiteName: domain)?.removePersistentDomain(forName: domain) }
+    let overlay = MacOSSubtitleOverlay(domain: domain)
+    defer {
+        overlay.hide()
+        overlay.invalidate()
+    }
+
+    _ = try overlay.call("translation.overlay.configure", params: [
+        "visible": .bool(true),
+        "maxEntries": .integer(3)
+    ])
+
+    overlay.update(.object([
+        "source": .string("Sentence 4"),
+        "translation": .string("第四句"),
+        "status": .string("completed"),
+        "entries": .array([
+            .object(["source": .string("Sentence 1"), "translation": .string("第一句"), "status": .string("completed")]),
+            .object(["source": .string("Sentence 2"), "translation": .string("第二句"), "status": .string("completed")]),
+            .object(["source": .string("Sentence 3"), "translation": .string(""), "status": .string("cancelled")]),
+            .object(["source": .string("Sentence 4"), "translation": .string("第四句"), "status": .string("completed")])
+        ])
+    ]))
+
+    // maxEntries = 3 keeps Sentence 2 (src + tr) and Sentence 3 (src only) in history, plus Sentence 4 as active
+    let historyTexts = overlay.historyLabelsForTesting.map(\.stringValue)
+    #expect(historyTexts == ["Sentence 2", "第二句", "Sentence 3"])
+    #expect(overlay.sourceLabelForTesting?.stringValue == "Sentence 4")
+    #expect(overlay.translationLabelForTesting?.stringValue == "第四句")
+
+    // Setting maxEntries back to 1 hides history
+    _ = try overlay.call("translation.overlay.configure", params: ["maxEntries": .integer(1)])
+    #expect(overlay.historyLabelsForTesting.isEmpty)
+
+    // Bounds validation: 0 and 11 rejected
+    #expect(throws: (any Error).self) {
+        _ = try overlay.call("translation.overlay.configure", params: ["maxEntries": .integer(0)])
+    }
+    #expect(throws: (any Error).self) {
+        _ = try overlay.call("translation.overlay.configure", params: ["maxEntries": .integer(11)])
+    }
+}
