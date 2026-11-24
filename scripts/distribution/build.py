@@ -24,10 +24,10 @@ import uuid
 ROOT = Path(__file__).resolve().parents[2]
 TARGETS = {
     'whisky-macos-gpui-arm64': ('Darwin', 'arm64', 'GPUI · ad-hoc ZIP · 预发布', ('swift', 'cargo', 'iconutil', 'codesign', 'ditto')),
-    'whisky-linux-amd64': ('Linux', 'x86_64', 'GPUI · Ubuntu 24.04 · tar.gz', ('swift', 'cargo', 'clang', 'patchelf', 'pkg-config')),
-    'whisky-linux-arm64': ('Linux', 'arm64', 'GPUI · Ubuntu 24.04 · tar.gz', ('swift', 'cargo', 'clang', 'patchelf', 'pkg-config')),
+    'whisky-linux-amd64': ('Linux', 'x86_64', 'GPUI · glibc 2.34 · tar.gz', ('swift', 'cargo', 'clang', 'patchelf', 'pkg-config')),
+    'whisky-linux-arm64': ('Linux', 'arm64', 'GPUI · glibc 2.34 · tar.gz', ('swift', 'cargo', 'clang', 'patchelf', 'pkg-config')),
     'wine-macos-arm64': ('Darwin', 'arm64', 'Apple Silicon 主机 · x86_64 Wine/Rosetta · Libraries', ('cmake', 'pkg-config', 'xcrun')),
-    'wine-linux-amd64': ('Linux', 'x86_64', 'Ubuntu 24.04 · new WoW64 · tar.gz', ('cc', 'make', 'patchelf', 'pkg-config', 'git')),
+    'wine-linux-amd64': ('Linux', 'x86_64', 'glibc 2.34 · new WoW64 · tar.gz', ('cc', 'make', 'patchelf', 'pkg-config', 'git')),
 }
 LINUX_APP_TARGETS = ('whisky-linux-amd64', 'whisky-linux-arm64')
 APP_TARGETS = ('whisky-macos-gpui-arm64',) + LINUX_APP_TARGETS
@@ -309,7 +309,7 @@ def plan(args):
         dependency_script = repo / ('scripts/linux/install-deps.sh' if is_wine else
                                     'apps/whisky-gpui/tools/install-linux-deps.sh')
         image_key = hashlib.sha256(dockerfile.read_bytes() + dependency_script.read_bytes()).hexdigest()[:16]
-        image = 'whisky-builder-' + ('wine' if is_wine else 'app') + f':ubuntu24-{docker_arch}-' + image_key
+        image = 'whisky-builder-' + ('wine' if is_wine else 'app') + f':el9-{docker_arch}-' + image_key
         cache = ROOT / 'build/distribution-cache/docker' / args.target
         inner = ['python3', '/workspace/scripts/distribution/build.py', 'run', args.target,
                  '--output', '/output/task', '--jobs', str(args.jobs), '--wine-repo', '/wine']
@@ -368,9 +368,10 @@ def doctor(args):
     for name in ('python3', 'git') + tools:
         checks.append(dict(name=name, passed=bool(shutil.which(name))))
     if args.executor == 'native' and system == 'Linux':
-        release = Path('/etc/os-release').read_text() if Path('/etc/os-release').exists() else ''
-        checks.append(dict(name='Ubuntu 24.04 构建基线', passed=bool(re.search(r'^ID=ubuntu$', release, re.M))
-                           and bool(re.search(r'^VERSION_ID="?24\.04"?$', release, re.M))))
+        glibc = subprocess.run(['ldd', '--version'], capture_output=True, text=True).stdout
+        match = re.search(r'(\d+)\.(\d+)', glibc)
+        checks.append(dict(name='glibc 2.34+ 构建基线',
+                           passed=bool(match) and (int(match.group(1)), int(match.group(2))) >= (2, 34)))
         checks.append(dict(name='Python 3.12+', passed=sys.version_info >= (3, 12)))
         if args.target in LINUX_APP_TARGETS:
             formats = args.formats or ['tar', 'deb', 'rpm', 'appimage']
@@ -589,7 +590,7 @@ def menu(args):
     if args.target.startswith('wine-'):
         args.wine_repo = Path(input(f'Wine 仓库 [{args.wine_repo}]：').strip() or args.wine_repo).expanduser().resolve()
     if TARGETS[args.target][0] == 'Linux':
-        executor = input('执行环境：1. Ubuntu 24.04 主机  2. Docker [1]：').strip() or '1'
+        executor = input('执行环境：1. Linux 主机  2. Docker [1]：').strip() or '1'
         if executor not in ('1', '2'):
             raise ValueError('请选择 1 或 2')
         args.executor = 'docker' if executor == '2' else 'native'
