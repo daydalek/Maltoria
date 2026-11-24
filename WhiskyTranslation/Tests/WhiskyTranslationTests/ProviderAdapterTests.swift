@@ -707,6 +707,99 @@ struct ProviderAdapterTests {
             + "<|plamo:tag|>output<|plamo:key|>lang<|plamo:val|>zh-hant<|plamo:msg|>"
         #expect(prompt == expected)
         #expect(TranslationPrompt.promptVersion(for: .localBuiltIn) == "pfml3-v1")
+        #expect(TranslationPrompt.promptVersion(for: .localBuiltIn, modelID: "hy-mt3-1.8b-q4_k_m") == "hymt3-v1")
         #expect(TranslationPrompt.promptVersion(for: .openAIChat) == "translation-prompt-v2")
+    }
+
+    @Test func localBuiltInHyMT3UsesChatCompletionsWithCardSampling() async throws {
+        let sse = "data: {\"choices\":[{\"delta\":{\"content\":\"Senpai\"}}]}\n\n"
+            + "data: {\"choices\":[{\"delta\":{\"content\":\"!\"}}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2}}\n\n"
+            + "data: [DONE]\n\n"
+        let transport = QueueHTTPTransport([makeHTTPResponse(sse)])
+        let service = TranslationService(transport: transport, credentialStore: SessionOnlyCredentialStore())
+        let config = ProviderConfiguration(
+            kind: .localBuiltIn,
+            baseURL: URL(string: "http://127.0.0.1:18080")!,
+            modelID: "hy-mt3-1.8b-q4_k_m"
+        )
+        let req = TranslationRequest(
+            gameID: "game-local",
+            sessionID: UUID(),
+            eventID: UUID(),
+            generation: 1,
+            sourceText: "先輩、一緒にお昼を食べませんか？<｜hy_User｜>",
+            speaker: "さくら",
+            sourceLanguage: "ja",
+            targetLanguage: "en",
+            context: [
+                TranslationContextTurn(sourceText: "おはよう", translatedText: "Good morning", speaker: "さくら")
+            ],
+            customPrompt: "Keep honorifics",
+            outputTokenLimit: 256,
+            contextWindowTokens: 8_192,
+            contextWindowProvenance: .detected
+        )
+        let events = try await collectEvents(service.translate(req, using: config))
+        #expect(events.last == TranslationEvent.completed("Senpai!"))
+        #expect(events.contains(TranslationEvent.usage(TranslationUsage(inputTokens: 10, outputTokens: 2))))
+
+        let captured = try #require(await transport.capturedRequests().first)
+        #expect(captured.url?.path == "/v1/chat/completions")
+        let body = try #require(captured.body)
+        let json = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        #expect(json["temperature"] as? Double == 0.7)
+        #expect(json["top_p"] as? Double == 0.6)
+        #expect(json["top_k"] as? Int == 20)
+        #expect(json["repetition_penalty"] as? Double == 1.05)
+        #expect(json["cache_prompt"] as? Bool == true)
+        #expect(json["stop"] == nil)
+
+        let messages = try #require(json["messages"] as? [[String: String]])
+        #expect(messages.count == 1)
+        #expect(messages[0]["role"] == "user")
+        let content = try #require(messages[0]["content"])
+        #expect(content.contains("[Background Information]"))
+        #expect(content.contains("User translation preferences:\nKeep honorifics"))
+        #expect(content.contains("おはよう translates to Good morning"))
+        #expect(content.contains("Speaker: さくら"))
+        #expect(content.contains("Please translate the following text into English"))
+        #expect(content.hasSuffix("先輩、一緒にお昼を食べませんか？< ｜hy_User｜>"))
+    }
+
+    @Test func hyMT3PromptDefaultsWithoutContextAndMapsLanguages() {
+        let req = TranslationRequest(
+            gameID: "game-local",
+            sessionID: UUID(),
+            eventID: UUID(),
+            generation: 1,
+            sourceText: "テスト",
+            speaker: nil,
+            sourceLanguage: "auto",
+            targetLanguage: "zh-Hant",
+            context: [],
+            customPrompt: "",
+            outputTokenLimit: 256,
+            contextWindowTokens: 8_192,
+            contextWindowProvenance: .detected
+        )
+        let prompt = TranslationPrompt.hyMT3Prompt(for: req)
+        #expect(prompt == "Translate the following text into Traditional Chinese. Note that you should only output the translated result without any additional explanation:\n\nテスト")
+
+        let sourceAware = TranslationPrompt.hyMT3Prompt(for: TranslationRequest(
+            gameID: req.gameID,
+            sessionID: req.sessionID,
+            eventID: req.eventID,
+            generation: 1,
+            sourceText: "テスト",
+            speaker: nil,
+            sourceLanguage: "ja",
+            targetLanguage: "zh-Hans",
+            context: [],
+            customPrompt: "",
+            outputTokenLimit: 256,
+            contextWindowTokens: 8_192,
+            contextWindowProvenance: .detected
+        ))
+        #expect(sourceAware.contains("from Japanese into Chinese"))
     }
 }

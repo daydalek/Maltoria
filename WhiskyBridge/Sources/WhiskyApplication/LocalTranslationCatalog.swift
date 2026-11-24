@@ -162,6 +162,20 @@ public struct LocalTranslationCatalog: Sendable {
             recommendedRamGB: 4,
             licenseName: "PLaMo Community License",
             licenseURL: "https://plamo.preferredai.jp/info/plamo-community-license-en"
+        ),
+        LocalModelCatalogEntry(
+            id: "hy-mt3-1.8b-q4_k_m",
+            displayName: "Hy-MT3 1.8B (Q4_K_M)",
+            subtitle: "腾讯混元 MT3 · 覆盖 102 种语言，指令遵循与上下文理解更强（运行约占 1.8~2.3 GB 内存）",
+            recommended: false,
+            repoID: "tencent/Hy-MT3-1.8B-GGUF",
+            filename: "Hy-MT3-1.8B-Q4_K_M.gguf",
+            sizeBytes: 1_348_432_160,
+            sha256: "bae6e591103654ff43ef0de7d1492f6e6df1f955505f6bb2cc52e86fc399a942",
+            contextWindow: 8_192,
+            recommendedRamGB: 8,
+            licenseName: "Apache-2.0",
+            licenseURL: "https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF/blob/main/LICENSE.txt"
         )
     ]
 

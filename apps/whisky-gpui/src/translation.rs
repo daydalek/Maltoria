@@ -2354,7 +2354,7 @@ impl TranslationPage {
         };
         self.draft = ProviderDraft {
             name: if is_local {
-                crate::i18n::s().translation.built_in_plamo_3_local_translation.into()
+                crate::i18n::s().translation.built_in_local_translation.into()
             } else {
                 String::new()
             },

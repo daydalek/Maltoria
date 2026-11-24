@@ -148,7 +148,7 @@ public struct HTTPTranslationProvider: TranslationProvider, Sendable {
             try configuration.validate()
             guard configuration.kind == kind
             else { throw TranslationError.invalidConfiguration("Provider kind does not match configuration") }
-            let fitted = try TranslationPrompt.fitting(request, kind: kind)
+            let fitted = try TranslationPrompt.fitting(request, kind: kind, modelID: configuration.modelID)
             try await self.translate(
                 fitted,
                 configuration: configuration,
@@ -230,6 +230,16 @@ public struct HTTPTranslationProvider: TranslationProvider, Sendable {
         continuation: AsyncThrowingStream<TranslationEvent, any Error>.Continuation
     ) async throws {
         guard let model = configuration.modelID, !model.isEmpty else { throw TranslationError.missingModel }
+        if LocalPromptFamily.resolve(modelID: model) == .hyMT3 {
+            try await translateLocalHyMT3(
+                request,
+                configuration: configuration,
+                credential: credential,
+                continuation: continuation,
+                model: model
+            )
+            return
+        }
         let body: [String: Any] = [
             "model": model,
             "prompt": TranslationPrompt.pfml3Prompt(for: request),
@@ -272,6 +282,62 @@ public struct HTTPTranslationProvider: TranslationProvider, Sendable {
                 )), to: continuation)
             }
             return stopHit ? .done : .continue
+        }
+    }
+
+    /// Hy-MT3 instruct models use the GGUF-embedded chat template via chat/completions
+    /// with the sampling parameters recommended by the model card.
+    private func translateLocalHyMT3(
+        _ request: TranslationRequest,
+        configuration: ProviderConfiguration,
+        credential: String?,
+        continuation: AsyncThrowingStream<TranslationEvent, any Error>.Continuation,
+        model: String
+    ) async throws {
+        let body: [String: Any] = [
+            "model": model,
+            "messages": [[
+                "role": "user",
+                "content": TranslationPrompt.hyMT3Prompt(for: request)
+            ]],
+            "max_tokens": request.outputTokenLimit,
+            "temperature": 0.7,
+            "top_p": 0.6,
+            "top_k": 20,
+            "repetition_penalty": 1.05,
+            "stream": true,
+            "stream_options": ["include_usage": true],
+            "cache_prompt": true
+        ]
+        let response = try await post(
+            configuration,
+            path: "chat/completions",
+            version: "v1",
+            credential: credential,
+            body: jsonData(body),
+            accept: "text/event-stream"
+        )
+        defer { response.cancel() }
+        try await consumeSSE(response.body, continuation: continuation) { frame, aggregate in
+            if frame.data == "[DONE]" { return .done }
+            let root = try jsonDictionary(Data(frame.data.utf8))
+            if frame.event == "error" || root["error"] != nil { throw TranslationError.providerRejected }
+            if let choices = root["choices"] as? [[String: Any]] {
+                for choice in choices {
+                    if let fragment = (choice["delta"] as? [String: Any])?["content"] as? String,
+                       !fragment.isEmpty {
+                        aggregate.append(fragment)
+                        try yield(.delta(fragment), to: continuation)
+                    }
+                }
+            }
+            if let usage = root["usage"] as? [String: Any] {
+                try yield(.usage(TranslationUsage(
+                    inputTokens: positiveInteger(usage["prompt_tokens"]),
+                    outputTokens: positiveInteger(usage["completion_tokens"])
+                )), to: continuation)
+            }
+            return .continue
         }
     }
 

@@ -78,7 +78,7 @@ public struct TranslationService: Sendable {
             // DeepL sends source text directly rather than an LLM prompt, so the token budget does not apply.
             let fitted = configuration.kind == .deepL
                 ? request
-                : try TranslationPrompt.fitting(request, kind: configuration.kind)
+                : try TranslationPrompt.fitting(request, kind: configuration.kind, modelID: configuration.modelID)
             let stream = provider.translate(fitted, configuration: configuration, credential: credential)
             for try await event in stream {
                 try yieldServiceEvent(event, to: continuation)
