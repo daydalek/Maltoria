@@ -34,6 +34,7 @@ pub(crate) fn native_popup_strings() -> serde_json::Value {
         ("sub_off", strings.linux_hud.sub_off.to_string()),
         ("draggable", strings.capture.draggable_unlocked.to_string()),
         ("locked", strings.linux_hud.locked_label.to_string()),
+        ("release_mouse", strings.capture.release_mouse_btn.to_string()),
         ("refresh", strings.common.refresh.to_string()),
         ("waiting_game", strings.linux_hud.waiting_game.to_string()),
         ("error", strings.common.error.to_string()),

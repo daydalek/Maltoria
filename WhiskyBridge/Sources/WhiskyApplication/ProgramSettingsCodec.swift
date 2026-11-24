@@ -25,7 +25,7 @@ enum ProgramSettingsCodec {
     static let booleans: Set<String> = [
         "dxvk", "dxvkAsync", "metal4Enabled", "shaderCacheEnabled", "controllerCompatibilityMode",
         "disableHIDAPI", "allowBackgroundEvents", "disableControllerMapping", "useButtonLabels",
-        "virtualDesktopEnabled", "emulateModeset"
+        "disableMouseCapture", "virtualDesktopEnabled", "emulateModeset"
     ]
     static let choices: [String: Set<String>] = Dictionary(uniqueKeysWithValues:
         ContainerConfiguration.fields.compactMap { field in

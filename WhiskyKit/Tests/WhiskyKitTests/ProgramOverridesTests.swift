@@ -256,4 +256,19 @@ final class ProgramOverridesTests: XCTestCase {
         let decoded = try PropertyListDecoder().decode(ProgramSettings.self, from: data)
         XCTAssertTrue(decoded.legacyFullscreenDismissed)
     }
+
+    func testDisableMouseCaptureRoundTripsAndAppliesEnv() throws {
+        var overrides = ProgramOverrides()
+        overrides.disableMouseCapture = true
+        let data = try PropertyListEncoder().encode(overrides)
+        let decoded = try PropertyListDecoder().decode(ProgramOverrides.self, from: data)
+        XCTAssertEqual(decoded.disableMouseCapture, true)
+        XCTAssertFalse(decoded.isEmpty)
+
+        var builder = EnvironmentBuilder()
+        var dllResolver = DLLOverrideResolver(managed: [], bottleCustom: [], programCustom: [])
+        Wine.applyProgramOverrides(decoded, builder: &builder, dllResolver: &dllResolver)
+        let (resolved, _) = builder.resolve()
+        XCTAssertEqual(resolved["WINE_CLIP_CURSOR"], "off")
+    }
 }

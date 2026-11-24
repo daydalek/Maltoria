@@ -82,6 +82,8 @@ public struct ProgramOverrides: Codable, Equatable, Sendable {
     public var disableControllerMapping: Bool?
     /// Whether to use native button labels instead of XInput layout. `nil` inherits from bottle.
     public var useButtonLabels: Bool?
+    /// Whether to prevent games from confining or grabbing the mouse cursor. `nil` inherits from bottle.
+    public var disableMouseCapture: Bool?
 
     // MARK: - Display
 
@@ -133,6 +135,7 @@ public struct ProgramOverrides: Codable, Equatable, Sendable {
             && allowBackgroundEvents == nil
             && disableControllerMapping == nil
             && useButtonLabels == nil
+            && disableMouseCapture == nil
             && emulateModeset == nil
             && virtualDesktopEnabled == nil
             && resolutionPreset == nil
@@ -164,6 +167,7 @@ public struct ProgramOverrides: Codable, Equatable, Sendable {
         self.allowBackgroundEvents = try container.decodeIfPresent(Bool.self, forKey: .allowBackgroundEvents)
         self.disableControllerMapping = try container.decodeIfPresent(Bool.self, forKey: .disableControllerMapping)
         self.useButtonLabels = try container.decodeIfPresent(Bool.self, forKey: .useButtonLabels)
+        self.disableMouseCapture = try container.decodeIfPresent(Bool.self, forKey: .disableMouseCapture)
         self.emulateModeset = try container.decodeIfPresent(Bool.self, forKey: .emulateModeset)
         self.virtualDesktopEnabled = try container.decodeIfPresent(Bool.self, forKey: .virtualDesktopEnabled)
         self.resolutionPreset = container.decodeLenientIfPresent(ResolutionPreset.self, forKey: .resolutionPreset)

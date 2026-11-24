@@ -83,6 +83,13 @@ public struct BottleInputConfig: Codable, Equatable {
     /// When `false` (default), the XInput layout is used.
     var useButtonLabels: Bool = false
 
+    /// Whether to prevent games from confining or grabbing the mouse cursor.
+    ///
+    /// When `true`, sets `WINE_CLIP_CURSOR=off` and writes `GrabPointer=N`
+    /// plus `CaptureDisplaysForFullscreen=N` so games cannot trap the cursor
+    /// inside a window or stale fullscreen rectangle.
+    var disableMouseCapture: Bool = false
+
     /// Whether the Mac `Command` key acts as Windows `Ctrl` inside Wine windows.
     ///
     /// When `true`, sets `LeftCommandIsCtrl` and `RightCommandIsCtrl` under
@@ -93,7 +100,7 @@ public struct BottleInputConfig: Codable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case controllerCompatibilityMode, disableHIDAPI, allowBackgroundEvents
-        case disableControllerMapping, useButtonLabels, commandActsAsControl
+        case disableControllerMapping, useButtonLabels, disableMouseCapture, commandActsAsControl
     }
 
     public init() {}
@@ -119,6 +126,10 @@ public struct BottleInputConfig: Codable, Equatable {
             Bool.self,
             forKey: .useButtonLabels
         ) ?? false) || legacyMapping
+        self.disableMouseCapture = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .disableMouseCapture
+        ) ?? false
         self.commandActsAsControl = try container.decodeIfPresent(
             Bool.self,
             forKey: .commandActsAsControl
@@ -131,6 +142,7 @@ public struct BottleInputConfig: Codable, Equatable {
         try container.encode(disableHIDAPI, forKey: .disableHIDAPI)
         try container.encode(allowBackgroundEvents, forKey: .allowBackgroundEvents)
         try container.encode(useButtonLabels, forKey: .useButtonLabels)
+        try container.encode(disableMouseCapture, forKey: .disableMouseCapture)
         try container.encode(commandActsAsControl, forKey: .commandActsAsControl)
     }
 }

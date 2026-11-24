@@ -40,6 +40,7 @@ final class CapturePopupStrings {
         "sub_off": "Subs Off",
         "draggable": "Draggable (Unlocked)",
         "locked": "Locked",
+        "release_mouse": "Free Mouse",
         "refresh": "Refresh",
         "waiting_game": "Waiting for game…",
         "error": "Error",

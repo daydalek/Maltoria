@@ -415,8 +415,8 @@ pub(crate) fn section_for(field_id: &str) -> &'static SectionSpec {
         "windowsVersion" | "enhancedSync" | "asfTimestampBase" | "avxEnabled" => "wine",
         "launcherCompatibilityMode" | "launcherMode" | "detectedLauncher" | "launcherLocale"
         | "gpuSpoofing" | "gpuVendor" | "autoEnableDXVK" => "launcher",
-        "controllerCompatibilityMode" | "disableHIDAPI" | "allowBackgroundEvents"
-        | "useButtonLabels" | "commandActsAsControl" => "input",
+        "disableMouseCapture" | "controllerCompatibilityMode" | "disableHIDAPI"
+        | "allowBackgroundEvents" | "useButtonLabels" | "commandActsAsControl" => "input",
         "graphicsBackend" | "frameGeneration" | "hostMemoryImport" | "shadowImportedHostMemory"
         | "metal4Enabled" | "metalHud" | "metalTrace" | "dxrEnabled" | "metalValidation"
         | "dxvkAsync" | "dxvkHud" => "graphics",
@@ -424,8 +424,8 @@ pub(crate) fn section_for(field_id: &str) -> &'static SectionSpec {
         | "gdiUpscalerCache" => "upscaling",
         "audioDriver" | "audioLatencyPreset" => "audio",
         "discordPresence" | "discordBridge" => "discord",
-        "virtualDesktopEnabled" | "resolutionPreset" | "customResolutionWidth"
-        | "customResolutionHeight" => "display",
+        "emulateModeset" | "virtualDesktopEnabled" | "resolutionPreset"
+        | "customResolutionWidth" | "customResolutionHeight" => "display",
         "shaderCacheEnabled" | "disableAppNap" => "performance",
         "clipboardPolicy" | "clipboardThreshold" | "killOnQuit" => "cleanup",
         "programLocale" | "arguments" => "program",
@@ -573,9 +573,9 @@ mod tests {
     #[test]
     fn recorded_schema_decodes_into_the_four_swift_kinds_only() {
         let fields = recorded();
-        assert_eq!(fields.len(), 42);
+        assert_eq!(fields.len(), 44);
         let kinds = kind_histogram(&fields);
-        assert_eq!(kinds.get("toggle"), Some(&23));
+        assert_eq!(kinds.get("toggle"), Some(&25));
         assert_eq!(kinds.get("choice"), Some(&15));
         assert_eq!(kinds.get("number"), Some(&3));
         assert_eq!(kinds.get("text"), Some(&1));
@@ -653,7 +653,7 @@ mod tests {
         assert!(linux.iter().all(|field| field.id != "metalTrace"));
         assert!(linux.iter().all(|field| field.id != "dxrEnabled"));
         assert!(linux.iter().all(|field| field.id != "metalValidation"));
-        assert!(linux.len() < 42);
+        assert!(linux.len() < 44);
         // `d3dMetal` and `dxmt` are macOS-only options of a shared field.
         let backend = field(&linux, "graphicsBackend");
         let ids: Vec<&str> = backend

@@ -269,6 +269,7 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
         if let capture {
             latestSnapshot = await capture.currentSnapshot()
         }
+        FullscreenOverlaySupport.releaseWineMouseCapture(container: activeContainer, resyncWindow: false)
         showPanel()
         return .object([
             "visible": .bool(true),
@@ -311,6 +312,10 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
             restoreHistory: preset.restoreHistory,
             autoAttach: preset.autoAttach
         )
+        if preset.autoAttach, currentCaptureState() == "attached", errorMessage == nil {
+            isCollapsed = true
+            rebuildUI(preservingScroll: false)
+        }
     }
 
     private func resolveLaunchProviderID(preset: CapturePreset) -> UUID? {
@@ -705,8 +710,10 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
             horizontalPadding: 7,
             verticalPadding: 2
         ) { [weak self] in
-            self?.isCollapsed = false
-            self?.rebuildUI(preservingScroll: false)
+            guard let self else { return }
+            FullscreenOverlaySupport.releaseWineMouseCapture(container: self.activeContainer, resyncWindow: false)
+            self.isCollapsed = false
+            self.rebuildUI(preservingScroll: false)
         }
         expandButton.setContentCompressionResistancePriority(.required, for: .horizontal)
         let closeButton = makeCloseButton()
@@ -773,10 +780,22 @@ final class MacOSCaptureHUD: NSObject, NSWindowDelegate {
     private func buildOverlayQuickBar() -> NSView {
         let label = makeLabel(strings.text("subtitle_overlay"), size: 11, weight: .medium, color: .lightGray, lines: 1)
         label.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        let releaseMouseButton = HUDActionButton(
+            title: strings.text("release_mouse"),
+            background: NSColor.white.withAlphaComponent(0.12),
+            foreground: .white,
+            fontSize: 11,
+            cornerRadius: 6,
+            horizontalPadding: 8,
+            verticalPadding: 3
+        ) { [weak self] in
+            FullscreenOverlaySupport.releaseWineMouseCapture(container: self?.activeContainer, resyncWindow: true)
+        }
+        releaseMouseButton.setContentCompressionResistancePriority(.required, for: .horizontal)
         let subtitleButton = makeSubtitleToggleButton()
         let dragButton = makeOverlayDragToggleButton()
 
-        let controls = NSStackView(views: [subtitleButton, dragButton])
+        let controls = NSStackView(views: [releaseMouseButton, subtitleButton, dragButton])
         controls.orientation = .horizontal
         controls.alignment = .centerY
         controls.spacing = 6

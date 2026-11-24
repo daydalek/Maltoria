@@ -86,6 +86,9 @@ public enum ResolutionPreset: String, Codable, CaseIterable, Equatable, Sendable
 /// ``BottleSettings``. The defensive `init(from:)` ensures unknown or
 /// corrupt values decode gracefully to defaults.
 public struct BottleDisplayConfig: Codable, Equatable {
+    /// Whether Wine's emulated display mode changes (`EmulateModeset`) are enabled.
+    var emulateModeset: Bool = false
+
     /// Whether Wine's virtual desktop mode is enabled.
     var virtualDesktopEnabled: Bool = false
 
@@ -103,6 +106,9 @@ public struct BottleDisplayConfig: Codable, Equatable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.emulateModeset = try container.decodeIfPresent(
+            Bool.self, forKey: .emulateModeset
+        ) ?? false
         self.virtualDesktopEnabled = try container.decodeIfPresent(
             Bool.self, forKey: .virtualDesktopEnabled
         ) ?? false

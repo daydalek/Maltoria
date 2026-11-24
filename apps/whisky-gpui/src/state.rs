@@ -7598,6 +7598,7 @@ impl WhiskyApp {
             "allowBackgroundEvents" => overrides.allow_background_events = Some(value),
             "disableControllerMapping" => overrides.disable_controller_mapping = Some(value),
             "useButtonLabels" => overrides.use_button_labels = Some(value),
+            "disableMouseCapture" => overrides.disable_mouse_capture = Some(value),
             "emulateModeset" => overrides.emulate_modeset = Some(value),
             "virtualDesktopEnabled" => overrides.virtual_desktop_enabled = Some(value),
             _ => {}

@@ -25,6 +25,7 @@ pub(crate) const FIELD_TITLE_KEYS: &[(&str, &str)] = &[
     ("gpuSpoofing", "config.field.gpuSpoofing"),
     ("gpuVendor", "config.field.gpuVendor"),
     ("autoEnableDXVK", "config.field.autoEnableDXVK"),
+    ("disableMouseCapture", "config.field.disableMouseCapture"),
     (
         "controllerCompatibilityMode",
         "config.field.controllerCompatibilityMode",
@@ -59,6 +60,7 @@ pub(crate) const FIELD_TITLE_KEYS: &[(&str, &str)] = &[
     ("audioLatencyPreset", "config.field.audioLatencyPreset"),
     ("discordPresence", "config.field.discordPresence"),
     ("discordBridge", "config.field.discordBridge"),
+    ("emulateModeset", "config.field.emulateModeset"),
     (
         "virtualDesktopEnabled",
         "config.field.virtualDesktopEnabled",

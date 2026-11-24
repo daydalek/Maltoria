@@ -82,7 +82,12 @@ enum LinuxWineConfiguration {
         return [#"[HKEY_CURRENT_USER\Software\Wine\Explorer]"#, #""Desktop"=-"#]
     }
 
-    static func launchRegistry(_ values: [String: ConfigurationValue], ownsGPU: Bool = false) -> [String] {
+    static func launchRegistry(
+        _ values: [String: ConfigurationValue],
+        ownsGPU: Bool = false,
+        ownsGrabPointer: Bool = false,
+        ownsEmulateModeset: Bool = false
+    ) -> [String] {
         let latency = switch values["audioLatencyPreset"] {
         case .text("lowLatency"): 512
         case .text("stable"): 131_072
@@ -92,6 +97,21 @@ enum LinuxWineConfiguration {
             #"[HKEY_CURRENT_USER\Software\Wine\DirectSound]"#,
             "\"HelBuflen\"=\"\(latency)\""
         ]
+        var x11Lines: [String] = []
+        if values["disableMouseCapture"] == .boolean(true) {
+            x11Lines.append(#""GrabPointer"="N""#)
+        } else if ownsGrabPointer {
+            x11Lines.append(#""GrabPointer"=-"#)
+        }
+        if values["emulateModeset"] == .boolean(true) {
+            x11Lines.append(#""EmulateModeset"="Y""#)
+        } else if ownsEmulateModeset {
+            x11Lines.append(#""EmulateModeset"=-"#)
+        }
+        if !x11Lines.isEmpty {
+            lines.append(#"[HKEY_CURRENT_USER\Software\Wine\X11 Driver]"#)
+            lines += x11Lines
+        }
         if values["launcherCompatibilityMode"] == .boolean(true), values["gpuSpoofing"] == .boolean(true) {
             lines.append(#"[HKEY_CURRENT_USER\Software\Wine\Direct3D]"#)
             let (vendor, device): (UInt32, UInt32) = switch values["gpuVendor"] {
@@ -123,7 +143,12 @@ enum LinuxWineConfiguration {
         let marker = container.appendingPathComponent(".whisky-linux-launch-registry.json")
         let previousData = try? Data(contentsOf: marker)
         let previous = previousData.flatMap { try? JSONDecoder().decode([String].self, from: $0) } ?? []
-        let lines = launchRegistry(values, ownsGPU: previous.contains { $0.contains("VideoPciVendorID") })
+        let lines = launchRegistry(
+            values,
+            ownsGPU: previous.contains { $0.contains("VideoPciVendorID") },
+            ownsGrabPointer: previous.contains { $0.contains(#""GrabPointer"="#) },
+            ownsEmulateModeset: previous.contains { $0.contains(#""EmulateModeset"="#) }
+        )
         let encoded = try JSONEncoder().encode(lines)
         guard previousData != encoded else { return }
         try await importRegistry(lines, container: container, host: host, acquire: false)

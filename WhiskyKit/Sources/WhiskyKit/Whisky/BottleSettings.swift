@@ -565,6 +565,12 @@ public struct BottleSettings: Codable, Equatable {
 
     // MARK: - Display settings
 
+    /// Whether Wine's emulated display mode changes (`EmulateModeset`) are enabled for this bottle.
+    public var emulateModeset: Bool {
+        get { displayConfig.emulateModeset }
+        set { displayConfig.emulateModeset = newValue }
+    }
+
     /// Whether Wine's virtual desktop mode is enabled for this bottle.
     ///
     /// When enabled, Wine runs in a windowed virtual desktop instead of
@@ -784,6 +790,12 @@ public struct BottleSettings: Codable, Equatable {
     public var useButtonLabels: Bool {
         get { inputConfig.useButtonLabels }
         set { inputConfig.useButtonLabels = newValue }
+    }
+
+    /// Whether to prevent games from confining or grabbing the mouse cursor.
+    public var disableMouseCapture: Bool {
+        get { inputConfig.disableMouseCapture }
+        set { inputConfig.disableMouseCapture = newValue }
     }
 
     /// Whether the macOS Command key is mapped to Windows Ctrl inside Wine.
@@ -1181,6 +1193,10 @@ public struct BottleSettings: Codable, Equatable {
             builder.set("DXVK_STATE_CACHE", "0", layer: .bottleManaged)
         }
 
+        if emulateModeset {
+            builder.set("WINE_EMULATE_MODESET", "1", layer: .bottleManaged)
+        }
+
         return managedDLLOverrides
     }
 
@@ -1317,6 +1333,10 @@ public struct BottleSettings: Codable, Equatable {
     ///
     /// - Parameter builder: The environment builder to populate.
     public func populateInputCompatibilityLayer(builder: inout EnvironmentBuilder) {
+        if disableMouseCapture {
+            builder.set("WINE_CLIP_CURSOR", "off", layer: .bottleManaged)
+        }
+
         guard controllerCompatibilityMode else { return }
 
         // Disable HIDAPI - forces SDL to use alternative input backend

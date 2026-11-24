@@ -489,6 +489,9 @@ final class MacOSSubtitleOverlay: NSObject, NSWindowDelegate {
 
     func setClickThrough(_ enabled: Bool) {
         settings.clickThrough = enabled
+        if !enabled {
+            FullscreenOverlaySupport.releaseWineMouseCapture(resyncWindow: false)
+        }
         apply()
         persist()
         onSettingsChanged?(settings)

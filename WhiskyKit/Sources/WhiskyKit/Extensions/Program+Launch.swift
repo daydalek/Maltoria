@@ -86,10 +86,12 @@ extension Program {
         SettingsPersistence.shared.flush()
         try await Wine.prepareBottlePrefix(bottle: bottle, bootstrapper: bootstrapper)
         await Wine.syncAudioRegistry(bottle: bottle)
-        await Wine.syncInputRegistry(bottle: bottle)
+        await Wine.syncInputRegistry(
+            bottle: bottle, disableMouseCapture: settings.overrides?.disableMouseCapture
+        )
         await Wine.syncGPURegistry(bottle: bottle)
         await Wine.syncDisplayModeRegistry(
-            bottle: bottle, emulateModeset: settings.overrides?.emulateModeset ?? false
+            bottle: bottle, emulateModeset: settings.overrides?.emulateModeset ?? bottle.settings.emulateModeset
         )
         return try await Wine.prepareProgramLaunch(
             at: url, args: args ?? settings.arguments.split { $0.isWhitespace }.map(String.init),

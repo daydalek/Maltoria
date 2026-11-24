@@ -1351,14 +1351,37 @@ impl WhiskyApp {
         let enabled = settings.input_enabled();
         let defaults = &settings.defaults;
         let overrides = settings.overrides.as_ref();
-        let mut children = vec![self.program_switch(
-            "ps-override-input".into(),
-            crate::i18n::s().program_settings.override_input,
-            enabled,
-            false,
-            |this, on, _cx| this.set_program_override_group("input", on),
-            cx,
-        )];
+        let disable_mouse_capture = overrides
+            .and_then(|value| value.disable_mouse_capture)
+            .or(defaults.disable_mouse_capture)
+            .unwrap_or(false);
+        let mouse_label = crate::i18n::config::field_title(
+            "config.field.disableMouseCapture",
+            "disableMouseCapture",
+            "disableMouseCapture",
+        );
+        let mut children = vec![
+            self.program_switch(
+                "ps-disable-mouse-capture".into(),
+                mouse_label,
+                disable_mouse_capture,
+                false,
+                |this, on, cx| this.set_program_override_bool("disableMouseCapture", on, cx),
+                cx,
+            ),
+            muted(crate::i18n::s().program_settings.disable_mouse_capture_desc)
+                .text_size(px(11.))
+                .line_height(relative(1.4))
+                .into_any_element(),
+            self.program_switch(
+                "ps-override-input".into(),
+                crate::i18n::s().program_settings.override_input,
+                enabled,
+                false,
+                |this, on, _cx| this.set_program_override_group("input", on),
+                cx,
+            ),
+        ];
         if enabled {
             for (id, key, field) in [
                 ("ps-controller-compat", "config.field.controllerCompatibilityMode", "controllerCompatibilityMode"),
@@ -1417,6 +1440,7 @@ impl WhiskyApp {
         let overrides = settings.overrides.as_ref();
         let emulate_modeset = overrides
             .and_then(|value| value.emulate_modeset)
+            .or(defaults.emulate_modeset)
             .unwrap_or(false);
         let mut children = vec![
             self.program_switch(

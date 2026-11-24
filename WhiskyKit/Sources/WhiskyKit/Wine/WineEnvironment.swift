@@ -690,6 +690,14 @@ extension Wine {
             }
         }
 
+        if let disableMouseCapture = overrides.disableMouseCapture {
+            builder.set("WINE_CLIP_CURSOR", disableMouseCapture ? "off" : "auto", layer: .programUser)
+        }
+
+        if let emulateModeset = overrides.emulateModeset {
+            builder.set("WINE_EMULATE_MODESET", emulateModeset ? "1" : "0", layer: .programUser)
+        }
+
         // Input override: controller compatibility SDL hints at program level
         if let controllerCompat = overrides.controllerCompatibilityMode {
             // When compat mode is overridden, control whether SDL hints are applied

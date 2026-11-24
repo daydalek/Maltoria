@@ -142,6 +142,7 @@ public extension Wine {
     private enum RegistryKey: String {
         case currentVersion = #"HKLM\Software\Microsoft\Windows NT\CurrentVersion"#
         case macDriver = #"HKCU\Software\Wine\Mac Driver"#
+        case x11Driver = #"HKCU\Software\Wine\X11 Driver"#
         case desktop = #"HKCU\Control Panel\Desktop"#
         case explorer = #"HKCU\Software\Wine\Explorer"#
         case explorerDesktops = #"HKCU\Software\Wine\Explorer\Desktops"#
@@ -376,8 +377,11 @@ public extension Wine {
     /// A missing marker on factory settings is stamped without booting
     /// wineserver, since a fresh prefix already behaves that way.
     @MainActor
-    static func syncInputRegistry(bottle: Bottle) async {
-        let desired = InputRegistryState.desired(for: bottle)
+    static func syncInputRegistry(bottle: Bottle, disableMouseCapture: Bool? = nil) async {
+        var desired = InputRegistryState.desired(for: bottle)
+        if let disableMouseCapture {
+            desired.disableMouseCapture = disableMouseCapture
+        }
         let applied = InputRegistryState.load(from: bottle.url)
         guard desired != applied else { return }
 
@@ -402,6 +406,29 @@ public extension Wine {
                 data: value,
                 type: .string
             )
+            let grabValue = desired.disableMouseCapture ? "N" : "Y"
+            try await addRegistryKey(
+                bottle: bottle,
+                key: RegistryKey.x11Driver.rawValue,
+                name: "GrabPointer",
+                data: grabValue,
+                type: .string
+            )
+            if desired.disableMouseCapture {
+                try await addRegistryKey(
+                    bottle: bottle,
+                    key: RegistryKey.macDriver.rawValue,
+                    name: "CaptureDisplaysForFullscreen",
+                    data: "N",
+                    type: .string
+                )
+            } else if applied?.disableMouseCapture == true {
+                try? await deleteRegistryValue(
+                    bottle: bottle,
+                    key: RegistryKey.macDriver.rawValue,
+                    name: "CaptureDisplaysForFullscreen"
+                )
+            }
             try desired.save(to: bottle.url)
         } catch {
             logger.error(
@@ -415,15 +442,34 @@ public extension Wine {
 /// as a marker file so launches only spawn `wine reg` when the settings changed.
 struct InputRegistryState: Codable, Equatable {
     var commandActsAsControl: Bool
+    var disableMouseCapture: Bool
+
+    init(commandActsAsControl: Bool, disableMouseCapture: Bool = false) {
+        self.commandActsAsControl = commandActsAsControl
+        self.disableMouseCapture = disableMouseCapture
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case commandActsAsControl, disableMouseCapture
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.commandActsAsControl = try container.decode(Bool.self, forKey: .commandActsAsControl)
+        self.disableMouseCapture = try container.decodeIfPresent(Bool.self, forKey: .disableMouseCapture) ?? false
+    }
 
     /// What the bottle's current settings ask the registry to contain.
     @MainActor
     static func desired(for bottle: Bottle) -> InputRegistryState {
-        InputRegistryState(commandActsAsControl: bottle.settings.commandActsAsControl)
+        InputRegistryState(
+            commandActsAsControl: bottle.settings.commandActsAsControl,
+            disableMouseCapture: bottle.settings.disableMouseCapture
+        )
     }
 
-    /// Wine's own default: Command is not remapped to Control.
-    static let factoryDefault = InputRegistryState(commandActsAsControl: false)
+    /// Wine's own default: Command is not remapped to Control and pointer grab is allowed.
+    static let factoryDefault = InputRegistryState(commandActsAsControl: false, disableMouseCapture: false)
 
     static func markerURL(in bottleURL: URL) -> URL {
         bottleURL.appending(path: ".input-registry-state.plist")

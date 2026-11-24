@@ -456,6 +456,18 @@
     "title": "为 Rockstar 启动器使用 DXVK"
   },
   {
+    "titleKey": "config.field.disableMouseCapture",
+    "id": "disableMouseCapture",
+    "requires": [],
+    "default": false,
+    "platforms": [
+      "linux",
+      "macos"
+    ],
+    "input": "toggle",
+    "title": "禁止游戏捕获鼠标"
+  },
+  {
     "titleKey": "config.field.controllerCompatibilityMode",
     "id": "controllerCompatibilityMode",
     "requires": [],
@@ -970,6 +982,18 @@
     ],
     "input": "toggle",
     "title": "转发游戏 Rich Presence"
+  },
+  {
+    "titleKey": "config.field.emulateModeset",
+    "id": "emulateModeset",
+    "requires": [],
+    "default": false,
+    "platforms": [
+      "linux",
+      "macos"
+    ],
+    "input": "toggle",
+    "title": "旧版全屏兼容"
   },
   {
     "titleKey": "config.field.virtualDesktopEnabled",

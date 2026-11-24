@@ -103,6 +103,7 @@ public enum ContainerConfiguration {
             toggle("autoEnableDXVK", "为 Rockstar 启动器使用 DXVK", "launcherConfig.autoEnableDXVK", true)
         ]),
         .init(id: "input", title: "输入与控制器", fields: [
+            toggle("disableMouseCapture", "禁止游戏捕获鼠标", "inputConfig.disableMouseCapture", false),
             toggle("controllerCompatibilityMode", "控制器兼容模式", "inputConfig.controllerCompatibilityMode", false),
             toggle("disableHIDAPI", "停用 HIDAPI", "inputConfig.disableHIDAPI", false),
             toggle("allowBackgroundEvents", "允许后台输入", "inputConfig.allowBackgroundEvents", false),
@@ -208,6 +209,7 @@ public enum ContainerConfiguration {
             toggle("discordBridge", "转发游戏 Rich Presence", "discordConfig.bridge", false)
         ]),
         .init(id: "display", title: "显示", fields: [
+            toggle("emulateModeset", "旧版全屏兼容", "displayConfig.emulateModeset", false),
             toggle(
                 "virtualDesktopEnabled",
                 "虚拟桌面",

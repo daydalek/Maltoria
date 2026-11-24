@@ -89,4 +89,22 @@ struct InputRegistrySyncTests {
         let after = try Data(contentsOf: InputRegistryState.markerURL(in: dir))
         #expect(before == after)
     }
+
+    @Test("Desired state mirrors bottle settings disableMouseCapture and legacy plist decodes false")
+    @MainActor
+    func disableMouseCaptureStateAndLegacyMigration() throws {
+        let (dir, cleanup) = makeBottleDir()
+        defer { cleanup() }
+
+        let legacyData = try PropertyListSerialization.data(
+            fromPropertyList: ["commandActsAsControl": true], format: .xml, options: 0
+        )
+        try legacyData.write(to: InputRegistryState.markerURL(in: dir))
+        let loadedLegacy = InputRegistryState.load(from: dir)
+        #expect(loadedLegacy == InputRegistryState(commandActsAsControl: true, disableMouseCapture: false))
+
+        let bottle = Bottle(bottleUrl: dir, inFlight: false, isAvailable: true, cleanInvalidPins: false)
+        bottle.settings.disableMouseCapture = true
+        #expect(InputRegistryState.desired(for: bottle).disableMouseCapture == true)
+    }
 }

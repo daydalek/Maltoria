@@ -100,10 +100,12 @@ public enum SteamLauncher {
             try Task.checkCancellation()
             try await Wine.prepareBottlePrefix(bottle: bottle)
             await Wine.syncAudioRegistry(bottle: bottle)
-            await Wine.syncInputRegistry(bottle: bottle)
+            await Wine.syncInputRegistry(
+                bottle: bottle, disableMouseCapture: plan.overrides.disableMouseCapture
+            )
             await Wine.syncGPURegistry(bottle: bottle)
             await Wine.syncDisplayModeRegistry(
-                bottle: bottle, emulateModeset: plan.overrides.emulateModeset ?? false
+                bottle: bottle, emulateModeset: plan.overrides.emulateModeset ?? bottle.settings.emulateModeset
             )
             try Task.checkCancellation()
             if !clientIsRunning {
@@ -188,12 +190,14 @@ public enum SteamLauncher {
                 try Task.checkCancellation()
                 await Wine.syncAudioRegistry(bottle: bottle)
                 try Task.checkCancellation()
-                await Wine.syncInputRegistry(bottle: bottle)
+                await Wine.syncInputRegistry(
+                    bottle: bottle, disableMouseCapture: overrides?.disableMouseCapture
+                )
                 try Task.checkCancellation()
                 try await Wine.syncGPURegistry(bottle: bottle, importer: gpuImporter)
                 try Task.checkCancellation()
                 try await Wine.syncDisplayModeRegistry(
-                    bottle: bottle, emulateModeset: overrides?.emulateModeset ?? false,
+                    bottle: bottle, emulateModeset: overrides?.emulateModeset ?? bottle.settings.emulateModeset,
                     importer: gpuImporter
                 )
                 try Task.checkCancellation()

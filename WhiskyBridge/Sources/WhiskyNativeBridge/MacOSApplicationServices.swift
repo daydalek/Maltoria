@@ -79,6 +79,9 @@ public final class MacOSApplicationServices: NativeApplicationServices {
         self.jobs = jobs
         self.engineStore = engineStore
         WhiskyPreferences.configureSharedDomain(preferencesDomain)
+        if wineEnabled {
+            GlobalMouseReleaseHotKey.shared.installIfNeeded()
+        }
     }
 
     public var capabilities: [String] {

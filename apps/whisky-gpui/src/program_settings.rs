@@ -82,9 +82,13 @@ impl ProgramSettingsDto {
     /// latest run failed a display-mode change, the fix is not already forced
     /// on, and the user has not permanently dismissed the suggestion.
     pub(crate) fn legacy_fullscreen_suggested(&self) -> bool {
-        self.display_mode_change_failed
-            && !self.legacy_fullscreen_dismissed
-            && self.overrides.as_ref().and_then(|o| o.emulate_modeset) != Some(true)
+        let effective = self
+            .overrides
+            .as_ref()
+            .and_then(|o| o.emulate_modeset)
+            .or(self.defaults.emulate_modeset)
+            .unwrap_or(false);
+        self.display_mode_change_failed && !self.legacy_fullscreen_dismissed && !effective
     }
 
     pub(crate) fn dll_enabled(&self) -> bool {
@@ -130,6 +134,8 @@ pub(crate) struct OverridesDto {
     pub(crate) disable_controller_mapping: Option<bool>,
     #[serde(default)]
     pub(crate) use_button_labels: Option<bool>,
+    #[serde(default)]
+    pub(crate) disable_mouse_capture: Option<bool>,
     #[serde(default)]
     pub(crate) emulate_modeset: Option<bool>,
     #[serde(default)]
@@ -532,6 +538,7 @@ pub(crate) fn settings_patch(
             "allowBackgroundEvents": overrides.allow_background_events,
             "disableControllerMapping": overrides.disable_controller_mapping,
             "useButtonLabels": overrides.use_button_labels,
+            "disableMouseCapture": overrides.disable_mouse_capture,
             "emulateModeset": overrides.emulate_modeset,
             "virtualDesktopEnabled": overrides.virtual_desktop_enabled,
             "resolutionPreset": overrides.resolution_preset,
@@ -564,8 +571,13 @@ pub(crate) fn normalized_patch_for_dirty_check(
 ) -> Value {
     let mut patch = settings_patch(settings, arguments, environment);
     if let Some(overrides) = patch["overrides"].as_object_mut() {
-        if overrides.get("emulateModeset").and_then(Value::as_bool) == Some(false) {
+        let default_emulate = settings.defaults.emulate_modeset.unwrap_or(false);
+        if overrides.get("emulateModeset").and_then(Value::as_bool) == Some(default_emulate) {
             overrides.insert("emulateModeset".to_owned(), Value::Null);
+        }
+        let default_mouse = settings.defaults.disable_mouse_capture.unwrap_or(false);
+        if overrides.get("disableMouseCapture").and_then(Value::as_bool) == Some(default_mouse) {
+            overrides.insert("disableMouseCapture".to_owned(), Value::Null);
         }
         if overrides.values().all(Value::is_null) {
             patch["overrides"] = Value::Null;
@@ -871,6 +883,15 @@ mod tests {
         assert_ne!(
             normalized_patch_for_dirty_check(&base, &base.arguments, &base.environment),
             normalized_patch_for_dirty_check(&draft, &draft.arguments, &draft.environment),
+        );
+
+        let mut mouse_draft = base.clone();
+        mouse_draft.overrides_mut().disable_mouse_capture = Some(true);
+        let patch = settings_patch(&mouse_draft, &mouse_draft.arguments, &mouse_draft.environment);
+        assert_eq!(patch["overrides"]["disableMouseCapture"], json!(true));
+        assert_ne!(
+            normalized_patch_for_dirty_check(&base, &base.arguments, &base.environment),
+            normalized_patch_for_dirty_check(&mouse_draft, &mouse_draft.arguments, &mouse_draft.environment),
         );
     }
 }

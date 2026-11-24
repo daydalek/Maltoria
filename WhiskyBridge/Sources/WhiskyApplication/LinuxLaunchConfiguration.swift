@@ -202,6 +202,18 @@ public struct LinuxLaunchConfiguration: Sendable, Equatable {
             }
         }
 
+        if let disableMouseCapture = overrideFlag("disableMouseCapture") {
+            environment["WINE_CLIP_CURSOR"] = disableMouseCapture ? "off" : "auto"
+        } else if flag("disableMouseCapture") == true {
+            environment["WINE_CLIP_CURSOR"] = "off"
+        }
+
+        if let emulateModeset = overrideFlag("emulateModeset") {
+            environment["WINE_EMULATE_MODESET"] = emulateModeset ? "1" : "0"
+        } else if flag("emulateModeset") == true {
+            environment["WINE_EMULATE_MODESET"] = "1"
+        }
+
         // Controller compatibility uses the same SDL hints as macOS.
         let controller = overrideFlag("controllerCompatibilityMode") ?? flag("controllerCompatibilityMode") ?? false
         if controller {
