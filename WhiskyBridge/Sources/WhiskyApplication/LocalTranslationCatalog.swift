@@ -152,9 +152,9 @@ public struct LocalTranslationCatalog: Sendable {
             sha256: "1ffd9073afcc70e35ccc942428aa2b73d7aa2b9ea779bf504b775369e0276c13",
             contextWindow: 32_768,
             recommendedRamGB: 8,
-            serverContextWindow: 4_096,
             licenseName: "PLaMo Community License",
-            licenseURL: "https://plamo.preferredai.jp/info/plamo-community-license-en"
+            licenseURL: "https://plamo.preferredai.jp/info/plamo-community-license-en",
+            serverContextWindow: 4_096
         ),
         LocalModelCatalogEntry(
             id: "plamo-3-translate-0.8b-q4_k_m",
@@ -167,9 +167,9 @@ public struct LocalTranslationCatalog: Sendable {
             sha256: "70891ec70dc7ab4205745a38307867c2881b99239f20327927633abfe4bc9ec6",
             contextWindow: 32_768,
             recommendedRamGB: 4,
-            serverContextWindow: 4_096,
             licenseName: "PLaMo Community License",
-            licenseURL: "https://plamo.preferredai.jp/info/plamo-community-license-en"
+            licenseURL: "https://plamo.preferredai.jp/info/plamo-community-license-en",
+            serverContextWindow: 4_096
         ),
         LocalModelCatalogEntry(
             id: "hy-mt3-1.8b-q4_k_m",
