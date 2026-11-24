@@ -240,8 +240,9 @@ enum TranslationPrompt {
             // swiftlint:disable:next line_length
             return "Translate the following text \(from)into \(targetLang). Note that you should only output the translated result without any additional explanation:\n\n\(sourceText)"
         }
+        let from = sourceLang.map { "from \($0) " } ?? ""
         // swiftlint:disable:next line_length
-        return "[Background Information]\n\(backgroundSections.joined(separator: "\n\n"))\n\nPlease translate the following text into \(targetLang), taking the provided background information into consideration.\n\n\(sourceText)"
+        return "[Background Information]\n\(backgroundSections.joined(separator: "\n\n"))\n\nPlease translate the following text \(from)into \(targetLang), taking the provided background information into consideration.\n\n\(sourceText)"
     }
 
     /// Maps Maltoria language codes/names to the full English language names Hy-MT3
