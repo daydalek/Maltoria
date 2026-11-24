@@ -60,6 +60,10 @@ public struct LocalModelCatalogEntry: Codable, Equatable, Identifiable, Sendable
     public let recommendedRamGB: Int
     public let licenseName: String
     public let licenseURL: String
+    /// llama-server `-c` override; nil launches with `contextWindow`. Keeps the
+    /// runtime's KV cache allocation within `recommendedRamGB` for models that
+    /// advertise a large window.
+    public let serverContextWindow: Int?
 
     public init(
         id: String,
@@ -73,7 +77,8 @@ public struct LocalModelCatalogEntry: Codable, Equatable, Identifiable, Sendable
         contextWindow: Int,
         recommendedRamGB: Int,
         licenseName: String,
-        licenseURL: String
+        licenseURL: String,
+        serverContextWindow: Int? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -87,6 +92,7 @@ public struct LocalModelCatalogEntry: Codable, Equatable, Identifiable, Sendable
         self.recommendedRamGB = recommendedRamGB
         self.licenseName = licenseName
         self.licenseURL = licenseURL
+        self.serverContextWindow = serverContextWindow
     }
 
     public var modelDescriptor: ModelDescriptor {
@@ -147,7 +153,8 @@ public struct LocalTranslationCatalog: Sendable {
             contextWindow: 32_768,
             recommendedRamGB: 8,
             licenseName: "PLaMo Community License",
-            licenseURL: "https://plamo.preferredai.jp/info/plamo-community-license-en"
+            licenseURL: "https://plamo.preferredai.jp/info/plamo-community-license-en",
+            serverContextWindow: 4_096
         ),
         LocalModelCatalogEntry(
             id: "plamo-3-translate-0.8b-q4_k_m",
@@ -161,7 +168,22 @@ public struct LocalTranslationCatalog: Sendable {
             contextWindow: 32_768,
             recommendedRamGB: 4,
             licenseName: "PLaMo Community License",
-            licenseURL: "https://plamo.preferredai.jp/info/plamo-community-license-en"
+            licenseURL: "https://plamo.preferredai.jp/info/plamo-community-license-en",
+            serverContextWindow: 4_096
+        ),
+        LocalModelCatalogEntry(
+            id: "hy-mt3-1.8b-q4_k_m",
+            displayName: "Hy-MT3 1.8B (Q4_K_M)",
+            subtitle: "腾讯混元 MT3 · 覆盖 102 种语言，指令遵循与上下文理解更强（运行约占 1.8~2.3 GB 内存）",
+            recommended: false,
+            repoID: "tencent/Hy-MT3-1.8B-GGUF",
+            filename: "Hy-MT3-1.8B-Q4_K_M.gguf",
+            sizeBytes: 1_348_432_160,
+            sha256: "bae6e591103654ff43ef0de7d1492f6e6df1f955505f6bb2cc52e86fc399a942",
+            contextWindow: 8_192,
+            recommendedRamGB: 8,
+            licenseName: "Apache-2.0",
+            licenseURL: "https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF/blob/main/LICENSE.txt"
         )
     ]
 

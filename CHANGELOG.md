@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Tencent Hy-MT3 1.8B (Q4_K_M) as a downloadable built-in local translation model alongside PLaMo 3, with its own chat-template prompt path and Apache-2.0 license labeling.
+
 ## [0.7.0] - 2026-11-24
 
 ### Added

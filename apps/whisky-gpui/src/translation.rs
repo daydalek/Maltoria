@@ -2354,7 +2354,7 @@ impl TranslationPage {
         };
         self.draft = ProviderDraft {
             name: if is_local {
-                crate::i18n::s().translation.built_in_plamo_3_local_translation.into()
+                crate::i18n::s().translation.built_in_local_translation.into()
             } else {
                 String::new()
             },
@@ -3723,7 +3723,7 @@ mod tests {
         assert_eq!(default_endpoint("localBuiltIn"), "http://127.0.0.1:18080");
         assert_eq!(
             provider_kind_label("localBuiltIn"),
-            "内置本地模型 (PLaMo 3)"
+            "内置本地模型 (llama.cpp)"
         );
         assert_eq!(format_bytes_human(573_126_848), "546.6 MB");
         assert_eq!(format_bytes_human(1_807_203_040), "1.68 GB");

@@ -131,6 +131,7 @@ public actor LocalTranslationRuntime {
                 modelID: modelID,
                 modelURL: modelURL,
                 binaryURL: binaryURL,
+                contextWindow: entry.serverContextWindow ?? entry.contextWindow,
                 gpuAcceleration: gpuAcceleration
             )
         }
@@ -196,6 +197,7 @@ public actor LocalTranslationRuntime {
         modelID: String,
         modelURL: URL,
         binaryURL: URL,
+        contextWindow: Int,
         gpuAcceleration: String
     ) async throws -> (baseURL: URL, apiKey: String) {
         let allocatedPort = try Self.allocateEphemeralLoopbackPort()
@@ -213,7 +215,7 @@ public actor LocalTranslationRuntime {
             "--host", "127.0.0.1",
             "--port", String(allocatedPort),
             "--api-key", token,
-            "-c", "4096",
+            "-c", String(contextWindow),
             "-np", "1",
             "--no-webui"
         ]

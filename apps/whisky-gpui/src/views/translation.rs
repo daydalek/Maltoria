@@ -1330,17 +1330,28 @@ impl WhiskyApp {
 
         // Card 2 — Model & Inference Tuning
         let model_card = if local_built_in {
-            let license_pill = pill_badge(
-                "PLaMo Community License",
-                badge_bg(),
-                badge_text(),
-                None,
-            )
-            .id("local-license-badge")
-            .tooltip(hover_tip(
-                crate::i18n::s().translation.plamo_license_note,
-            ))
-            .into_any_element();
+            let license_pill = {
+                let license_name = self
+                    .translation_page
+                    .local_status
+                    .as_ref()
+                    .and_then(|s| {
+                        s.models
+                            .iter()
+                            .find(|m| m.id == active_model_id)
+                            .map(|m| m.license_name.clone())
+                    })
+                    .filter(|n| !n.is_empty())
+                    .unwrap_or_else(|| "PLaMo Community License".to_string());
+                let pill = pill_badge(license_name.clone(), badge_bg(), badge_text(), None)
+                    .id("local-license-badge");
+                if license_name.contains("PLaMo") {
+                    pill.tooltip(hover_tip(crate::i18n::s().translation.plamo_license_note))
+                        .into_any_element()
+                } else {
+                    pill.into_any_element()
+                }
+            };
 
             section_card_v2(
                 "cpu",
