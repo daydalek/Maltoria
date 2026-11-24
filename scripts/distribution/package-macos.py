@@ -121,7 +121,7 @@ def package(app: Path, version: str, output: Path, build_number: int = 1) -> Non
 
 Download {archive_name}, extract Maltoria.app and drag it into Applications.
 The app downloads CrossOver-based GE Wine Libraries separately on first setup.
-The current Wine runtime requires macOS 27+ and Rosetta 2.
+The current Wine runtime requires macOS 15+ and Rosetta 2.
 Source code is included in {sources_name}.
 Third-party licenses, source attribution, and cabextract source are included in
 Maltoria.app/Contents/Resources/ThirdParty/ and THIRD-PARTY-NOTICES.md.
