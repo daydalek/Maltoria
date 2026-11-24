@@ -184,7 +184,7 @@ def main():
                 time.sleep(0.05)
             time.sleep(0.3)
             session.snapshot('wayland-shortcut-section-scrolled')
-            session.click(370, 647)
+            session.click(375, 686)
             shortcut = fixture / 'data/applications/game.desktop'
             wait(shortcut.exists, 'Wayland shortcut creation failed')
             assert '--container-id' in shortcut.read_text()
