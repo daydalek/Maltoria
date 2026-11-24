@@ -750,7 +750,7 @@ struct ProviderAdapterTests {
         #expect(json["temperature"] as? Double == 0.7)
         #expect(json["top_p"] as? Double == 0.6)
         #expect(json["top_k"] as? Int == 20)
-        #expect(json["repetition_penalty"] as? Double == 1.05)
+        #expect(json["repeat_penalty"] as? Double == 1.05)
         #expect(json["cache_prompt"] as? Bool == true)
         #expect(json["stop"] == nil)
 
@@ -762,7 +762,7 @@ struct ProviderAdapterTests {
         #expect(content.contains("User translation preferences:\nKeep honorifics"))
         #expect(content.contains("おはよう translates to Good morning"))
         #expect(content.contains("Speaker: さくら"))
-        #expect(content.contains("Please translate the following text into English"))
+        #expect(content.contains("Please translate the following text from Japanese into English"))
         #expect(content.hasSuffix("先輩、一緒にお昼を食べませんか？< ｜hy_User｜>"))
     }
 

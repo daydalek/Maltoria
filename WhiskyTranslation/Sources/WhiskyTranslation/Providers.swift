@@ -304,7 +304,7 @@ public struct HTTPTranslationProvider: TranslationProvider, Sendable {
             "temperature": 0.7,
             "top_p": 0.6,
             "top_k": 20,
-            "repetition_penalty": 1.05,
+            "repeat_penalty": 1.05,
             "stream": true,
             "stream_options": ["include_usage": true],
             "cache_prompt": true
