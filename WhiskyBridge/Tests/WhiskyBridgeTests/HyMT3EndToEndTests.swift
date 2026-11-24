@@ -52,6 +52,9 @@ struct HyMT3EndToEndTests {
             to: modelsDir.appendingPathComponent(entry.filename)
         )
         for item in try fileManager.contentsOfDirectory(atPath: runtimeDir) {
+            // Skip active.json: the test writes its own manifest below, and
+            // writing through a hardlinked file would clobber the real store.
+            guard item != "active.json" else { continue }
             try fileManager.linkItem(
                 at: URL(fileURLWithPath: runtimeDir).appendingPathComponent(item),
                 to: runtimesDir.appendingPathComponent(item)
