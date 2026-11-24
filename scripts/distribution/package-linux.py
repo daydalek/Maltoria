@@ -270,7 +270,9 @@ def portable_libraries(bundle):
     tools = bundle / 'tools'
     tools.mkdir()
     for source in loaders + query:
-        target = (loader_dir if source in loaders else tools) / source.name
+        # Launchers look up the canonical tool name regardless of the host's -64 suffix.
+        name = source.name if source in loaders else 'gdk-pixbuf-query-loaders'
+        target = (loader_dir if source in loaders else tools) / name
         shutil.copyfile(source, target)
         target.chmod(0o755)
         queue.append(target)
