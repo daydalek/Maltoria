@@ -4,8 +4,10 @@ FROM almalinux:9
 COPY install-deps.sh /tmp/install-linux-deps.sh
 RUN bash /tmp/install-linux-deps.sh && rm /tmp/install-linux-deps.sh
 # Official UBI9 Swift toolchain, same version family as the previous noble image.
-RUN curl --proto '=https' --tlsv1.2 -sSfL \
-      https://download.swift.org/swift-6.4.0-release/ubi9/swift-6.4.0-RELEASE/swift-6.4.0-RELEASE-ubi9.tar.gz \
+ARG TARGETARCH
+RUN case "${TARGETARCH:-amd64}" in amd64) variant=ubi9 ;; arm64) variant=ubi9-aarch64 ;; *) echo "unsupported arch $TARGETARCH" >&2; exit 1 ;; esac \
+    && curl --proto '=https' --tlsv1.2 -sSfL \
+      "https://download.swift.org/swift-6.4.0-release/$variant/swift-6.4.0-RELEASE/swift-6.4.0-RELEASE-$variant.tar.gz" \
       -o /tmp/swift.tar.gz \
     && mkdir -p /opt/swift && tar xzf /tmp/swift.tar.gz --strip-components=1 -C /opt/swift \
     && rm /tmp/swift.tar.gz

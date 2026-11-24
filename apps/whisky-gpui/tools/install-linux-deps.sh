@@ -11,14 +11,14 @@ if command -v dnf >/dev/null 2>&1; then
         binutils-gold libcurl-devel libedit-devel libicu-devel libxml2-devel \
         ncurses-devel sqlite-devel libuuid-devel zlib-devel libzstd-devel \
         python3.12 \
-        libsecret-devel libsecret-tools gnome-keyring alsa-lib-devel systemd-devel \
+        libsecret-devel libsecret gnome-keyring alsa-lib-devel systemd-devel \
         fontconfig-devel freetype-devel gdk-pixbuf2-devel gtk4-devel webp-pixbuf-loader \
         libxkbcommon-devel libxkbcommon-x11-devel wayland-devel libX11-devel \
         libxcb-devel xcb-util-cursor-devel vulkan-headers vulkan-loader-devel libgomp \
         mesa-vulkan-drivers libwebp-devel \
         glib-networking dconf glib2-devel \
         xorg-x11-server-Xvfb xorg-x11-xauth dbus-x11 xdotool xterm ImageMagick \
-        google-noto-sans-cjk-fonts dejavu-sans-fonts python3-gobject python3-pyatspi \
+        google-noto-sans-cjk-ttc-fonts dejavu-sans-fonts python3-gobject python3-pyatspi \
         desktop-file-utils xdg-utils rpm-build dpkg squashfs-tools libarchive
     dnf clean all
     rm -rf /var/cache/dnf

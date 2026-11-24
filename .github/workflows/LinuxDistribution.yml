@@ -57,6 +57,10 @@ jobs:
       GIT_CONFIG_KEY_0: safe.directory
       GIT_CONFIG_VALUE_0: '*'
     steps:
+      # The almalinux:9 image ships without git; install it before checkout so the
+      # checkout keeps repository metadata (source packaging runs git ls-files).
+      - name: Install git for checkout
+        run: dnf -y install git tar gzip
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
@@ -156,6 +160,8 @@ jobs:
     container: almalinux:9
     timeout-minutes: 35
     steps:
+      - name: Install git for checkout
+        run: dnf -y install git tar gzip
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
