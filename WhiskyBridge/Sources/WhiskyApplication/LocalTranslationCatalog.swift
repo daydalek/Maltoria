@@ -60,6 +60,10 @@ public struct LocalModelCatalogEntry: Codable, Equatable, Identifiable, Sendable
     public let recommendedRamGB: Int
     public let licenseName: String
     public let licenseURL: String
+    /// llama-server `-c` override; nil launches with `contextWindow`. Keeps the
+    /// runtime's KV cache allocation within `recommendedRamGB` for models that
+    /// advertise a large window.
+    public let serverContextWindow: Int?
 
     public init(
         id: String,
@@ -73,7 +77,8 @@ public struct LocalModelCatalogEntry: Codable, Equatable, Identifiable, Sendable
         contextWindow: Int,
         recommendedRamGB: Int,
         licenseName: String,
-        licenseURL: String
+        licenseURL: String,
+        serverContextWindow: Int? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -87,6 +92,7 @@ public struct LocalModelCatalogEntry: Codable, Equatable, Identifiable, Sendable
         self.recommendedRamGB = recommendedRamGB
         self.licenseName = licenseName
         self.licenseURL = licenseURL
+        self.serverContextWindow = serverContextWindow
     }
 
     public var modelDescriptor: ModelDescriptor {
@@ -146,6 +152,7 @@ public struct LocalTranslationCatalog: Sendable {
             sha256: "1ffd9073afcc70e35ccc942428aa2b73d7aa2b9ea779bf504b775369e0276c13",
             contextWindow: 32_768,
             recommendedRamGB: 8,
+            serverContextWindow: 4_096,
             licenseName: "PLaMo Community License",
             licenseURL: "https://plamo.preferredai.jp/info/plamo-community-license-en"
         ),
@@ -160,6 +167,7 @@ public struct LocalTranslationCatalog: Sendable {
             sha256: "70891ec70dc7ab4205745a38307867c2881b99239f20327927633abfe4bc9ec6",
             contextWindow: 32_768,
             recommendedRamGB: 4,
+            serverContextWindow: 4_096,
             licenseName: "PLaMo Community License",
             licenseURL: "https://plamo.preferredai.jp/info/plamo-community-license-en"
         ),

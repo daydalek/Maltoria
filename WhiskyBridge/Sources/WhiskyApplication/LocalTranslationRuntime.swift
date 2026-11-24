@@ -131,7 +131,7 @@ public actor LocalTranslationRuntime {
                 modelID: modelID,
                 modelURL: modelURL,
                 binaryURL: binaryURL,
-                contextWindow: entry.contextWindow,
+                contextWindow: entry.serverContextWindow ?? entry.contextWindow,
                 gpuAcceleration: gpuAcceleration
             )
         }
