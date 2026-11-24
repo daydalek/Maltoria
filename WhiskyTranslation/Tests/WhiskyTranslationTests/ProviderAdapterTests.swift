@@ -783,7 +783,9 @@ struct ProviderAdapterTests {
             contextWindowProvenance: .detected
         )
         let prompt = TranslationPrompt.hyMT3Prompt(for: req)
-        #expect(prompt == "Translate the following text into Traditional Chinese. Note that you should only output the translated result without any additional explanation:\n\nテスト")
+        #expect(prompt ==
+            // swiftlint:disable:next line_length
+            "Translate the following text into Traditional Chinese. Note that you should only output the translated result without any additional explanation:\n\nテスト")
 
         let sourceAware = TranslationPrompt.hyMT3Prompt(for: TranslationRequest(
             gameID: req.gameID,

@@ -32,7 +32,8 @@ struct HyMT3EndToEndTests {
     @Test func managedProviderTranslatesWithRealRuntime() async throws {
         let env = ProcessInfo.processInfo.environment
         guard let modelPath = env["MT3_E2E_MODEL"], !modelPath.isEmpty,
-              let runtimeDir = env["MT3_E2E_RUNTIME_DIR"], !runtimeDir.isEmpty else {
+              let runtimeDir = env["MT3_E2E_RUNTIME_DIR"], !runtimeDir.isEmpty
+        else {
             return
         }
         let modelID = "hy-mt3-1.8b-q4_k_m"
@@ -43,15 +44,15 @@ struct HyMT3EndToEndTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let modelsDir = root.appendingPathComponent("models", isDirectory: true)
         let runtimesDir = root.appendingPathComponent("runtime", isDirectory: true)
-        let fm = FileManager.default
-        try fm.createDirectory(at: modelsDir, withIntermediateDirectories: true)
-        try fm.createDirectory(at: runtimesDir, withIntermediateDirectories: true)
-        try fm.linkItem(
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(at: modelsDir, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: runtimesDir, withIntermediateDirectories: true)
+        try fileManager.linkItem(
             at: URL(fileURLWithPath: modelPath),
             to: modelsDir.appendingPathComponent(entry.filename)
         )
-        for item in try fm.contentsOfDirectory(atPath: runtimeDir) {
-            try fm.linkItem(
+        for item in try fileManager.contentsOfDirectory(atPath: runtimeDir) {
+            try fileManager.linkItem(
                 at: URL(fileURLWithPath: runtimeDir).appendingPathComponent(item),
                 to: runtimesDir.appendingPathComponent(item)
             )
