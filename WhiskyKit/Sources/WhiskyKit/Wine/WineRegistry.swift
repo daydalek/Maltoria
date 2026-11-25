@@ -368,6 +368,8 @@ public extension Wine {
         )
     }
 
+    // The registry update is a single cohesive transaction.
+    // swiftlint:disable function_body_length
     /// Brings the bottle's Mac Driver input registry values in line with its
     /// input settings.
     ///
@@ -376,8 +378,6 @@ public extension Wine {
     /// from the launch path, and only when the marker file shows they changed.
     /// A missing marker on factory settings is stamped without booting
     /// wineserver, since a fresh prefix already behaves that way.
-    // The registry update is a single cohesive transaction.
-    // swiftlint:disable:next function_body_length
     @MainActor
     static func syncInputRegistry(bottle: Bottle, disableMouseCapture: Bool? = nil) async {
         var desired = InputRegistryState.desired(for: bottle)
@@ -438,6 +438,7 @@ public extension Wine {
             )
         }
     }
+    // swiftlint:enable function_body_length
 }
 
 /// The Mac Driver input registry values Whisky last wrote into a bottle, kept
