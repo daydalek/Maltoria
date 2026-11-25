@@ -1,0 +1,3597 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f6ecd6">
+<title>Maltoria — 使用说明</title>
+<meta name="description" content="Maltoria 完整使用说明：涵盖 macOS Apple Silicon 与 Linux x86_64 安装、容器与扫描导入、五大数据源刮削、LunaHook 与本地模型实时翻译、画面超分、快捷键及故障排查。">
+<meta name="google-site-verification" content="PI8mPfrFZCpyztIr5p7CVO7j-Jv0XlLGxB31MzZcnnY">
+<link rel="canonical" href="https://daydalek.github.io/Maltoria/guide.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Maltoria — 使用说明">
+<meta property="og:description" content="Maltoria 完整使用说明：安装、容器管理、刮削、LunaHook 实时翻译、画面超分与排障指南。">
+<meta property="og:url" content="https://daydalek.github.io/Maltoria/guide.html">
+<meta property="og:image" content="https://raw.githubusercontent.com/daydalek/Maltoria/main/images/og-card.png">
+<link rel="icon" href="assets/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;1,400;1,500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: light;
+    --paper: #f6ecd6;
+    --paper-deep: #ede0c3;
+    --paper-sheet: #fbf5e6;
+    --paper-inset: #eee2c7;
+    --paper-footer: #e7d8b8;
+
+    --ink: #261d14;
+    --ink-body: #47392b;
+    --ink-muted: #6f5d49;
+    --ink-faint: #8e7b63;
+
+    --rule: rgba(74, 52, 26, 0.14);
+    --rule-strong: rgba(74, 52, 26, 0.25);
+    --rule-soft: rgba(74, 52, 26, 0.08);
+
+    --accent: #9a5420;
+    --accent-hover: #7c4014;
+    --accent-soft: rgba(154, 84, 32, 0.10);
+    --accent-rule: rgba(154, 84, 32, 0.30);
+    --sage: #38664e;
+    --sage-soft: rgba(56, 102, 78, 0.12);
+
+    --font-serif: "Playfair Display", "Noto Serif SC", "Songti SC", "STSong", "Noto Serif CJK SC", Georgia, serif;
+    --font-sans: "Noto Sans SC", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    --font-mono: "IBM Plex Mono", "SF Mono", Menlo, Consolas, ui-monospace, monospace;
+
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html {
+    scroll-behavior: smooth;
+    scrollbar-color: rgba(111, 93, 73, 0.38) var(--paper-deep);
+    scrollbar-width: thin;
+  }
+
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-track { background: var(--paper-deep); }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(111, 93, 73, 0.34);
+    border-radius: 999px;
+    border: 2px solid var(--paper-deep);
+  }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(111, 93, 73, 0.54); }
+
+  ::selection { background: rgba(154, 84, 32, 0.20); color: var(--ink); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  body {
+    position: relative;
+    background-color: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 15.5px;
+    line-height: 1.78;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    background-image:
+      radial-gradient(ellipse 88% 52% at 50% 0%, rgba(255, 250, 232, 0.80), transparent 72%),
+      radial-gradient(ellipse 68% 48% at 12% 38%, rgba(226, 198, 148, 0.34), transparent 68%),
+      radial-gradient(ellipse 65% 50% at 88% 72%, rgba(220, 190, 138, 0.36), transparent 70%),
+      radial-gradient(ellipse 55% 42% at 45% 92%, rgba(230, 204, 156, 0.28), transparent 68%);
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 90;
+    opacity: 0.52;
+    mix-blend-mode: multiply;
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.78' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.48  0 0 0 0 0.34  0 0 0 0 0.16  0 0 0 0.42 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23grain)'/%3E%3C/svg%3E"),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='360' height='360' viewBox='0 0 360 360'%3E%3Cfilter id='pulp'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.045' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.56  0 0 0 0 0.40  0 0 0 0 0.18  0 0 0 0.14 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23pulp)'/%3E%3C/svg%3E");
+    background-size: 220px 220px, 360px 360px;
+  }
+
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.48;
+    background-image:
+      repeating-linear-gradient(0deg, rgba(110, 78, 38, 0.036) 0px, rgba(110, 78, 38, 0.036) 1px, transparent 1px, transparent 24px),
+      repeating-linear-gradient(90deg, rgba(110, 78, 38, 0.018) 0px, rgba(110, 78, 38, 0.018) 1px, transparent 1px, transparent 96px);
+  }
+
+  a { color: inherit; text-decoration: none; }
+  img { display: block; max-width: 100%; }
+  button { font: inherit; color: inherit; }
+  .tnum { font-variant-numeric: tabular-nums; }
+
+  .wrap {
+    position: relative;
+    z-index: 1;
+    max-width: 1160px;
+    margin: 0 auto;
+    padding: 0 32px;
+  }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    background: var(--paper-inset);
+    border: 1px solid var(--rule);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--ink);
+    word-break: break-word;
+  }
+
+  kbd {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    background: var(--paper-sheet);
+    border: 1px solid var(--rule-strong);
+    border-bottom-width: 2px;
+    padding: 2px 7px;
+    border-radius: 5px;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+
+  /* =========================================================
+     Top Navigation Bar (Matches index.html 3-Zone Contract)
+     ========================================================= */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 60;
+    background: rgba(246, 236, 214, 0.90);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--rule);
+    transition: background 0.2s var(--ease), border-color 0.2s var(--ease);
+  }
+  .topbar.solid {
+    background: rgba(246, 236, 214, 0.96);
+    border-bottom-color: var(--rule-strong);
+  }
+  .topbar .wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 32px;
+    height: 64px;
+  }
+  .read-progress {
+    position: absolute;
+    left: 0;
+    bottom: -1px;
+    height: 2px;
+    width: 100%;
+    transform-origin: left center;
+    transform: scaleX(0);
+    background: var(--accent);
+    pointer-events: none;
+  }
+  .brand-wordmark {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-serif);
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .brand-wordmark img {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid var(--rule-strong);
+  }
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink-muted);
+  }
+  .nav-links a {
+    position: relative;
+    padding: 6px 0;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: color 0.18s var(--ease);
+  }
+  .nav-links a::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 2px;
+    height: 1.5px;
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 0.2s var(--ease);
+  }
+  .nav-links a:hover,
+  .nav-links a.active { color: var(--ink); }
+  .nav-links a:hover::after,
+  .nav-links a.active::after { transform: scaleX(1); }
+
+  .nav-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .lang-picker {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    color: var(--ink-muted);
+  }
+  .lang-picker svg.globe-ic {
+    position: absolute;
+    left: 10px;
+    pointer-events: none;
+    color: var(--ink-muted);
+  }
+  .lang-picker svg.chev-ic {
+    position: absolute;
+    right: 8px;
+    pointer-events: none;
+    color: var(--ink-faint);
+  }
+  .lang-select {
+    appearance: none;
+    -webkit-appearance: none;
+    height: 36px;
+    padding: 0 26px 0 30px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--rule-strong);
+    background: var(--paper-sheet);
+    color: var(--ink-body);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 0.18s var(--ease), color 0.18s var(--ease);
+  }
+  .lang-select:hover {
+    border-color: var(--accent);
+    color: var(--ink);
+  }
+  .nav-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 36px;
+    padding: 0 16px;
+    border-radius: var(--radius-sm);
+    background: var(--ink);
+    color: var(--paper-sheet);
+    font-size: 13.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 0.18s var(--ease), transform 0.18s var(--ease);
+  }
+  .nav-cta:hover {
+    background: var(--accent);
+    transform: translateY(-1px);
+  }
+  .nav-menu-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--rule-strong);
+    border-radius: var(--radius-sm);
+    background: var(--paper-sheet);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .mobile-drawer {
+    display: none;
+    border-top: 1px solid var(--rule);
+    background: var(--paper-sheet);
+    padding: 12px 24px 18px;
+  }
+  .mobile-drawer.open { display: block; }
+  .mobile-drawer a {
+    display: block;
+    padding: 10px 0;
+    font-size: 15px;
+    color: var(--ink-body);
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .mobile-drawer a:last-child { border-bottom: 0; }
+
+  /* =========================================================
+     Handbook Editorial Masthead
+     ========================================================= */
+  .masthead {
+    padding: 56px 0 40px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .masthead-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 42px;
+    align-items: center;
+  }
+  .masthead-art {
+    margin: 0;
+    padding: 7px;
+    background: var(--paper-sheet);
+    border: 1px solid var(--rule-strong);
+    border-radius: var(--radius-md);
+    box-shadow: 0 18px 38px -24px rgba(46, 30, 14, 0.28), 0 2px 6px -2px rgba(46, 30, 14, 0.08);
+    transform: rotate(1.2deg);
+  }
+  .masthead-art img {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    object-position: center 38%;
+    border-radius: calc(var(--radius-md) - 4px);
+    border: 1px solid rgba(38, 29, 20, 0.16);
+  }
+  .masthead-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    margin-bottom: 14px;
+  }
+  .masthead-kicker::before {
+    content: "";
+    width: 24px;
+    height: 1px;
+    background: var(--accent);
+  }
+  .masthead h1 {
+    font-family: var(--font-serif);
+    font-size: clamp(34px, 4.4vw, 50px);
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+  .masthead-lead {
+    margin-top: 14px;
+    max-width: 68ch;
+    font-size: 16px;
+    line-height: 1.78;
+    color: var(--ink-body);
+  }
+  .masthead-bar {
+    margin-top: 26px;
+    padding-top: 18px;
+    border-top: 1px solid var(--rule);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px 24px;
+  }
+  .platform-seg {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    background: var(--paper-inset);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-sm);
+  }
+  .plat-tab {
+    border: 0;
+    background: transparent;
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--ink-muted);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.16s var(--ease), color 0.16s var(--ease);
+  }
+  .plat-tab:hover { color: var(--ink); }
+  .plat-tab.on {
+    background: var(--paper-sheet);
+    color: var(--ink);
+    box-shadow: 0 1px 2px rgba(46, 30, 14, 0.10);
+  }
+  .masthead-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 18px;
+    font-size: 13px;
+    color: var(--ink-muted);
+  }
+  .masthead-meta a {
+    color: var(--accent);
+    font-weight: 500;
+    border-bottom: 1px solid var(--accent-rule);
+    padding-bottom: 1px;
+    transition: color 0.18s var(--ease), border-color 0.18s var(--ease);
+  }
+  .masthead-meta a:hover {
+    color: var(--accent-hover);
+    border-bottom-color: var(--accent-hover);
+  }
+
+  /* =========================================================
+     Two-Column Archival Handbook Shell
+     ========================================================= */
+  .handbook-shell {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    gap: 56px;
+    align-items: start;
+    padding: 44px 0 96px;
+  }
+
+  /* Sticky Left Chapter Index Rail */
+  .toc-rail {
+    position: sticky;
+    top: 90px;
+    padding-top: 4px;
+  }
+  .toc-label {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.08em;
+    color: var(--ink-faint);
+    padding-bottom: 10px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--rule-strong);
+  }
+  .toc-list {
+    list-style: none;
+  }
+  .toc-list li {
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .toc-list a {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 9px 6px;
+    font-size: 13.5px;
+    line-height: 1.45;
+    color: var(--ink-muted);
+    transition: color 0.16s var(--ease), transform 0.16s var(--ease);
+  }
+  .toc-list a:hover { color: var(--ink); }
+  .toc-list a.active {
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .toc-num {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--ink-faint);
+    flex-shrink: 0;
+  }
+  .toc-list a.active .toc-num { color: var(--accent); }
+
+  .toc-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink-muted);
+    transition: color 0.16s var(--ease);
+  }
+  .toc-back:hover { color: var(--accent); }
+
+  /* Mobile compact chapter strip */
+  .mobile-toc {
+    display: none;
+    margin-bottom: 28px;
+    padding: 14px 16px;
+    background: var(--paper-sheet);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-md);
+  }
+  .mobile-toc-title {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--ink-faint);
+    margin-bottom: 10px;
+  }
+  .mobile-toc-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 14px;
+    list-style: none;
+  }
+  .mobile-toc-grid a {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--ink-body);
+    padding: 3px 0;
+  }
+  .mobile-toc-grid a:hover { color: var(--accent); }
+
+  /* =========================================================
+     Handbook Chapters & Editorial Typography
+     ========================================================= */
+  .handbook-body {
+    max-width: 780px;
+    min-width: 0;
+  }
+
+  .chapter {
+    scroll-margin-top: 86px;
+    padding-bottom: 52px;
+    margin-bottom: 52px;
+    border-bottom: 1px solid var(--rule-strong);
+  }
+  .chapter:last-child {
+    border-bottom: 0;
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .chapter-head {
+    margin-bottom: 22px;
+  }
+  .chapter-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .chapter h2 {
+    font-family: var(--font-serif);
+    font-size: clamp(24px, 2.8vw, 31px);
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: -0.015em;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+  .chapter-intro {
+    margin-top: 10px;
+    color: var(--ink-body);
+    font-size: 15.5px;
+    line-height: 1.78;
+  }
+
+  .chapter-figure {
+    margin: 20px 0 28px;
+    padding: 8px;
+    background: var(--paper-sheet);
+    border: 1px solid var(--rule-strong);
+    border-radius: var(--radius-md);
+    box-shadow: 0 18px 38px -24px rgba(46, 30, 14, 0.28), 0 2px 6px -2px rgba(46, 30, 14, 0.08);
+  }
+  .chapter-figure img {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1600 / 1027;
+    object-fit: cover;
+    border-radius: calc(var(--radius-md) - 4px);
+    border: 1px solid rgba(38, 29, 20, 0.16);
+    cursor: zoom-in;
+  }
+  .chapter-figure figcaption {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 4px 2px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.03em;
+    color: var(--ink-muted);
+  }
+  .chapter-figure figcaption span:last-child {
+    color: var(--ink-faint);
+    white-space: nowrap;
+  }
+
+  .inline-figure-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin: 20px 0 6px;
+  }
+  .inline-figure {
+    margin: 0;
+    padding: 6px;
+    background: var(--paper-sheet);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-sm);
+  }
+  .inline-figure img {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    object-position: top center;
+    border-radius: calc(var(--radius-sm) - 3px);
+    border: 1px solid rgba(38, 29, 20, 0.14);
+    cursor: zoom-in;
+  }
+  .inline-figure figcaption {
+    padding: 7px 3px 1px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--ink-muted);
+  }
+
+  .quickstart-card {
+    margin-bottom: 44px;
+    padding: 18px 20px 16px;
+    background: var(--paper-sheet);
+    border: 1px solid var(--rule-strong);
+    border-radius: var(--radius-md);
+    box-shadow: 0 18px 38px -26px rgba(46, 30, 14, 0.24);
+  }
+  .quickstart-label {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+  .quickstart-steps {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+    list-style: none;
+  }
+  .quickstart-steps a {
+    display: block;
+    min-height: 74px;
+    padding: 10px 11px;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-sm);
+    color: var(--ink-body);
+    font-size: 13px;
+    line-height: 1.45;
+    transition: border-color 0.16s var(--ease), color 0.16s var(--ease), background 0.16s var(--ease);
+  }
+  .quickstart-steps a:hover {
+    border-color: var(--accent-rule);
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .quickstart-steps strong {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ink-faint);
+    margin-bottom: 4px;
+  }
+
+  .sub-block {
+    margin-top: 26px;
+  }
+  .sub-block h3 {
+    font-family: var(--font-serif);
+    font-size: 18.5px;
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--ink);
+    margin-bottom: 10px;
+  }
+  .sub-block p {
+    color: var(--ink-body);
+    margin-bottom: 12px;
+  }
+  .sub-block p:last-child { margin-bottom: 0; }
+
+  .guide-list {
+    list-style: none;
+    border-top: 1px solid var(--rule);
+    margin-top: 10px;
+  }
+  .guide-list li {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--rule);
+    color: var(--ink-body);
+    font-size: 14.8px;
+    line-height: 1.72;
+  }
+  .guide-list li strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  /* Two-column Platform / Comparison Split Cards (Single Elevation, Hairline Only) */
+  .pair-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    margin-top: 16px;
+  }
+  .sheet-card {
+    background: var(--paper-sheet);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-md);
+    padding: 20px 22px;
+    transition: border-color 0.18s var(--ease);
+  }
+  .sheet-card h4 {
+    font-family: var(--font-serif);
+    font-size: 16.5px;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .sheet-meta {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-weight: 400;
+    color: var(--ink-faint);
+  }
+  .sheet-card p {
+    font-size: 14.2px;
+    line-height: 1.7;
+    color: var(--ink-body);
+    margin-bottom: 10px;
+  }
+  .sheet-card p:last-child { margin-bottom: 0; }
+  .sheet-card ul {
+    list-style: none;
+    margin-top: 6px;
+  }
+  .sheet-card ul li {
+    position: relative;
+    padding: 5px 0 5px 14px;
+    font-size: 14px;
+    line-height: 1.65;
+    color: var(--ink-body);
+  }
+  .sheet-card ul li::before {
+    content: "·";
+    position: absolute;
+    left: 2px;
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  /* Quiet Archival Note Box (Hairline all-around, NO thick left accent bar) */
+  .note-box {
+    margin-top: 18px;
+    padding: 16px 20px;
+    background: var(--paper-sheet);
+    border: 1px solid var(--rule-strong);
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    line-height: 1.72;
+    color: var(--ink-body);
+  }
+  .note-box .note-title {
+    display: block;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+
+  /* Copyable Terminal Snippet */
+  .cmd-block {
+    margin-top: 12px;
+    background: var(--paper-inset);
+    border: 1px solid var(--rule-strong);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .cmd-block pre {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.65;
+    color: var(--ink);
+    white-space: pre-wrap;
+    word-break: break-all;
+    overflow-x: auto;
+    flex: 1;
+  }
+  .copy-btn {
+    border: 1px solid var(--rule-strong);
+    background: var(--paper-sheet);
+    color: var(--ink-body);
+    padding: 5px 12px;
+    border-radius: 5px;
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: border-color 0.16s var(--ease), color 0.16s var(--ease), background 0.16s var(--ease);
+  }
+  .copy-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .copy-btn.copied {
+    border-color: var(--sage);
+    background: var(--sage-soft);
+    color: var(--sage);
+  }
+
+  /* Ruled Editorial Tables */
+  .table-wrap {
+    margin-top: 14px;
+    overflow-x: auto;
+    border-top: 2px solid var(--rule-strong);
+    border-bottom: 1px solid var(--rule-strong);
+    background: var(--paper-sheet);
+    border-radius: 4px;
+  }
+  table.guide-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    text-align: left;
+  }
+  table.guide-table th {
+    padding: 11px 14px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink-muted);
+    background: var(--paper-inset);
+    border-bottom: 1px solid var(--rule-strong);
+    white-space: nowrap;
+  }
+  table.guide-table td {
+    padding: 11px 14px;
+    color: var(--ink-body);
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+    line-height: 1.6;
+  }
+  table.guide-table tr:last-child td { border-bottom: 0; }
+  table.guide-table td strong { color: var(--ink); font-weight: 600; }
+  table.guide-table a {
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--accent-rule);
+  }
+  table.guide-table a:hover { border-bottom-color: var(--accent); }
+  table.guide-table td.cell-nowrap { white-space: nowrap; }
+
+  /* Platform Filter Visibility */
+  [data-plat-only] { transition: opacity 0.2s var(--ease); }
+  body[data-plat-filter="mac"] [data-plat-only="linux"],
+  body[data-plat-filter="linux"] [data-plat-only="mac"] {
+    display: none;
+  }
+  body[data-plat-filter="mac"] .pair-grid.plat-pair,
+  body[data-plat-filter="linux"] .pair-grid.plat-pair {
+    grid-template-columns: 1fr;
+  }
+
+  /* Quiet Archival Footer */
+  footer {
+    border-top: 1px solid var(--rule-strong);
+    background: var(--paper-footer);
+    padding: 36px 0 44px;
+    font-size: 13.5px;
+    color: var(--ink-muted);
+  }
+  footer .wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px 32px;
+    justify-content: space-between;
+    align-items: center;
+  }
+  footer .links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+  }
+  footer a {
+    color: var(--ink-body);
+    transition: color 0.18s var(--ease);
+  }
+  footer a:hover { color: var(--accent); }
+
+  @media (max-width: 1060px) {
+    .nav-links,
+    .nav-cta { display: none; }
+    .nav-menu-btn { display: inline-flex; }
+  }
+
+  @media (max-width: 960px) {
+    .masthead-layout {
+      grid-template-columns: 1fr;
+      gap: 28px;
+    }
+    .masthead-art {
+      max-width: 420px;
+      transform: none;
+    }
+    .handbook-shell {
+      grid-template-columns: 1fr;
+      gap: 0;
+      padding: 28px 0 72px;
+    }
+    .toc-rail { display: none; }
+    .mobile-toc { display: block; }
+    .handbook-body { max-width: 100%; }
+    .quickstart-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  @media (max-width: 640px) {
+    .wrap { padding: 0 20px; }
+    .masthead { padding: 36px 0 28px; }
+    .masthead-art { max-width: 100%; }
+    .pair-grid { grid-template-columns: 1fr; }
+    .quickstart-steps { grid-template-columns: 1fr; }
+    .inline-figure-grid { grid-template-columns: 1fr; }
+    .mobile-toc-grid { grid-template-columns: 1fr; }
+    .cmd-block { flex-direction: column; align-items: stretch; }
+    .copy-btn { align-self: flex-end; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+    html { scroll-behavior: auto; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar" id="nav">
+  <div class="wrap">
+    <a class="brand-wordmark" href="index.html">
+      <img src="assets/logo.png" alt="Maltoria" width="28" height="28">
+      <span>Maltoria</span>
+    </a>
+
+    <nav class="nav-links" id="main-nav" aria-label="主导航">
+      <a href="index.html" data-ui="nav_home">首页</a>
+      <a href="#install" data-ui="nav_start">快速上手</a>
+      <a href="#translation" data-ui="nav_trans">实时翻译</a>
+      <a href="#runtime" data-ui="nav_runtime">运行调校</a>
+      <a href="#troubleshooting" data-ui="nav_trouble">排障</a>
+    </nav>
+
+    <div class="nav-actions">
+      <label class="lang-picker">
+        <svg class="globe-ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+        <select class="lang-select" id="lang-select" aria-label="切换语言">
+          <option value="zh-Hans">简体中文</option>
+          <option value="en">English</option>
+          <option value="ja">日本語</option>
+          <option value="ko">한국어</option>
+          <option value="fr">Français</option>
+          <option value="es">Español</option>
+          <option value="it">Italiano</option>
+          <option value="de">Deutsch</option>
+          <option value="ru">Русский</option>
+        </select>
+        <svg class="chev-ic" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </label>
+
+      <a class="nav-cta" href="index.html#download">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" aria-hidden="true"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+        <span data-ui="nav_cta">下载 v0.7.0</span>
+      </a>
+
+      <button class="nav-menu-btn" id="nav-menu-btn" type="button" aria-expanded="false" aria-controls="mobile-drawer" aria-label="展开导航菜单">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="read-progress" id="read-progress" aria-hidden="true"></div>
+
+  <div class="mobile-drawer" id="mobile-drawer">
+    <a href="index.html" data-ui="nav_home">首页</a>
+    <a href="#install" data-ui="nav_start">快速上手</a>
+    <a href="#translation" data-ui="nav_trans">实时翻译</a>
+    <a href="#runtime" data-ui="nav_runtime">运行调校</a>
+    <a href="#troubleshooting" data-ui="nav_trouble">排障</a>
+    <a href="index.html#download" data-ui="nav_cta">下载 v0.7.0</a>
+  </div>
+</header>
+
+<section class="masthead">
+  <div class="wrap masthead-layout">
+    <div class="masthead-copy">
+      <p class="masthead-kicker tnum" data-ui="kicker">MANUAL · v0.7.0 · macOS &amp; Linux</p>
+      <h1 data-ui="title">Maltoria 使用说明</h1>
+      <p class="masthead-lead" data-ui="lead">基于源码整理的完整操作手册：涵盖首次安装、容器与游戏入库、五大数据源刮削、LunaHook 与本地模型实时翻译、画面超分、快捷键以及故障排查。</p>
+
+      <div class="masthead-bar">
+        <div class="platform-seg" id="plat-filter" role="tablist" aria-label="按平台筛选说明">
+          <button class="plat-tab on" type="button" data-plat="all" role="tab" aria-selected="true" data-ui="plat_all">全部平台</button>
+          <button class="plat-tab" type="button" data-plat="mac" role="tab" aria-selected="false">macOS</button>
+          <button class="plat-tab" type="button" data-plat="linux" role="tab" aria-selected="false">Linux</button>
+        </div>
+        <div class="masthead-meta">
+          <span data-ui="meta_scope">适用版本 v0.7.0 · Apple Silicon &amp; Linux x86_64</span>
+          <a href="index.html#download" data-ui="meta_dl">获取安装包 ↗</a>
+        </div>
+      </div>
+    </div>
+
+    <figure class="masthead-art" aria-hidden="true">
+      <img src="assets/artwork-spring-school.jpg" alt="" width="1600" height="900">
+    </figure>
+  </div>
+</section>
+
+<div class="wrap">
+  <div class="handbook-shell">
+    <aside class="toc-rail" aria-label="章节目录">
+      <div class="toc-label" data-ui="toc_label">目录</div>
+      <ol class="toc-list" id="toc-list"></ol>
+      <a class="toc-back" href="index.html">
+        <span aria-hidden="true">←</span>
+        <span data-ui="back_home">返回产品主页</span>
+      </a>
+    </aside>
+
+    <main class="handbook-body">
+      <nav class="mobile-toc" aria-label="章节快速跳转">
+        <div class="mobile-toc-title" data-ui="toc_label">目录</div>
+        <ol class="mobile-toc-grid" id="mobile-toc-list"></ol>
+      </nav>
+      <div id="guide-root"></div>
+    </main>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span><strong>Maltoria</strong> · <span data-ui="ft_note">GPL-3.0 开源视觉小说管理器与 Wine 运行环境</span></span>
+    <div class="links">
+      <a href="index.html" data-ui="ft_home">返回首页</a>
+      <a href="index.html#download" data-ui="ft_dl">下载 v0.7.0</a>
+      <a href="https://github.com/daydalek/Maltoria" target="_blank" rel="noopener" data-ui="ft_repo">GitHub 仓库</a>
+      <a href="https://github.com/daydalek/Maltoria/issues" target="_blank" rel="noopener" data-ui="ft_issues">问题反馈</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+const LANG_STORAGE_KEY = 'maltoria-lang';
+
+function normalizeLang(raw) {
+  if (!raw) return null;
+  const s = String(raw).trim().toLowerCase().replace(/_/g, '-');
+  if (s === 'zh' || s.startsWith('zh-')) return 'zh-Hans';
+  const base = s.split('-')[0];
+  if (['en', 'ja', 'ko', 'fr', 'es', 'it', 'de', 'ru'].includes(base)) return base;
+  return null;
+}
+
+function detectInitialLang() {
+  try {
+    const fromUrl = normalizeLang(new URLSearchParams(location.search).get('lang'));
+    if (fromUrl) return fromUrl;
+  } catch {}
+  try {
+    const saved = normalizeLang(localStorage.getItem(LANG_STORAGE_KEY));
+    if (saved) return saved;
+  } catch {}
+  const list = Array.isArray(navigator.languages) && navigator.languages.length
+    ? navigator.languages
+    : [navigator.language];
+  for (const c of list) {
+    const m = normalizeLang(c);
+    if (m) return m;
+  }
+  return 'zh-Hans';
+}
+
+const GUIDE_DATA = {
+  'zh-Hans': {
+    doc_title: 'Maltoria — 使用说明',
+    meta_desc: 'Maltoria 完整使用说明：涵盖安装与首次启动、容器管理、五大数据源刮削、LunaHook 与本地模型实时翻译、画面超分、快捷键与故障排查。',
+    ui: {
+      nav_home: '首页', nav_start: '快速上手', nav_trans: '实时翻译', nav_runtime: '运行调校', nav_trouble: '排障',
+      nav_cta: '下载 v0.7.0', kicker: 'MANUAL · v0.7.0 · macOS & Linux',
+      title: 'Maltoria 使用说明',
+      lead: '结合 Maltoria 实际功能整理的完整操作手册：涵盖首次安装、容器与游戏入库、五大数据源刮削、LunaHook 与本地模型实时翻译、画面超分、快捷键以及常见故障排查。',
+      plat_all: '全部平台', meta_scope: '适用版本 v0.7.0 · Apple Silicon & Linux x86_64', meta_dl: '获取安装包 ↗',
+      toc_label: '章节目录', back_home: '返回产品主页',
+      copy: '复制命令', copied: '已复制 ✓',
+      ft_note: 'GPL-3.0 开源视觉小说管理器与 Wine 运行环境', ft_home: '返回首页', ft_dl: '下载 v0.7.0', ft_repo: 'GitHub 仓库', ft_issues: '问题反馈'
+    },
+    chapters: [
+      {
+        id: 'install', num: '01', toc: '安装与首次启动', title: '安装与首次启动',
+        intro: 'Maltoria 同时支持 macOS (Apple Silicon) 与 Linux (x86_64)。首次打开时会先通过三步引导保存偏好设置，不会擅自扫描目录、下载运行时或发起网络刮削。',
+        blocks: [
+          {
+            type: 'plat_cards',
+            cards: [
+              {
+                plat: 'mac', title: 'macOS (Apple Silicon)', meta: 'M1 及以上 · .zip',
+                bullets: [
+                  '下载 Maltoria-0.7.0-arm64.zip 解压，将 Maltoria.app 拖入「应用程序」。',
+                  '当前采用 ad-hoc 签名，首次打开若弹出 Gatekeeper 提示，请前往「系统设置 → 隐私与安全性」点击「仍要打开」，或执行下方命令解除隔离属性。',
+                  '启动后在「设置 → 运行时与引擎」安装 Rosetta 2（运行 x86_64 游戏必需）与托管 Wine 运行时（自动校验 SHA-256）。'
+                ],
+                cmd: 'xattr -dr com.apple.quarantine /Applications/Maltoria.app'
+              },
+              {
+                plat: 'linux', title: 'Linux (x86_64)', meta: '.deb / .rpm / AppImage',
+                bullets: [
+                  'Ubuntu 24.04+ 直接安装 whisky_0.7.0_amd64.deb；Fedora 44+ 安装 whisky-0.7.0-1.x86_64.rpm；其余发行版使用免安装 Maltoria-0.7.0-x86_64.AppImage。',
+                  'AppImage 模式下，可在「设置 → 通用 → 桌面入口与打开方式」创建持久化桌面快捷方式。',
+                  '启动后自动引导下载托管 Wine 运行时至 ~/.local/share/whisky/runtime/wine/ 并校验 SHA-256。'
+                ],
+                cmd: 'chmod +x Maltoria-0.7.0-x86_64.AppImage && ./Maltoria-0.7.0-x86_64.AppImage'
+              }
+            ]
+          },
+          {
+            type: 'note',
+            title: '首次三步引导（Onboarding）',
+            body: '① 创建或导入容器 → ② 添加游戏目录并选择启动 .exe → ③ 选择默认资料来源（也可点「暂不刮削」稍后再开）。界面支持九种语言，可在「设置 → 通用 → 界面语言」随时切换，或通过环境变量 WHISKY_GPUI_LOCALE 指定。'
+          }
+        ]
+      },
+      {
+        id: 'bottles', num: '02', toc: '容器与游戏入库', title: '容器管理与游戏入库',
+        intro: '每个容器（Wine Bottle）都是一套独立的 Windows C: 盘与运行环境。推荐将视觉小说按系统环境或启动器（如单独建一个 Steam 容器）分组管理。',
+        blocks: [
+          {
+            type: 'list', heading: '创建、导入与维护容器',
+            items: [
+              ['创建 / 批量导入', '侧边栏点击「创建容器…」新建独立前缀；若已有 Whisky 容器，可用「导入已有容器…」扫描磁盘并单次批量导入最多 128 个。'],
+              ['复制、移动与导出', '右键容器支持重命名、克隆（完整复制设置与程序）、迁移位置与导出备份；删除时可区分「仅移除列表」与「彻底删除磁盘文件」。'],
+              ['独立工具箱', '每个容器页均内置「打开 C: 盘」「终端」「Winetricks…」「控制面板」「注册表编辑器」「Wine 配置」与实时「运行中的进程」管理。']
+            ]
+          },
+          {
+            type: 'list', heading: '添加游戏与整理书架',
+            items: [
+              ['扫描文件夹（推荐）', '在游戏库打开「管理扫描文件夹…」，添加存放多部作品的根目录，其直接子目录会自动识别为独立游戏条目（记录于 Folder Games.json）；若目录本身即单款作品，选「添加单个游戏文件夹…」。'],
+              ['多 .exe 入口模式', '首次启动文件夹游戏会弹出 .exe 选择器并记住选择。若作品含配置工具、外传或多个启动器，可在「运行设置」开启「多 exe 入口」，之后启动时用 ↑↓ 切换、Enter 启动、→ 调整该入口专属设置。'],
+              ['五种视图与筛选', '右上角可切换沉浸、画廊、网格、列表与双列五种视图；支持按厂商聚类、顶部二次下滑抽出标签与厂商栏、隐藏游戏（Library Visibility.json，不删文件）以及 26 周游玩足迹热力日历。']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'metadata', num: '03', toc: '五大数据源刮削', title: '五大数据源刮削与封面超分',
+        intro: 'Maltoria 内置 5 个公开数据源，支持按字段（基本信息 / 简介 / 封面 / 人物）分别设定优先来源，并保护所有手动修改不被覆盖。',
+        blocks: [
+          {
+            type: 'table',
+            headers: ['数据源', '主要提供内容', '人物 / 声优', '匹配技巧'],
+            rows: [
+              ['Bangumi 番组计划', '中文名 / 原名、简介、发售日、多尺寸封面', '支持', '中文条目默认首选，支持粘贴条目网址或 ID'],
+              ['VNDB', '多语言标题、罗马音、别名、开发商与纵向封面', '支持', '可直接输入 v<数字>（如 v17）精确直达'],
+              ['Steam 商店', '简中商店名、简介、开发商与 600×900 竖版封面', '不支持', '适合 Steam 发行作品与官方中文版'],
+              ['月幕 Galgame (YMGal)', 'Galgame 中文档案、原名、发售日与封面', '不支持', '内置公开 OAuth 客户端，适合日系新作'],
+              ['NextMoe 目录', '多语言标题、封面、简介、开发商与人物档案', '支持', '匿名只读目录，补全人物立绘与 CV']
+            ]
+          },
+          {
+            type: 'list', heading: '刮削保护与批量封面超分',
+            items: [
+              ['不重复打扰、不覆盖手改', '新增扫描目录时仅首次自动匹配；「扫描并同步游戏信息」只补全尚未关联的作品。作品详情中开启「手动编辑标题/简介」或上传本地「自定义封面」后，优先级永远高于在线来源。'],
+              ['单作品精准关联', '点击作品「游戏资料与封面…」可搜索关键词或直接粘贴目标平台 ID / 网址关联到草稿，保存后按 ID 刷新；解除关联会标记为纯手动模式。'],
+              ['书架封面超分（2× / 4×）', '在「设置 → 游戏库 → 封面超分」可开启 2× 实用或 4× 激进并一键「全部超分」：macOS 支持 Real-CUGAN（Core ML 质量优先）与 Anime4K（Metal 更快）；Linux 使用 realcugan-ncnn-vulkan（优先 Vulkan，回退 CPU），可通过 WHISKY_REALCUGAN_HELPER 与 WHISKY_REALCUGAN_MODELS 指定路径。']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'translation', num: '04', toc: 'LunaHook 实时翻译', title: 'LunaHook 实时翻译与字幕叠层',
+        intro: '从任意游戏的详情页或右键菜单打开「游戏翻译与捕获…」，即可将 Windows 进程内的对话实时钩取并翻译至全屏置顶的原生透明字幕窗。',
+        blocks: [
+          {
+            type: 'list', heading: '第一步：通过配置向导接入 AI 翻译',
+            items: [
+              ['内置本地模型（离线免费）', '由 Maltoria 自动下载并 SHA-256 校验 llama.cpp（macOS Metal / Linux Vulkan 或 CPU）与 GGUF 权重，空闲 5 分钟自动释放内存；中国大陆网络可开启「国内镜像源 (hf-mirror.com)」。'],
+              ['本机 Ollama 服务', '直连本地 11434 端口，通常无需密钥，保存后点「发现模型」即可挑选已拉取模型。'],
+              ['云端与兼容 API', '支持 OpenAI Chat Completions（含 DeepSeek、OpenRouter、OneAPI/NewAPI、vLLM、LM Studio）、Anthropic Claude、Google Gemini、DeepL（Free 版将端点改为 https://api-free.deepl.com）与旧版 /completions。推理模型可调低「思考程度 (Thinking)」显著降低字幕延迟，并按需切换 max_completion_tokens / max_tokens。']
+            ]
+          },
+          {
+            type: 'table',
+            headers: ['内置本地模型', '下载体积', '建议内存', '备注'],
+            rows: [
+              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '约 1.68 GB', '8 GB+', '32K 上下文；运行约占 2.2–2.7 GB'],
+              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '约 546 MB', '4 GB+', '32K 上下文；运行约占 1.0 GB'],
+              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '约 1.26 GB', '8 GB+', '8K 上下文；覆盖 102 种语言；运行约占 1.8–2.3 GB']
+            ]
+          },
+          {
+            type: 'list', heading: '第二步：进程附加、线程角色与字幕叠层',
+            items: [
+              ['扫描、附加与记忆预设', '启动游戏后点「开始并扫描进程」，勾选游戏主进程并「附加所选进程」。开启「为此游戏启用翻译」与「自动附加」后，下次启动将自动复用进程与 ASLR 线程绑定；如未自动识别文本，可在线程栏注入自定义 Hook code（UTF-8 ≤ 2048 字节）。'],
+              ['分配线程角色', '触发几句对话后，在线程列表勾选「仅看有文本」，为对应线程分配角色：正文（限 1 个）、说话人（限 1 个）、选项，其余设为忽略（最多同时启用 8 个线程）。'],
+              ['全屏字幕叠层与悬浮球', '可配置保留 1–10 条历史、字号、背景透明度与配色。桌面悬浮球可一键切换字幕显隐与「可拖动 / 鼠标穿透」；macOS 支持全屏 Space 悬浮，Linux X11 支持全屏置顶与鼠标穿透（Wayland 使用 LayerShell 尽力置顶）。'],
+              ['防抖、上下文与凭证安全', '在「AI 翻译 → 全局设置」可设快进防抖（0–5000 ms，推荐 150 ms 防止 Ctrl 快进刷爆调用）、携带原文/译文上下文轮数、跨重启复用的句子缓存；若仅用离线翻译可关闭「允许远程提供商」。']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'runtime', num: '05', toc: '运行时与画面超分', title: '视觉小说运行时调校与画面超分',
+        intro: 'Maltoria 基于 CrossOver Wine 26.3 移植了 GE-Proton 多媒体补丁，并在容器级与单游戏级提供精细的图形、超分与兼容开关。',
+        blocks: [
+          {
+            type: 'list', heading: 'Wine 引擎、图形后端与多媒体修复',
+            items: [
+              ['OP 与过场黑屏修复', '内置 GE-Proton 多媒体补丁解决常见片头动画黑屏；若 ASF/WMV 视频音画不同步或卡顿，可在容器配置开启「ASF 时间戳修复」。'],
+              ['图形后端与 GPTK', '默认选「自动推荐」即可；macOS 可在「设置 → 运行时与引擎」导入 Apple Game Porting Toolkit 启用 D3DMetal；亦可在容器或程序覆盖页按需切换 DXVK、DXMT 或 WineD3D，或注册只读的外部自定义 Wine 引擎。'],
+              ['视觉小说常用覆盖', '在单作品「运行设置」可快速应用日语/简体中文/英语语言区域预设；遇到低分辨率老游戏切全屏失败，开启「旧版全屏兼容」（失败时应用也会自动提示）；鼠标被锁死时勾选「禁用鼠标捕获」或游戏内按 Ctrl+Option+M 随时释放。']
+            ]
+          },
+          {
+            type: 'sub', heading: 'macOS 实时 GDI / Retina 画面超分与屏蔽区域',
+            body: '面向 GDI / WineD3D OpenGL 视觉小说，容器配置与单游戏运行设置支持 6 种神经/着色器混合超分模式（修改后重启游戏生效）：动态 MetalFX 或 Anime4K 负责即时响应变化，画面静止约 200 ms 后异步由 Real-CUGAN 或 Real-ESRGAN AnimeVideo-v3 补足精细立绘与背景细节。',
+            items: [
+              ['跨场景 LRU 缓存', '支持「关闭 / 本次游戏内存缓存 / 缓存并保存到磁盘」，持久化默认每游戏 256 MiB 内存 + 4 GiB 磁盘，跨场景重复立绘秒出高清；注意磁盘缓存会增加持续写入与 SSD 磨损，空间有限或写入敏感设备建议使用内存缓存。'],
+              ['超分屏蔽区域（保护文本框）', '在程序设置可启用「首次启用 GDI 超分时框选」或填入原图坐标 x,y,宽,高（如 1280×720 底部对话框填 0,520,1280,200，多区域用英文分号分隔），让对话框字体保持锐利原样，只超分背景与立绘。']
+            ]
+          },
+          {
+            type: 'list', heading: 'Winetricks 与 Steam 专用容器',
+            items: [
+              ['Winetricks 与 DLL 覆盖', '容器页「Winetricks…」支持一键安装 Visual C++ 运行库、中日韩字体与各类 DLL；也可在容器或程序级单独配置原生/内建 DLL 加载顺序。'],
+              ['Steam 容器最佳实践', '建议为 Steam 单独建立 Windows 10 容器，并在容器配置中先开启「启动器兼容模式（自动）」与「GPU 伪装（NVIDIA）」再安装 SteamSetup.exe，保持图形后端为「自动推荐」以让 Steam 客户端走 DXVK 而游戏保留容器后端。']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'shortcuts', num: '06', toc: '快捷键速查', title: '快捷键速查',
+        intro: '以下快捷键均直接对应 Maltoria 客户端键位绑定，覆盖窗口导航、书架浏览、多入口启动与游戏内鼠标释放。',
+        blocks: [
+          {
+            type: 'table',
+            headers: ['功能', 'macOS', 'Linux'],
+            rows: [
+              ['打开设置窗口', '⌘ ,', 'Ctrl + ,'],
+              ['搜索游戏库', '⌘ F', 'Ctrl + F'],
+              ['刷新游戏库', '⌘ R', 'Ctrl + R'],
+              ['显示 / 隐藏侧边栏', '⌘ ⌃ S', 'Ctrl + Alt + S'],
+              ['返回上一页', '⌘ [', 'Alt + ←'],
+              ['开关界面动画', '⌘ ⇧ M', 'Ctrl + Shift + M'],
+              ['关闭弹窗 / 预览', 'Esc', 'Esc'],
+              ['最小化 / 关闭窗口 / 退出', '⌘ M / ⌘ W / ⌘ Q', 'Ctrl + M / Ctrl + W / Ctrl + Q'],
+              ['多入口启动选择器', '↑ ↓ 切换 · Enter 启动 · → 设置', '↑ ↓ 切换 · Enter 启动 · → 设置'],
+              ['游戏中释放鼠标锁定并校准', 'Ctrl + Option + M', '—（请在运行设置勾选禁用鼠标捕获）']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'troubleshooting', num: '07', toc: '故障排查与诊断', title: '常见故障排查与诊断',
+        intro: '遇到闪退、无声、乱码或捕获异常时，可优先在容器页打开「诊断… / 故障排查」运行内置预检、Wine WinMM 440 Hz 音频测试并导出脱敏诊断报告（仅含环境变量名，不含密钥值）。',
+        blocks: [
+          {
+            type: 'list', heading: '高频问题速查',
+            items: [
+              ['macOS 每次更新后钥匙串反复弹窗', '因 ad-hoc 签名在更新后代码签名变化，钥匙串会重新请求授权。可在「AI 翻译 → 全局设置 → 凭证存储方式」切换为「本地文件（0600 权限，免弹窗）」，保存设置后再重新保存一次 API 密钥即可。'],
+              ['日文游戏文字乱码或方块', '在该作品「运行设置 → 语言区域」切换为「日语（日本）」，并在对应容器的 Winetricks 中安装「中日韩字体」组件。'],
+              ['LunaHook 提示 events_dropped', '游戏高频触发底层文本钩子导致队列溢出。在线程列表中将系统噪声线程设为「忽略」，只保留 1 个正文线程与（可选）1 个说话人线程即可恢复稳定。'],
+              ['游戏卡死或退出清理超时', '前往容器的「运行中的进程」点击「停止所有进程」，或在顶部菜单执行结束所有进程。']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'paths', num: '08', toc: '数据路径与卸载', title: '本地数据路径、环境变量与彻底卸载',
+        intro: '卸载应用本体默认不会删除你的容器、游戏存档与刮削缓存。如需迁移备份或彻底清理，请参考以下路径（删除前请务必先备份重要游戏存档）。',
+        blocks: [
+          {
+            type: 'plat_cards',
+            cards: [
+              {
+                plat: 'mac', title: 'macOS 存储路径与彻底卸载', meta: 'Application Support & Containers',
+                bullets: [
+                  '共享 Wine 运行库：~/Library/Application Support/com.daydalek.Maltoria/Libraries/',
+                  '默认容器、游戏库配置（Folder Games.json、Library Visibility.json）与元数据缓存（Game Metadata/）：~/Library/Containers/com.daydalek.Maltoria/',
+                  '如需连同所有容器与偏好彻底清除，先备份存档再执行：'
+                ],
+                cmd: 'rm -rf "/Applications/Maltoria.app" \\\n  ~/Library/Containers/com.daydalek.Maltoria \\\n  ~/Library/Containers/com.daydalek.Maltoria.WhiskyThumbnail \\\n  ~/Library/Application\\ Support/com.daydalek.Maltoria \\\n  ~/Library/Caches/com.daydalek.Maltoria \\\n  ~/Library/Logs/com.daydalek.Maltoria \\\n  ~/Library/HTTPStorages/com.daydalek.Maltoria \\\n  ~/Library/Preferences/com.daydalek.Maltoria.plist'
+              },
+              {
+                plat: 'linux', title: 'Linux 存储路径与彻底卸载', meta: '/opt/whisky & ~/.local/share/whisky',
+                bullets: [
+                  '程序安装目录：/opt/whisky/（启动器 /usr/bin/whisky）',
+                  '托管 Wine 运行库：~/.local/share/whisky/runtime/wine/',
+                  '默认容器、配置与刮削缓存：~/.local/share/whisky/Bottles/',
+                  'deb 用 sudo apt remove whisky、rpm 用 sudo dnf remove whisky、AppImage 直接删除文件；如需清除全部用户数据：'
+                ],
+                cmd: 'rm -rf ~/.local/share/whisky'
+              }
+            ]
+          },
+          {
+            type: 'note',
+            title: '常用环境变量与离线模式',
+            body: 'WHISKY_GPUI_LOCALE 可强制指定界面语言（如 ja / en / zh-Hans）；MALTORIA_LLAMA_DOWNLOAD_BASE 可覆盖本地推理引擎下载地址；在「设置 → 网络与更新」开启「离线模式」可完全禁止 Maltoria 自身联网（不影响容器内游戏）。'
+          }
+        ]
+      }
+    ]
+  },
+
+  en: {
+    doc_title: 'Maltoria — User Guide',
+    meta_desc: 'Complete Maltoria User Guide covering macOS Apple Silicon and Linux x86_64 installation, Bottles, 5-source metadata scraping, LunaHook live translation, upscaling, shortcuts, and troubleshooting.',
+    ui: {
+      nav_home: 'Home', nav_start: 'Quick Start', nav_trans: 'Translation', nav_runtime: 'Runtime', nav_trouble: 'Troubleshooting',
+      nav_cta: 'Download v0.7.0', kicker: 'MANUAL · v0.7.0 · macOS & Linux',
+      title: 'Maltoria User Guide',
+      lead: 'A complete, codebase-verified handbook covering installation, Bottle management, 5-source metadata scraping, LunaHook & local-model live subtitles, upscaling, shortcuts, and troubleshooting.',
+      plat_all: 'All Platforms', meta_scope: 'For v0.7.0 · Apple Silicon & Linux x86_64', meta_dl: 'Get Downloads ↗',
+      toc_label: 'Contents', back_home: 'Back to Home',
+      copy: 'Copy', copied: 'Copied ✓',
+      ft_note: 'GPL-3.0 open-source visual novel manager & Wine runtime', ft_home: 'Home', ft_dl: 'Download v0.7.0', ft_repo: 'GitHub Repo', ft_issues: 'Issues'
+    },
+    chapters: [
+      {
+        id: 'install', num: '01', toc: 'Installation & Setup', title: 'Installation & First Launch',
+        intro: 'Maltoria supports macOS (Apple Silicon) and Linux (x86_64). A 3-step onboarding wizard saves your preferences first without automatically scanning folders, downloading runtimes, or scraping online.',
+        blocks: [
+          {
+            type: 'plat_cards',
+            cards: [
+              {
+                plat: 'mac', title: 'macOS (Apple Silicon)', meta: 'M1 or later · .zip',
+                bullets: [
+                  'Download Maltoria-0.7.0-arm64.zip, unzip, and move Maltoria.app into Applications.',
+                  'Because builds are ad-hoc signed, if Gatekeeper blocks first launch, go to System Settings → Privacy & Security → Open Anyway, or clear the quarantine flag below.',
+                  'Open Settings → Runtime & Engine to install Rosetta 2 (required for x86_64 games) and the SHA-256-verified managed Wine runtime.'
+                ],
+                cmd: 'xattr -dr com.apple.quarantine /Applications/Maltoria.app'
+              },
+              {
+                plat: 'linux', title: 'Linux (x86_64)', meta: '.deb / .rpm / AppImage',
+                bullets: [
+                  'Install whisky_0.7.0_amd64.deb on Ubuntu 24.04+, whisky-0.7.0-1.x86_64.rpm on Fedora 44+, or run the portable Maltoria-0.7.0-x86_64.AppImage on other distros.',
+                  'For AppImage, use Settings → General → Desktop Entry to register a persistent desktop launcher.',
+                  'Managed Wine downloads automatically to ~/.local/share/whisky/runtime/wine/ with SHA-256 verification.'
+                ],
+                cmd: 'chmod +x Maltoria-0.7.0-x86_64.AppImage && ./Maltoria-0.7.0-x86_64.AppImage'
+              }
+            ]
+          },
+          {
+            type: 'note',
+            title: '3-Step Onboarding & 9 Languages',
+            body: '① Create or import a Bottle → ② Add games and pick executables → ③ Choose metadata sources (or skip scraping for later). Switch between 9 UI languages anytime in Settings → General → Language, or override via WHISKY_GPUI_LOCALE.'
+          }
+        ]
+      },
+      {
+        id: 'bottles', num: '02', toc: 'Bottles & Library', title: 'Bottles & Adding Games',
+        intro: 'Each Bottle is an isolated Windows C: prefix. Group titles by compatibility needs, and keep Steam in its own dedicated Bottle.',
+        blocks: [
+          {
+            type: 'list', heading: 'Creating, Importing & Managing Bottles',
+            items: [
+              ['Create or Batch-Import', 'Use Create Bottle… in the sidebar, or Import Existing Bottles… to scan and import up to 128 existing Whisky Bottles at once.'],
+              ['Clone, Move & Export', 'Right-click a Bottle to rename, duplicate (including settings & programs), move, or export. Removing lets you keep disk files or permanently delete the prefix.'],
+              ['Built-In Tools', 'Every Bottle provides Open C: Drive, Terminal, Winetricks…, Control Panel, Registry Editor, Wine Config, and live Running Processes control.']
+            ]
+          },
+          {
+            type: 'list', heading: 'Importing Games & Organizing Your Shelf',
+            items: [
+              ['Scan Folders (Recommended)', 'Open Manage Scan Folders… to add parent game directories—each direct subfolder becomes a library entry (stored in Folder Games.json). Use Add Single Game Folder… when the folder itself is one game.'],
+              ['Multi-EXE Entry Mode', 'First launch prompts for the target .exe and remembers it. For titles with config tools or extra executables, enable Multi-EXE Entry Mode in Run Settings (↑↓ switch, Enter launch, → per-EXE settings).'],
+              ['5 Views, Tags & Play Calendar', 'Switch between Immersive, Gallery, Grid, List, and Dual views; group by Studio, pull down the Tag & Studio bar, hide entries non-destructively (Library Visibility.json), and review your 26-week Play Calendar.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'metadata', num: '03', toc: 'Metadata & Covers', title: '5-Source Metadata Scraping & Cover Upscaling',
+        intro: 'Combine 5 built-in metadata sources with per-field priority (Basic Info, Summary, Cover, Characters). Manual edits are never overwritten.',
+        blocks: [
+          {
+            type: 'table',
+            headers: ['Source', 'Provided Fields', 'Characters / Cast', 'Tips'],
+            rows: [
+              ['Bangumi', 'Chinese/original titles, synopsis, release date, covers', 'Yes', 'Great for CJK dossiers; paste URL or subject ID'],
+              ['VNDB', 'Multilingual titles, romanizations, aliases, devs, covers', 'Yes', 'Supports direct v<id> queries (e.g. v17)'],
+              ['Steam Store', 'Store title, description, developer, 600×900 portrait cover', 'No', 'Ideal for official Steam releases'],
+              ['YMGal', 'Galgame titles, release date, covers, synopsis', 'No', 'Uses public OAuth client; strong for JP releases'],
+              ['NextMoe Catalog', 'Multilingual titles, covers, synopsis, devs, cast', 'Yes', 'Anonymous read-only catalog with portraits & voice cast']
+            ]
+          },
+          {
+            type: 'list', heading: 'Manual Protection & Batch Cover Upscaling',
+            items: [
+              ['Safe Refreshing', 'Auto-matching runs once per newly added scan root. Manual title/summary toggles and local custom covers always override online snapshots; unlinking locks an entry to manual-only.'],
+              ['ID / URL Linking', 'In Game Info & Cover…, search by title or paste a platform ID/URL into the draft, save, and refresh by ID.'],
+              ['2× / 4× Cover Upscaling', 'Enable 2× Practical or 4× Aggressive in Settings → Library → Cover Upscale and run Upscale All: macOS uses Real-CUGAN (Core ML) or Anime4K (Metal); Linux uses realcugan-ncnn-vulkan (Vulkan with CPU fallback, configurable via WHISKY_REALCUGAN_HELPER & WHISKY_REALCUGAN_MODELS).']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'translation', num: '04', toc: 'Live Translation', title: 'LunaHook Live Translation & Subtitle Overlay',
+        intro: 'Open Game Translation & Capture… from any game’s detail page or context menu to hook in-game dialogue and display live streaming subtitles over fullscreen games.',
+        blocks: [
+          {
+            type: 'list', heading: 'Step 1: Connect an AI Translation Provider',
+            items: [
+              ['Built-In Local Models (Offline & Free)', 'Maltoria downloads and SHA-256-verifies llama.cpp (Metal / Vulkan / CPU) and GGUF weights automatically, unloading after 5 min idle. Toggle China Mirror (hf-mirror.com) if Hugging Face is slow.'],
+              ['Local Ollama', 'Connects to localhost:11434 with no API key required; click Discover Models after saving.'],
+              ['Cloud & Custom APIs', 'Supports OpenAI Chat Completions (DeepSeek, OpenRouter, OneAPI/NewAPI, vLLM, LM Studio), Anthropic, Gemini, DeepL (set endpoint to https://api-free.deepl.com for Free tier), and legacy /completions. Lower Thinking Level on reasoning models to reduce latency, and switch max_completion_tokens / max_tokens as needed.']
+            ]
+          },
+          {
+            type: 'table',
+            headers: ['Built-In Model', 'Download', 'Rec. RAM', 'Notes'],
+            rows: [
+              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '~1.68 GB', '8 GB+', '32K context; ~2.2–2.7 GB while running'],
+              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '~546 MB', '4 GB+', '32K context; ~1.0 GB while running'],
+              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '~1.26 GB', '8 GB+', '8K context; 102 languages; ~1.8–2.3 GB while running']
+            ]
+          },
+          {
+            type: 'list', heading: 'Step 2: Hooking Threads & Subtitle Overlay',
+            items: [
+              ['Attach & Auto-Restore', 'Launch your game, click Start & Scan Processes, and Attach Selected. Enabling Translation & Auto-Attach remembers target processes and ASLR thread bindings; inject custom H-codes (UTF-8 ≤ 2048 B) if needed.'],
+              ['Assign Thread Roles', 'Enable Text Only, then assign roles: Body (max 1), Speaker (max 1), Choice, or Ignore (up to 8 active threads total).'],
+              ['Fullscreen Overlay & Floating HUD', 'Configure 1–10 history lines, font size, opacity, and colors. Toggle visibility and Drag / Click-Through right from the floating HUD pill (macOS native Space overlay; Linux X11 click-through, Wayland LayerShell fallback).'],
+              ['Debounce, Cache & Credentials', 'In Translation → Global Settings, tune skip debounce (0–5000 ms, 150 ms recommended for Ctrl-skipping), context turns, persistent sentence cache, Allow Remote Providers toggle, and secure credential storage mode.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'runtime', num: '05', toc: 'Runtime & Upscaling', title: 'Visual Novel Runtime Tuning & Upscaling',
+        intro: 'Built on CrossOver Wine 26.3 with ported GE-Proton media patches, Maltoria provides per-Bottle and per-EXE graphics, upscaling, and compatibility overrides.',
+        blocks: [
+          {
+            type: 'list', heading: 'Wine Engine, Backends & Media Fixes',
+            items: [
+              ['Cutscene & OP Video Fixes', 'GE-Proton media patches resolve black-screen intros; toggle ASF Timestamp Fix in Bottle Config if WMV/ASF videos stutter or desync.'],
+              ['Backends & Custom Engines', 'Keep Recommended by default; import Apple Game Porting Toolkit in Settings → Runtime & Engine to enable D3DMetal on macOS. Switch DXVK, DXMT, or WineD3D per Bottle/program, or register read-only external Wine engines.'],
+              ['Visual Novel Essentials', 'Apply Japanese / Chinese / English locale presets per program; enable Legacy Fullscreen Compatibility when older low-res games fail to enter fullscreen; enable Disable Mouse Capture (or press Ctrl+Option+M in-game) if the cursor locks.']
+            ]
+          },
+          {
+            type: 'sub', heading: 'macOS Real-Time GDI / Retina Upscaling & Excluded Regions',
+            body: 'For GDI / WineD3D OpenGL visual novels, choose from 6 hybrid neural/shader upscalers (restart game to apply): MetalFX or Anime4K handles live motion while Real-CUGAN or Real-ESRGAN AnimeVideo-v3 asynchronously sharpens still artwork after ~200 ms.',
+            items: [
+              ['Cross-Scene LRU Cache', 'Choose Off, Session Memory, or Disk Cache (default 256 MiB RAM + 4 GiB disk per game) to reuse upscaled sprites across scenes. Disk caching can increase sustained writes and SSD wear; use memory-only caching on small or write-sensitive drives.'],
+              ['Excluded Regions (Keep Text Crisp)', 'Box-select on first launch or enter x,y,w,h coordinates (e.g. 0,520,1280,200 for a 1280×720 textbox; separate multiple rectangles with semicolons) so dialogue stays razor-sharp while CGs upscale.']
+            ]
+          },
+          {
+            type: 'list', heading: 'Winetricks & Steam Bottles',
+            items: [
+              ['Winetricks & DLL Overrides', 'Install Visual C++ runtimes, CJK fonts, and DLL components directly from the Bottle page, or configure native/builtin DLL load order per Bottle or program.'],
+              ['Dedicated Steam Bottle', 'Use a separate Windows 10 Bottle with Launcher Compatibility (Auto) and GPU Spoofing (NVIDIA) enabled before installing SteamSetup.exe; leave Graphics Backend on Recommended so Steam uses DXVK while launched games keep the Bottle backend.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'shortcuts', num: '06', toc: 'Keyboard Shortcuts', title: 'Keyboard Shortcuts',
+        intro: 'Complete reference of built-in desktop shortcuts for macOS and Linux.',
+        blocks: [
+          {
+            type: 'table',
+            headers: ['Action', 'macOS', 'Linux'],
+            rows: [
+              ['Open Settings', '⌘ ,', 'Ctrl + ,'],
+              ['Search Library', '⌘ F', 'Ctrl + F'],
+              ['Refresh Library', '⌘ R', 'Ctrl + R'],
+              ['Toggle Sidebar', '⌘ ⌃ S', 'Ctrl + Alt + S'],
+              ['Navigate Back', '⌘ [', 'Alt + ←'],
+              ['Toggle UI Animations', '⌘ ⇧ M', 'Ctrl + Shift + M'],
+              ['Close Modal / Preview', 'Esc', 'Esc'],
+              ['Minimize / Close / Quit', '⌘ M / ⌘ W / ⌘ Q', 'Ctrl + M / Ctrl + W / Ctrl + Q'],
+              ['Multi-EXE Launch Chooser', '↑ ↓ Move · Enter Run · → Settings', '↑ ↓ Move · Enter Run · → Settings'],
+              ['Release In-Game Mouse Lock', 'Ctrl + Option + M', 'Use Disable Mouse Capture in Run Settings']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'troubleshooting', num: '07', toc: 'Troubleshooting', title: 'Troubleshooting & Diagnostics',
+        intro: 'Open Diagnostics… / Troubleshoot inside any Bottle to run automated preflight checks, play a Wine WinMM 440 Hz audio test tone, and export a privacy-safe Diagnostics Report (env var keys only, no secret values).',
+        blocks: [
+          {
+            type: 'list', heading: 'Common Fixes',
+            items: [
+              ['Repeated macOS Keychain Prompts', 'Ad-hoc signed updates change the binary signature. Switch Translation → Global Settings → Credential Storage to Local File (0600 permissions, no prompts), save settings, then re-save your API key once.'],
+              ['Garbled Japanese Text', 'Set Program Run Settings → Locale to Japanese (ja_JP) and install CJK Fonts via Winetricks in that Bottle.'],
+              ['LunaHook events_dropped Warning', 'High-frequency hooks overflowed the queue. Set noisy system threads to Ignore and keep only 1 Body thread (plus optional Speaker thread).'],
+              ['Frozen Game or Quit Cleanup Timeout', 'Open Running Processes in the Bottle and click Stop All Processes, or use Kill All Processes from the app menu.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'paths', num: '08', toc: 'Paths & Uninstall', title: 'Storage Paths, Env Vars & Clean Uninstall',
+        intro: 'Removing the app binary preserves your Bottles, saves, and cached metadata. Back up important game saves before performing a clean uninstall.',
+        blocks: [
+          {
+            type: 'plat_cards',
+            cards: [
+              {
+                plat: 'mac', title: 'macOS Paths & Clean Uninstall', meta: 'Application Support & Containers',
+                bullets: [
+                  'Shared Wine Runtime: ~/Library/Application Support/com.daydalek.Maltoria/Libraries/',
+                  'Default Bottles, library configs (Folder Games.json, Library Visibility.json), and Game Metadata/: ~/Library/Containers/com.daydalek.Maltoria/',
+                  'To wipe everything after backing up saves:'
+                ],
+                cmd: 'rm -rf "/Applications/Maltoria.app" \\\n  ~/Library/Containers/com.daydalek.Maltoria \\\n  ~/Library/Containers/com.daydalek.Maltoria.WhiskyThumbnail \\\n  ~/Library/Application\\ Support/com.daydalek.Maltoria \\\n  ~/Library/Caches/com.daydalek.Maltoria \\\n  ~/Library/Logs/com.daydalek.Maltoria \\\n  ~/Library/HTTPStorages/com.daydalek.Maltoria \\\n  ~/Library/Preferences/com.daydalek.Maltoria.plist'
+              },
+              {
+                plat: 'linux', title: 'Linux Paths & Clean Uninstall', meta: '/opt/whisky & ~/.local/share/whisky',
+                bullets: [
+                  'Application install: /opt/whisky/ (launcher /usr/bin/whisky)',
+                  'Managed Wine Runtime: ~/.local/share/whisky/runtime/wine/',
+                  'Default Bottles, configs & metadata cache: ~/.local/share/whisky/Bottles/',
+                  'Uninstall via sudo apt remove whisky, sudo dnf remove whisky, or delete the AppImage; to wipe all user data:'
+                ],
+                cmd: 'rm -rf ~/.local/share/whisky'
+              }
+            ]
+          },
+          {
+            type: 'note',
+            title: 'Useful Environment Variables & Offline Mode',
+            body: 'WHISKY_GPUI_LOCALE forces a UI locale (e.g. en, ja, zh-Hans); MALTORIA_LLAMA_DOWNLOAD_BASE overrides the llama.cpp download base URL; Settings → Network & Updates → Offline Mode blocks Maltoria’s own network calls while leaving games unaffected.'
+          }
+        ]
+      }
+    ]
+  },
+
+  ja: {
+    doc_title: 'Maltoria — 使い方ガイド',
+    meta_desc: 'Maltoria 完全ガイド：macOS Apple Silicon / Linux x86_64 への導入、Bottle 管理、5ソース自動取得、LunaHook リアルタイム翻訳、超解像、ショートカットとトラブル対処。',
+    ui: {
+      nav_home: 'ホーム', nav_start: '導入', nav_trans: 'リアルタイム翻訳', nav_runtime: '実行設定', nav_trouble: '対処法',
+      nav_cta: 'v0.7.0 を入手', kicker: 'MANUAL · v0.7.0 · macOS & Linux',
+      title: 'Maltoria 使い方ガイド',
+      lead: '実装仕様に基づく操作マニュアルです。インストール、Bottle とゲーム登録、5データソース取得、LunaHook・ローカルモデル翻訳、超解像、ショートカット、障害対応をまとめています。',
+      plat_all: '全プラットフォーム', meta_scope: '対象 v0.7.0 · Apple Silicon & Linux x86_64', meta_dl: 'ダウンロードへ ↗',
+      toc_label: '目次', back_home: 'トップページへ戻る',
+      copy: 'コピー', copied: 'コピー済み ✓',
+      ft_note: 'GPL-3.0 オープンソース・ビジュアルノベル管理＆Wine 実行環境', ft_home: 'ホーム', ft_dl: 'v0.7.0 入手', ft_repo: 'GitHub', ft_issues: '問題報告'
+    },
+    chapters: [
+      {
+        id: 'install', num: '01', toc: '導入と初回起動', title: 'インストールと初回起動',
+        intro: 'macOS (Apple Silicon) と Linux (x86_64) に対応しています。初回は3ステップの設定ウィザードのみ保存され、勝手にスキャンやダウンロードは行われません。',
+        blocks: [
+          {
+            type: 'plat_cards',
+            cards: [
+              {
+                plat: 'mac', title: 'macOS (Apple Silicon)', meta: 'M1 以降 · .zip',
+                bullets: [
+                  'Maltoria-0.7.0-arm64.zip を展開し、Maltoria.app をアプリケーションフォルダへ移動します。',
+                  'ad-hoc 署名のため初回起動で Gatekeeper 警告が出た場合は、「システム設定 → プライバシーとセキュリティ → このまま開く」または下記コマンドを実行します。',
+                  '「設定 → ランタイムとエンジン」から Rosetta 2 と管理 Wine ランタイム（SHA-256 検証付き）をインストールします。'
+                ],
+                cmd: 'xattr -dr com.apple.quarantine /Applications/Maltoria.app'
+              },
+              {
+                plat: 'linux', title: 'Linux (x86_64)', meta: '.deb / .rpm / AppImage',
+                bullets: [
+                  'Ubuntu 24.04+ は .deb、Fedora 44+ は .rpm、その他はポータブル版 AppImage を利用します。',
+                  'AppImage は「設定 → 一般 → デスクトップエントリ」から永続的なランチャーを登録できます。',
+                  'Wine ランタイムは ~/.local/share/whisky/runtime/wine/ に SHA-256 検証付きで導入されます。'
+                ],
+                cmd: 'chmod +x Maltoria-0.7.0-x86_64.AppImage && ./Maltoria-0.7.0-x86_64.AppImage'
+              }
+            ]
+          },
+          {
+            type: 'note',
+            title: '3ステップ初回ガイドと9言語UI',
+            body: '① Bottle 作成/インポート → ② ゲーム追加と .exe 選択 → ③ メタデータソース選択（スキップ可能）。UI 言語は「設定 → 一般」または環境変数 WHISKY_GPUI_LOCALE で切替可能です。'
+          }
+        ]
+      },
+      {
+        id: 'bottles', num: '02', toc: 'Bottle とゲーム登録', title: 'Bottle 管理とゲーム登録',
+        intro: 'Bottle は作品ごとの独立した Windows 環境です。Steam など大型ランチャーは専用 Bottle に分けるのがおすすめです。',
+        blocks: [
+          {
+            type: 'list', heading: 'Bottle の作成・管理',
+            items: [
+              ['作成と一括インポート', '「Bottle を作成…」で新規作成。「既存 Bottle をインポート…」は最大 128 件を一括取り込みできます。'],
+              ['複製・移動・エクスポート', '右クリックから名称変更、複製、移動、バックアップ書き出しが可能。削除時はリスト除去と完全削除を選べます。'],
+              ['内蔵ツール', 'C: ドライブを開く、ターミナル、Winetricks、コントロールパネル、regedit、Wine 設定、実行中プロセス管理を備えています。']
+            ]
+          },
+          {
+            type: 'list', heading: 'ゲーム追加と5種類の本棚ビュー',
+            items: [
+              ['フォルダスキャン（推奨）', '「スキャンフォルダを管理…」に親フォルダを追加すると直下サブフォルダが作品として登録されます（Folder Games.json）。単体作品フォルダも直接追加可能です。'],
+              ['マルチ .exe 入口モード', '設定ツールや複数実行ファイルがある作品は「実行設定」でマルチ .exe を有効化すると、起動時に ↑↓ 選択・Enter 起動・→ 個別設定が使えます。'],
+              ['5ビューとプレイ記録', '没入・ギャラリー・グリッド・リスト・2カラムの5ビュー、ブランド別グループ化、タグ/ブランド抽出バー、非破壊非表示、26週プレイカレンダーに対応。']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'metadata', num: '03', toc: 'メタデータ取得と超解像', title: '5データソース自動取得と表紙超解像',
+        intro: '5つの公開ソースを項目別（基本情報 / あらすじ / 表紙 / キャラクター）に優先設定でき、手動編集やローカル表紙は上書きされません。',
+        blocks: [
+          {
+            type: 'table',
+            headers: ['データソース', '取得できる項目', 'キャラ・声優', '活用ポイント'],
+            rows: [
+              ['Bangumi', '中国語/原題・あらすじ・発売日・表紙', '対応', 'URL または ID 指定で直接関連付け可能'],
+              ['VNDB', '多言語タイトル・ローマ字・別名・ブランド・表紙', '対応', 'v<ID>（例：v17）で直接検索可能'],
+              ['Steam ストア', 'ストア名・説明・開発元・縦長 600×900 表紙', '非対応', 'Steam 配信タイトルに最適'],
+              ['月幕 Galgame', '作品名・発売日・表紙・あらすじ', '非対応', '公開 OAuth クライアント内蔵'],
+              ['NextMoe', '多言語タイトル・表紙・あらすじ・キャラ情報', '対応', '立ち絵と声優データの補完に便利']
+            ]
+          },
+          {
+            type: 'list', heading: '手動保護と表紙の一括超解像',
+            items: [
+              ['上書き防止', '自動照合は新規フォルダ追加時の初回のみ実行。手動編集スイッチやローカルカスタム表紙が最優先され、リンク解除で手動専用に固定されます。'],
+              ['表紙超解像（2× / 4×）', '「設定 → ライブラリ → 表紙超解像」で全表紙を一括高画質化可能。macOS は Real-CUGAN（Core ML）または Anime4K（Metal）、Linux は realcugan-ncnn-vulkan（WHISKY_REALCUGAN_HELPER / WHISKY_REALCUGAN_MODELS でパス指定可）を使用します。']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'translation', num: '04', toc: 'LunaHook リアルタイム翻訳', title: 'LunaHook リアルタイム翻訳＆字幕オーバーレイ',
+        intro: 'ゲーム詳細または右クリックメニューの「ゲーム翻訳とキャプチャ…」から、起動中のセリフをリアルタイム取得・翻訳し全画面上に表示できます。',
+        blocks: [
+          {
+            type: 'list', heading: 'ステップ1：翻訳プロバイダーを設定',
+            items: [
+              ['内蔵ローカルモデル（オフライン無料）', 'llama.cpp（Metal / Vulkan / CPU）と GGUF モデルを SHA-256 検証付きで自動導入。5分間アイドルでメモリ自動解放、中国向けミラー（hf-mirror.com）切替対応。'],
+              ['ローカル Ollama', 'localhost:11434 に接続（通常キー不要）。保存後「モデル検出」で取得済みモデルを選択できます。'],
+              ['クラウド / カスタム API', 'OpenAI Chat（DeepSeek・OpenRouter・OneAPI・vLLM・LM Studio 互換）、Anthropic、Gemini、DeepL（Free 版は https://api-free.deepl.com）、旧 /completions に対応。推論モデルは思考深度（Thinking）を下げると字幕遅延を大幅に短縮できます。']
+            ]
+          },
+          {
+            type: 'table',
+            headers: ['内蔵ローカルモデル', 'サイズ', '推奨 RAM', '備考'],
+            rows: [
+              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '約 1.68 GB', '8 GB+', '32K コンテキスト・実行時約 2.2–2.7 GB'],
+              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '約 546 MB', '4 GB+', '32K コンテキスト・実行時約 1.0 GB'],
+              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '約 1.26 GB', '8 GB+', '8K コンテキスト・102言語対応・実行時約 1.8–2.3 GB']
+            ]
+          },
+          {
+            type: 'list', heading: 'ステップ2：アタッチ・スレッド役割・字幕重ね表示',
+            items: [
+              ['自動アタッチと H コード', 'ゲーム起動後にスキャンして主プロセスへアタッチ。「自動アタッチ」有効化で次回以降プロセスと ASLR スレッド設定を自動復元。カスタム H コード（UTF-8 2048 B 以内）注入も対応。'],
+              ['スレッド役割の割り当て', '「テキストのみ」で絞り込み、本文（1件）・話者（1件）・選択肢を設定（最大8スレッド）。不要スレッドは無視に設定します。'],
+              ['全画面オーバーレイとフローティング HUD', '履歴 1–10 行・字サイズ・透過率を調整可能。HUD から字幕オン/オフとドラッグ/クリック透過を即切替（macOS 全画面 Space 対応、Linux は X11 透過 / Wayland LayerShell）。'],
+              ['デバウンスと文キャッシュ', '早送りデバウンス（0–5000 ms、推奨 150 ms）、文脈ターン数、再起動をまたぐ文キャッシュ、「リモートプロバイダー許可」スイッチを備えています。']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'runtime', num: '05', toc: 'ランタイムと超解像', title: 'ビジュアルノベル向け Wine 調整と画面超解像',
+        intro: 'CrossOver Wine 26.3 に GE-Proton 動画パッチを移植し、Bottle 単位・ゲーム単位で柔軟に調整できます。',
+        blocks: [
+          {
+            type: 'list', heading: '動画修正・グラフィック・互換オプション',
+            items: [
+              ['OP 動画の黒画面対策', 'GE-Proton パッチでムービー再生を改善。ASF/WMV 再生がずれる場合は「ASF タイムスタンプ修正」を有効化します。'],
+              ['バックエンドと外部エンジン', '基本は「自動推奨」のままでOK。macOS は GPTK をインポートして D3DMetal を利用可能。DXVK / DXMT / WineD3D 切替や読み取り専用外部 Wine エンジン登録にも対応。'],
+              ['定番の互換設定', 'プログラム単位で日本語/中国語/英語ロケール、低解像度向け「旧フルスクリーン互換」、マウス拘束を防ぐ「マウスキャプチャ無効化」（ゲーム中 Ctrl+Option+M で解除）を利用できます。']
+            ]
+          },
+          {
+            type: 'sub', heading: 'macOS リアルタイム GDI / Retina 超解像と除外領域',
+            body: 'GDI / WineD3D OpenGL 作品向けに6種類のハイブリッド超解像（MetalFX または Anime4K の動的補間＋約 200 ms 静止後の Real-CUGAN / AnimeVideo-v3 静的補完）を提供。',
+            items: [
+              ['シーン横断 LRU キャッシュ', 'オフ／セッションメモリ／ディスク保存（既定 256 MiB RAM + 4 GiB ディスク）から選択可能。ディスクキャッシュは書き込み量と SSD 摩耗を増やす可能性があります。'],
+              ['テキスト枠の除外領域', '初回枠選択または x,y,幅,高さ（例：0,520,1280,200、複数はセミコロン区切り）を指定すると、文字枠をくっきり保ったまま立ち絵・背景だけ超解像します。']
+            ]
+          },
+          {
+            type: 'list', heading: 'Winetricks・Steam 専用 Bottle',
+            items: [
+              ['Winetricks と DLL オーバーライド', 'Visual C++・CJK フォント導入やネイティブ/内蔵 DLL 優先順を GUI から設定できます。'],
+              ['Steam 専用 Bottle', 'Windows 10 Bottle を作成し「ランチャー互換（自動）」「GPU 偽装（NVIDIA）」を有効化してから SteamSetup.exe を導入します。']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'shortcuts', num: '06', toc: 'ショートカット一覧', title: 'キーボードショートカット一覧',
+        intro: 'macOS / Linux 共通の操作ショートカット早見表です。',
+        blocks: [
+          {
+            type: 'table',
+            headers: ['操作', 'macOS', 'Linux'],
+            rows: [
+              ['設定を開く', '⌘ ,', 'Ctrl + ,'],
+              ['ライブラリ検索', '⌘ F', 'Ctrl + F'],
+              ['ライブラリ更新', '⌘ R', 'Ctrl + R'],
+              ['サイドバー開閉', '⌘ ⌃ S', 'Ctrl + Alt + S'],
+              ['前の画面へ戻る', '⌘ [', 'Alt + ←'],
+              ['UI アニメーション切替', '⌘ ⇧ M', 'Ctrl + Shift + M'],
+              ['モーダル / プレビューを閉じる', 'Esc', 'Esc'],
+              ['最小化 / 閉じる / 終了', '⌘ M / ⌘ W / ⌘ Q', 'Ctrl + M / Ctrl + W / Ctrl + Q'],
+              ['マルチ .exe 起動選択', '↑ ↓ 選択 · Enter 起動 · → 設定', '↑ ↓ 選択 · Enter 起動 · → 設定'],
+              ['ゲーム内マウス拘束を解除', 'Ctrl + Option + M', '実行設定でマウスキャプチャ無効化を使用']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'troubleshooting', num: '07', toc: 'トラブル対処', title: 'よくあるトラブルと診断',
+        intro: 'Bottle ページの「診断… / トラブルシューティング」から事前チェック、Wine WinMM 440 Hz 音声テスト、秘密値を含まない診断レポート出力を実行できます。',
+        blocks: [
+          {
+            type: 'list', heading: '主な症状と対処法',
+            items: [
+              ['macOS で更新ごとにキーチェーン確認が出る', 'ad-hoc 署名のため更新時に再認証が求められます。「AI 翻訳 → グローバル設定 → 認証情報の保存方式」を「ローカルファイル（0600 権限）」へ変更し保存後、API キーを再保存してください。'],
+              ['日本語テキストが文字化けする', '作品の「実行設定 → ロケール」を日本語にし、Winetricks で CJK フォントを導入します。'],
+              ['LunaHook で events_dropped が出る', '高頻度スレッドがキューを溢れさせています。システム系ノイズスレッドを「無視」にし、本文スレッドのみ残してください。'],
+              ['ゲームがフリーズ・終了しない', 'Bottle の「実行中のプロセス」から「すべてのプロセスを停止」を実行してください。']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'paths', num: '08', toc: 'データ保存先と削除', title: '保存パス・環境変数と完全アンインストール',
+        intro: 'アプリ本体を削除しても Bottle とセーブデータは保持されます。完全削除の前に必ずセーブデータをバックアップしてください。',
+        blocks: [
+          {
+            type: 'plat_cards',
+            cards: [
+              {
+                plat: 'mac', title: 'macOS 保存先と完全削除', meta: 'Application Support & Containers',
+                bullets: [
+                  '共有 Wine ランタイム：~/Library/Application Support/com.daydalek.Maltoria/Libraries/',
+                  'Bottle・設定・メタデータキャッシュ：~/Library/Containers/com.daydalek.Maltoria/',
+                  '全データを削除するコマンド（要バックアップ）：'
+                ],
+                cmd: 'rm -rf "/Applications/Maltoria.app" \\\n  ~/Library/Containers/com.daydalek.Maltoria \\\n  ~/Library/Containers/com.daydalek.Maltoria.WhiskyThumbnail \\\n  ~/Library/Application\\ Support/com.daydalek.Maltoria \\\n  ~/Library/Caches/com.daydalek.Maltoria \\\n  ~/Library/Logs/com.daydalek.Maltoria \\\n  ~/Library/HTTPStorages/com.daydalek.Maltoria \\\n  ~/Library/Preferences/com.daydalek.Maltoria.plist'
+              },
+              {
+                plat: 'linux', title: 'Linux 保存先と完全削除', meta: '/opt/whisky & ~/.local/share/whisky',
+                bullets: [
+                  'アプリ本体：/opt/whisky/（ランチャー /usr/bin/whisky）',
+                  '管理 Wine：~/.local/share/whisky/runtime/wine/',
+                  'Bottle とキャッシュ：~/.local/share/whisky/Bottles/',
+                  'apt/dnf でパッケージ削除後、ユーザーデータも消す場合：'
+                ],
+                cmd: 'rm -rf ~/.local/share/whisky'
+              }
+            ]
+          },
+          {
+            type: 'note',
+            title: '便利な環境変数とオフラインモード',
+            body: 'WHISKY_GPUI_LOCALE で UI 言語を固定、MALTORIA_LLAMA_DOWNLOAD_BASE で llama.cpp 取得先を変更できます。「設定 → ネットワークと更新 → オフラインモード」でアプリ自身の通信を遮断できます。'
+          }
+        ]
+      }
+    ]
+  },
+
+  ko: {
+    doc_title: 'Maltoria — 사용 설명서',
+    meta_desc: 'Maltoria 완전 사용 설명서: macOS/Linux 설치, Bottle 관리, 5개 소스 메타데이터 수집, LunaHook 실시간 번역, 업스케일링, 단축키 및 문제 해결.',
+    ui: {
+      nav_home: '홈', nav_start: '시작하기', nav_trans: '실시간 번역', nav_runtime: '런타임', nav_trouble: '문제 해결',
+      nav_cta: 'v0.7.0 다운로드', kicker: 'MANUAL · v0.7.0 · macOS & Linux',
+      title: 'Maltoria 사용 설명서',
+      lead: '실제 구현 코드를 바탕으로 정리한 안내서입니다. 설치, 컨테이너 및 게임 등록, 5대 소스 스크래핑, LunaHook·로컬 모델 실시간 번역, 업스케일링, 단축키와 문제 해결을 다룹니다.',
+      plat_all: '전체 플랫폼', meta_scope: '대상 버전 v0.7.0 · Apple Silicon & Linux x86_64', meta_dl: '다운로드 바로가기 ↗',
+      toc_label: '목차', back_home: '메인 페이지로 돌아가기',
+      copy: '복사', copied: '복사됨 ✓',
+      ft_note: 'GPL-3.0 오픈소스 비주얼 노벨 라이브러리 및 Wine 실행 환경', ft_home: '홈', ft_dl: 'v0.7.0 다운로드', ft_repo: 'GitHub 저장소', ft_issues: '이슈 제보'
+    },
+    chapters: [
+      {
+        id: 'install', num: '01', toc: '설치 및 첫 실행', title: '설치 및 첫 실행',
+        intro: 'macOS(Apple Silicon)와 Linux(x86_64)를 지원합니다. 첫 실행 시 3단계 온보딩은 선호 설정만 저장하며 임의로 폴더를 스캔하거나 다운로드하지 않습니다.',
+        blocks: [
+          {
+            type: 'plat_cards',
+            cards: [
+              {
+                plat: 'mac', title: 'macOS (Apple Silicon)', meta: 'M1 이상 · .zip',
+                bullets: [
+                  'Maltoria-0.7.0-arm64.zip 압축을 풀고 Maltoria.app을 응용 프로그램 폴더로 옮깁니다.',
+                  'ad-hoc 서명 빌드이므로 Gatekeeper 경고가 뜨면 「시스템 설정 → 개인정보 보호 및 보안 → 확인 없이 열기」를 누르거나 아래 명령을 실행하세요.',
+                  '「설정 → 런타임 및 엔진」에서 Rosetta 2와 관리형 Wine 런타임(SHA-256 검증)을 설치합니다.'
+                ],
+                cmd: 'xattr -dr com.apple.quarantine /Applications/Maltoria.app'
+              },
+              {
+                plat: 'linux', title: 'Linux (x86_64)', meta: '.deb / .rpm / AppImage',
+                bullets: [
+                  'Ubuntu 24.04+는 .deb, Fedora 44+는 .rpm, 기타 배포판은 무설치 AppImage를 사용합니다.',
+                  'AppImage는 「설정 → 일반 → 데스크톱 엔트리」에서 영구 런처를 등록할 수 있습니다.',
+                  '관리형 Wine 런타임은 ~/.local/share/whisky/runtime/wine/에 SHA-256 검증 후 설치됩니다.'
+                ],
+                cmd: 'chmod +x Maltoria-0.7.0-x86_64.AppImage && ./Maltoria-0.7.0-x86_64.AppImage'
+              }
+            ]
+          },
+          {
+            type: 'note',
+            title: '3단계 온보딩 및 9개 언어 지원',
+            body: '① 컨테이너 생성/가져오기 → ② 게임 추가 및 .exe 선택 → ③ 메타데이터 소스 선택(건너뛰기 가능). 언어는 「설정 → 일반」 또는 환경 변수 WHISKY_GPUI_LOCALE로 변경할 수 있습니다.'
+          }
+        ]
+      },
+      {
+        id: 'bottles', num: '02', toc: '컨테이너와 게임 등록', title: '컨테이너(Bottle) 관리와 게임 추가',
+        intro: '각 Bottle은 독립된 Windows C: 환경입니다. 호환성 성격에 따라 컨테이너를 나누고 Steam은 전용 컨테이너로 분리하는 것을 권장합니다.',
+        blocks: [
+          {
+            type: 'list', heading: '컨테이너 생성 및 유지 관리',
+            items: [
+              ['생성 및 일괄 가져오기', '사이드바에서 「컨테이너 생성…」을 누르거나 「기존 컨테이너 가져오기…」로 한 번에 최대 128개의 기존 Whisky 컨테이너를 가져올 수 있습니다.'],
+              ['복제·이동·내보내기', '컨테이너 우클릭으로 이름 변경, 복제, 이동, 내보내기가 가능하며 삭제 시 목록만 제거할지 디스크에서 완전히 지울지 선택합니다.'],
+              ['내장 도구', 'C: 드라이브 열기, 터미널, Winetricks, 제어판, regedit, Wine 설정, 실행 중인 프로세스 관리를 기본 제공합니다.']
+            ]
+          },
+          {
+            type: 'list', heading: '게임 추가와 서재 정리',
+            items: [
+              ['스캔 폴더(권장)', '「스캔 폴더 관리…」에 게임 상위 폴더를 등록하면 직속 하위 폴더가 자동 등록됩니다(Folder Games.json). 단일 게임 폴더 추가도 지원합니다.'],
+              ['멀티 .exe 진입점 모드', '설정 툴이나 여러 실행 파일이 있는 작품은 「실행 설정」에서 멀티 .exe를 켜면 실행 시 ↑↓ 이동, Enter 실행, → 개별 설정이 가능합니다.'],
+              ['5가지 뷰 및 플레이 달력', '몰입·갤러리·그리드·목록·2열 뷰, 제작사별 그룹화, 상단 풀다운 태그/제작사 필터, 비파괴 숨기기(Library Visibility.json), 26주 플레이 달력을 제공합니다.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'metadata', num: '03', toc: '5대 소스 스크래핑', title: '5대 소스 메타데이터 수집과 표지 업스케일링',
+        intro: '5개 공개 소스에서 기본 정보·줄거리·표지·캐릭터별 우선 소스를 지정할 수 있으며, 수동 편집과 로컬 표지는 덮어쓰지 않습니다.',
+        blocks: [
+          {
+            type: 'table',
+            headers: ['소스', '수집 항목', '캐릭터/성우', '활용 팁'],
+            rows: [
+              ['Bangumi', '제목·줄거리·발매일·표지', '지원', 'ID 또는 작품 URL 붙여넣기로 바로 연결'],
+              ['VNDB', '다국어 제목·별칭·개발사·표지', '지원', 'v<ID>(예: v17) 직접 검색 지원'],
+              ['Steam 상점', '상점 제목·소개·600×900 세로 표지', '미지원', 'Steam 출시작에 최적'],
+              ['YMGal', 'Galgame 제목·발매일·표지·소개', '미지원', '공개 OAuth 클라이언트 내장'],
+              ['NextMoe', '다국어 제목·표지·개발사·인물/성우', '지원', '인물 일러스트와 CV 보완에 유용']
+            ]
+          },
+          {
+            type: 'list', heading: '수동 보호 및 일괄 표지 업스케일링',
+            items: [
+              ['안전한 새로고침', '자동 매칭은 새 스캔 폴더 등록 시 최초 1회만 실행됩니다. 수동 편집 내용과 로컬 커스텀 표지는 항상 우선 적용됩니다.'],
+              ['2× / 4× 표지 업스케일링', '「설정 → 게임 라이브러리 → 표지 업스케일」에서 전체 표지를 일괄 고화질화합니다. macOS는 Real-CUGAN(Core ML)·Anime4K(Metal), Linux는 realcugan-ncnn-vulkan(WHISKY_REALCUGAN_HELPER / WHISKY_REALCUGAN_MODELS)을 사용합니다.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'translation', num: '04', toc: 'LunaHook 실시간 번역', title: 'LunaHook 실시간 번역과 자막 오버레이',
+        intro: '작품 상세나 우클릭 메뉴에서 「게임 번역 및 캡처…」를 열면 게임 대사를 실시간 추출·번역해 전체 화면 위에 띄웁니다.',
+        blocks: [
+          {
+            type: 'list', heading: '1단계: AI 번역 제공자 연결',
+            items: [
+              ['내장 로컬 모델(오프라인·무료)', 'llama.cpp(Metal/Vulkan/CPU)와 GGUF 가중치를 SHA-256 검증 후 자동 설치하며 5분 유휴 시 메모리를 해제합니다. hf-mirror.com 미러 전환 지원.'],
+              ['로컬 Ollama', 'localhost:11434에 키 없이 연결하며 저장 후 「모델 탐색」으로 바로 선택합니다.'],
+              ['클라우드 및 사용자 정의 API', 'OpenAI Chat(DeepSeek·OpenRouter·OneAPI·vLLM·LM Studio), Anthropic, Gemini, DeepL(Free는 https://api-free.deepl.com), 구 /completions 지원. 추론 모델은 Thinking 단계를 낮춰 지연을 줄일 수 있습니다.']
+            ]
+          },
+          {
+            type: 'table',
+            headers: ['내장 로컬 모델', '용량', '권장 RAM', '비고'],
+            rows: [
+              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '약 1.68 GB', '8 GB+', '32K 컨텍스트, 실행 시 약 2.2–2.7 GB'],
+              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '약 546 MB', '4 GB+', '32K 컨텍스트, 실행 시 약 1.0 GB'],
+              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '약 1.26 GB', '8 GB+', '8K 컨텍스트, 102개 언어, 실행 시 약 1.8–2.3 GB']
+            ]
+          },
+          {
+            type: 'list', heading: '2단계: 프로세스 연결, 스레드 역할 및 자막 창',
+            items: [
+              ['자동 연결 및 H-코드', '게임 실행 후 스캔하여 주 프로세스에 연결하세요. 자동 연결을 켜면 다음 실행부터 프로세스와 ASLR 스레드 바인딩을 자동 복원하며, 필요 시 사용자 정의 H-코드(UTF-8 ≤ 2048 B)를 주입할 수 있습니다.'],
+              ['스레드 역할 지정', '「텍스트만 보기」로 필터링한 뒤 본문(최대 1), 화자(최대 1), 선택지 역할을 지정합니다(총 8개 이하).'],
+              ['전체 화면 오버레이 및 플로팅 HUD', '1–10줄 기록·글꼴 크기·투명도를 조절하며 HUD에서 자막 표시 및 드래그/클릭 통과를 즉시 전환합니다(macOS Space 지원, Linux X11 클릭 통과 / Wayland LayerShell).'],
+              ['디바운스·캐시·자격 증명', '스킵 디바운스(0–5000 ms, 권장 150 ms), 문맥 턴 수, 재시작 후에도 유지되는 문장 캐시, 원격 제공자 차단 토글을 제공합니다.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'runtime', num: '05', toc: '런타임 및 업스케일링', title: '비주얼 노벨 런타임 튜닝 및 화면 업스케일링',
+        intro: 'CrossOver Wine 26.3에 GE-Proton 멀티미디어 패치를 이식해 영상 검은 화면 문제를 해결하고, 컨테이너·게임별 세부 설정을 지원합니다.',
+        blocks: [
+          {
+            type: 'list', heading: '엔진, 그래픽 백엔드 및 호환성',
+            items: [
+              ['OP 및 컷신 수정', 'GE-Proton 패치로 오프닝 검은 화면을 해결하며, ASF/WMV 싱크 문제는 「ASF 타임스탬프 수정」으로 보정합니다.'],
+              ['그래픽 백엔드와 외부 엔진', '기본은 「자동 추천」을 권장합니다. macOS는 GPTK를 가져와 D3DMetal을 사용할 수 있으며 DXVK·DXMT·WineD3D 전환 및 읽기 전용 외부 Wine 엔진 등록을 지원합니다.'],
+              ['비주얼 노벨 필수 옵션', '프로그램별 일본어/중국어/영어 로케일, 저해상도 게임용 「구버전 전체 화면 호환」, 마우스 잠금 방지(게임 중 Ctrl+Option+M 해제)를 제공합니다.']
+            ]
+          },
+          {
+            type: 'sub', heading: 'macOS 실시간 GDI / Retina 업스케일링과 제외 영역',
+            body: 'GDI / WineD3D OpenGL 게임용 6가지 하이브리드 업스케일러(동적 MetalFX·Anime4K + 약 200 ms 정지 후 Real-CUGAN·AnimeVideo-v3 정적 보강)를 지원합니다.',
+            items: [
+              ['장면 간 LRU 캐시', '끄기 / 세션 메모리 / 디스크 캐시(기본 게임당 256 MiB RAM + 4 GiB 디스크)를 선택할 수 있습니다. 디스크 캐시는 쓰기량과 SSD 마모를 늘릴 수 있습니다.'],
+              ['대화창 제외 영역', '첫 실행 시 영역 드래그 또는 x,y,너비,높이 좌표(예: 0,520,1280,200)를 지정해 자막 글꼴을 선명하게 유지하면서 배경·스탠딩만 업스케일합니다.']
+            ]
+          },
+          {
+            type: 'list', heading: 'Winetricks 및 Steam 전용 컨테이너',
+            items: [
+              ['Winetricks와 DLL 오버라이드', 'Visual C++, 한중일 폰트 설치와 DLL 우선순위를 컨테이너/프로그램 단위로 관리합니다.'],
+              ['Steam 전용 컨테이너', '별도의 Windows 10 컨테이너에서 「런처 호환 모드(자동)」와 「GPU 스푸핑(NVIDIA)」을 먼저 켠 뒤 SteamSetup.exe를 설치하세요.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'shortcuts', num: '06', toc: '단축키 모음', title: '키보드 단축키 모음',
+        intro: 'macOS 및 Linux에서 바로 사용할 수 있는 내장 단축키입니다.',
+        blocks: [
+          {
+            type: 'table',
+            headers: ['기능', 'macOS', 'Linux'],
+            rows: [
+              ['설정 열기', '⌘ ,', 'Ctrl + ,'],
+              ['라이브러리 검색', '⌘ F', 'Ctrl + F'],
+              ['라이브러리 새로고침', '⌘ R', 'Ctrl + R'],
+              ['사이드바 토글', '⌘ ⌃ S', 'Ctrl + Alt + S'],
+              ['뒤로 이동', '⌘ [', 'Alt + ←'],
+              ['UI 애니메이션 토글', '⌘ ⇧ M', 'Ctrl + Shift + M'],
+              ['팝업 / 미리보기 닫기', 'Esc', 'Esc'],
+              ['최소화 / 창 닫기 / 종료', '⌘ M / ⌘ W / ⌘ Q', 'Ctrl + M / Ctrl + W / Ctrl + Q'],
+              ['멀티 .exe 선택기', '↑ ↓ 이동 · Enter 실행 · → 설정', '↑ ↓ 이동 · Enter 실행 · → 설정'],
+              ['게임 내 마우스 잠금 해제', 'Ctrl + Option + M', '실행 설정에서 마우스 캡처 비활성화']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'troubleshooting', num: '07', toc: '문제 해결', title: '자주 겪는 문제 해결 및 진단',
+        intro: '컨테이너 페이지의 「진단… / 문제 해결」에서 자동 점검, Wine WinMM 440 Hz 오디오 테스트, 민감 정보를 제외한 진단 보고서 내보내기를 실행할 수 있습니다.',
+        blocks: [
+          {
+            type: 'list', heading: '빠른 해결 가이드',
+            items: [
+              ['macOS 업데이트마다 키체인 팝업이 반복됨', 'ad-hoc 서명 특성상 바이너리가 바뀌면 키체인 권한을 다시 묻습니다. 「AI 번역 → 전역 설정 → 자격 증명 저장 방식」을 「로컬 파일(0600 권한)」으로 바꾸고 저장한 뒤 API 키를 한 번 다시 저장하세요.'],
+              ['일본어 텍스트 깨짐', '「실행 설정 → 로케일」을 일본어로 지정하고 Winetricks에서 한중일 폰트를 설치하세요.'],
+              ['LunaHook events_dropped 경고', '잡음 스레드를 「무시」로 돌리고 본문 스레드 1개(+화자 1개)만 유지하면 해결됩니다.'],
+              ['게임 멈춤 또는 종료 정리 시간 초과', '컨테이너의 「실행 중인 프로세스」에서 「모든 프로세스 중지」를 실행하세요.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'paths', num: '08', toc: '데이터 경로 및 제거', title: '저장 경로, 환경 변수 및 완전 제거',
+        intro: '앱만 삭제해도 컨테이너와 게임 세이브는 유지됩니다. 완전 삭제 전 중요한 세이브를 반드시 백업하세요.',
+        blocks: [
+          {
+            type: 'plat_cards',
+            cards: [
+              {
+                plat: 'mac', title: 'macOS 경로 및 완전 제거', meta: 'Application Support & Containers',
+                bullets: [
+                  '공유 Wine 런타임: ~/Library/Application Support/com.daydalek.Maltoria/Libraries/',
+                  '컨테이너·설정·메타데이터 캐시: ~/Library/Containers/com.daydalek.Maltoria/',
+                  '세이브 백업 후 모든 데이터 삭제:'
+                ],
+                cmd: 'rm -rf "/Applications/Maltoria.app" \\\n  ~/Library/Containers/com.daydalek.Maltoria \\\n  ~/Library/Containers/com.daydalek.Maltoria.WhiskyThumbnail \\\n  ~/Library/Application\\ Support/com.daydalek.Maltoria \\\n  ~/Library/Caches/com.daydalek.Maltoria \\\n  ~/Library/Logs/com.daydalek.Maltoria \\\n  ~/Library/HTTPStorages/com.daydalek.Maltoria \\\n  ~/Library/Preferences/com.daydalek.Maltoria.plist'
+              },
+              {
+                plat: 'linux', title: 'Linux 경로 및 완전 제거', meta: '/opt/whisky & ~/.local/share/whisky',
+                bullets: [
+                  '앱 설치 경로: /opt/whisky/ (실행기 /usr/bin/whisky)',
+                  '관리형 Wine: ~/.local/share/whisky/runtime/wine/',
+                  '컨테이너 및 캐시: ~/.local/share/whisky/Bottles/',
+                  '패키지 제거 후 사용자 데이터 완전 삭제:'
+                ],
+                cmd: 'rm -rf ~/.local/share/whisky'
+              }
+            ]
+          },
+          {
+            type: 'note',
+            title: '주요 환경 변수 및 오프라인 모드',
+            body: 'WHISKY_GPUI_LOCALE로 UI 언어를 강제 지정하고, MALTORIA_LLAMA_DOWNLOAD_BASE로 llama.cpp 다운로드 주소를 재정의할 수 있습니다. 「설정 → 네트워크 및 업데이트 → 오프라인 모드」는 앱 자체 통신만 차단합니다.'
+          }
+        ]
+      }
+    ]
+  },
+
+  fr: {
+    doc_title: 'Maltoria — Guide d’utilisation',
+    meta_desc: 'Guide complet de Maltoria : installation macOS Apple Silicon et Linux x86_64, Bottles, métadonnées 5 sources, traduction LunaHook, upscaling, raccourcis et dépannage.',
+    ui: {
+      nav_home: 'Accueil', nav_start: 'Démarrage', nav_trans: 'Traduction', nav_runtime: 'Exécution', nav_trouble: 'Dépannage',
+      nav_cta: 'Télécharger v0.7.0', kicker: 'MANUEL · v0.7.0 · macOS & Linux',
+      title: 'Guide d’utilisation Maltoria',
+      lead: 'Manuel complet basé sur le code source : installation, gestion des Bottles, métadonnées sur 5 sources, traduction en direct LunaHook et modèles locaux, upscaling, raccourcis et dépannage.',
+      plat_all: 'Toutes plateformes', meta_scope: 'Pour v0.7.0 · Apple Silicon & Linux x86_64', meta_dl: 'Téléchargements ↗',
+      toc_label: 'Sommaire', back_home: 'Retour à l’accueil',
+      copy: 'Copier', copied: 'Copié ✓',
+      ft_note: 'Gestionnaire de visual novels et environnement Wine open source GPL-3.0', ft_home: 'Accueil', ft_dl: 'Télécharger v0.7.0', ft_repo: 'Dépôt GitHub', ft_issues: 'Signaler un bug'
+    },
+    chapters: [
+      {
+        id: 'install', num: '01', toc: 'Installation', title: 'Installation et premier lancement',
+        intro: 'Maltoria fonctionne sur macOS (Apple Silicon) et Linux (x86_64). L’assistant en 3 étapes enregistre vos préférences sans analyser de dossier ni télécharger automatiquement.',
+        blocks: [
+          {
+            type: 'plat_cards',
+            cards: [
+              {
+                plat: 'mac', title: 'macOS (Apple Silicon)', meta: 'M1 ou ultérieur · .zip',
+                bullets: [
+                  'Décompressez Maltoria-0.7.0-arm64.zip et déplacez Maltoria.app dans Applications.',
+                  'Les builds étant signés ad-hoc, si Gatekeeper bloque l’ouverture, passez par Réglages Système → Confidentialité et sécurité → Ouvrir quand même, ou exécutez la commande ci-dessous.',
+                  'Installez Rosetta 2 (requis pour x86_64) et le runtime Wine vérifié SHA-256 dans Réglages → Exécution.'
+                ],
+                cmd: 'xattr -dr com.apple.quarantine /Applications/Maltoria.app'
+              },
+              {
+                plat: 'linux', title: 'Linux (x86_64)', meta: '.deb / .rpm / AppImage',
+                bullets: [
+                  'Installez le paquet .deb (Ubuntu 24.04+), .rpm (Fedora 44+) ou lancez l’AppImage portable.',
+                  'Pour l’AppImage, créez un lanceur persistant via Réglages → Général → Entrée de bureau.',
+                  'Le runtime Wine géré est installé dans ~/.local/share/whisky/runtime/wine/ avec vérification SHA-256.'
+                ],
+                cmd: 'chmod +x Maltoria-0.7.0-x86_64.AppImage && ./Maltoria-0.7.0-x86_64.AppImage'
+              }
+            ]
+          },
+          {
+            type: 'note',
+            title: 'Assistant initial et 9 langues',
+            body: '① Créer/importer une Bottle → ② Ajouter vos jeux et choisir l’exécutable → ③ Choisir les sources de métadonnées. Changez de langue dans Réglages → Général ou via WHISKY_GPUI_LOCALE.'
+          }
+        ]
+      },
+      {
+        id: 'bottles', num: '02', toc: 'Bottles & bibliothèque', title: 'Gestion des Bottles et ajout de jeux',
+        intro: 'Chaque Bottle isole un disque C: Windows complet. Créez une Bottle dédiée pour Steam afin d’éviter tout conflit.',
+        blocks: [
+          {
+            type: 'list', heading: 'Créer, importer et gérer les Bottles',
+            items: [
+              ['Création et import en lot', 'Créez une Bottle depuis la barre latérale ou importez jusqu’à 128 Bottles Whisky existantes en une fois.'],
+              ['Clonage, déplacement, export', 'Le menu contextuel permet de renommer, dupliquer, déplacer ou exporter ; la suppression propose de conserver ou d’effacer les fichiers.'],
+              ['Outils intégrés', 'Accès direct au lecteur C:, Terminal, Winetricks, Panneau de configuration, Regedit, Wine Config et Processus actifs.']
+            ]
+          },
+          {
+            type: 'list', heading: 'Ajout de jeux et organisation',
+            items: [
+              ['Dossiers d’analyse (recommandé)', 'Ajoutez vos dossiers racines dans Gérer les dossiers d’analyse… : chaque sous-dossier direct devient un jeu (Folder Games.json). L’ajout d’un dossier de jeu unique est aussi disponible.'],
+              ['Mode multi-EXE', 'Si un titre possède un outil de configuration ou plusieurs exécutables, activez le mode multi-EXE dans les paramètres du jeu (↑↓ choisir, Entrée lancer, → réglages).'],
+              ['5 vues et calendrier', 'Immersif, Galerie, Grille, Liste et Double ; regroupement par studio, barre de tags déroulante, masquage non destructif et calendrier de jeu sur 26 semaines.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'metadata', num: '03', toc: 'Métadonnées & jaquettes', title: 'Métadonnées sur 5 sources et upscaling des jaquettes',
+        intro: 'Définissez une source par défaut et des priorités par champ (infos, synopsis, jaquette, personnages). Vos éditions manuelles restent protégées.',
+        blocks: [
+          {
+            type: 'table',
+            headers: ['Source', 'Données', 'Personnages', 'Astuce'],
+            rows: [
+              ['Bangumi', 'Titres, synopsis, sortie, jaquettes', 'Oui', 'Lien direct par URL ou ID'],
+              ['VNDB', 'Titres multilingues, alias, studios, jaquettes', 'Oui', 'Recherche directe par v<id> (ex. v17)'],
+              ['Steam Store', 'Nom, description, jaquette 600×900', 'Non', 'Idéal pour les éditions Steam'],
+              ['YMGal', 'Fiches Galgame, sortie, jaquettes', 'Non', 'Client OAuth public intégré'],
+              ['NextMoe', 'Titres, jaquettes, studios, personnages & voix', 'Oui', 'Catalogue public en lecture seule']
+            ]
+          },
+          {
+            type: 'list', heading: 'Protection manuelle et upscaling 2× / 4×',
+            items: [
+              ['Aucun écrasement', 'La correspondance auto ne s’exécute qu’au premier scan d’un dossier ; les titres manuels et jaquettes locales priment toujours.'],
+              ['Upscaling par lot', 'Activez 2× ou 4× dans Réglages → Bibliothèque → Upscaling jaquettes : Real-CUGAN (Core ML) ou Anime4K (Metal) sur macOS ; realcugan-ncnn-vulkan sur Linux (WHISKY_REALCUGAN_HELPER / WHISKY_REALCUGAN_MODELS).']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'translation', num: '04', toc: 'Traduction LunaHook', title: 'Traduction en direct LunaHook et surcouche',
+        intro: 'Ouvrez Traduction et capture… depuis un jeu pour capter les dialogues et afficher une surcouche transparente par-dessus le plein écran.',
+        blocks: [
+          {
+            type: 'list', heading: 'Étape 1 : Configurer un fournisseur IA',
+            items: [
+              ['Modèles locaux intégrés (hors ligne, gratuits)', 'Téléchargement et vérification SHA-256 automatiques de llama.cpp (Metal / Vulkan / CPU) et des poids GGUF, déchargement après 5 min d’inactivité, miroir hf-mirror.com optionnel.'],
+              ['Ollama local', 'Connexion à localhost:11434 sans clé API et découverte automatique des modèles.'],
+              ['API cloud et personnalisées', 'OpenAI Chat (DeepSeek, OpenRouter, OneAPI, vLLM, LM Studio), Anthropic, Gemini, DeepL (https://api-free.deepl.com en offre Free) et /completions. Réduisez le niveau Thinking pour limiter la latence.']
+            ]
+          },
+          {
+            type: 'table',
+            headers: ['Modèle local', 'Taille', 'RAM rec.', 'Notes'],
+            rows: [
+              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '~1,68 Go', '8 Go+', 'Contexte 32K ; environ 2,2–2,7 Go en exécution'],
+              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '~546 Mo', '4 Go+', 'Contexte 32K ; environ 1,0 Go en exécution'],
+              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '~1,26 Go', '8 Go+', 'Contexte 8K ; 102 langues ; environ 1,8–2,3 Go en exécution']
+            ]
+          },
+          {
+            type: 'list', heading: 'Étape 2 : Capture, threads et surcouche',
+            items: [
+              ['Attachement automatique et H-codes', 'Lancez le jeu, analysez et attachez le processus principal. L’attachement auto mémorise le processus et les adresses ASLR ; injection de H-codes personnalisés (UTF-8 ≤ 2048 o).'],
+              ['Rôles de threads', 'Filtrez « Texte uniquement » et assignez Corps (1 max), Locuteur (1 max), Choix ou Ignorer (8 threads max).'],
+              ['HUD flottant et plein écran', 'Réglez 1–10 lignes d’historique, taille et opacité. Basculez visibilité et clic traversant depuis le HUD (Space natif sur macOS ; X11 traversant / Wayland LayerShell sur Linux).'],
+              ['Anti-rebond et cache', 'Anti-rebond d’avance rapide (0–5000 ms, 150 ms conseillé), historique de contexte, cache persistant par phrase et blocage des serveurs distants.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'runtime', num: '05', toc: 'Exécution & upscaling', title: 'Réglages Wine et upscaling temps réel',
+        intro: 'Basé sur CrossOver Wine 26.3 avec correctifs média GE-Proton, Maltoria offre des surcharges fines par Bottle et par jeu.',
+        blocks: [
+          {
+            type: 'list', heading: 'Vidéo, backends graphiques et compatibilité',
+            items: [
+              ['Correctifs OP / cinématiques', 'Les patchs GE-Proton corrigent les vidéos noires ; activez le correctif d’horodatage ASF en cas de saccade WMV/ASF.'],
+              ['Backends et moteurs externes', 'Conservez Recommandé ; importez Apple GPTK sur macOS pour D3DMetal. DXVK, DXMT, WineD3D et moteurs externes en lecture seule sont supportés.'],
+              ['Essentiels visual novel', 'Préréglages de locale (japonais/chinois/anglais), compatibilité plein écran hérité pour les anciens titres, et désactivation de capture souris (Ctrl+Option+M en jeu).']
+            ]
+          },
+          {
+            type: 'sub', heading: 'Upscaling GDI / Retina temps réel (macOS) et zones exclues',
+            body: 'Six algorithmes hybrides combinent MetalFX ou Anime4K en mouvement avec Real-CUGAN ou AnimeVideo-v3 sur image fixe (~200 ms).',
+            items: [
+              ['Cache LRU inter-scènes', 'Désactivé, mémoire de session ou disque (256 Mio RAM + 4 Gio disque par jeu par défaut). Le cache disque peut augmenter les écritures et l’usure du SSD.'],
+              ['Zones exclues (boîte de dialogue)', 'Sélectionnez la zone de texte au premier lancement ou saisissez x,y,l,h (ex. 0,520,1280,200) pour garder une police nette tout en améliorant les illustrations.']
+            ]
+          },
+          {
+            type: 'list', heading: 'Winetricks et Bottle Steam',
+            items: [
+              ['Winetricks et DLL', 'Installez Visual C++, polices CJK et gérez l’ordre de chargement DLL par Bottle ou jeu.'],
+              ['Bottle Steam dédiée', 'Créez une Bottle Windows 10 avec Compatibilité lanceur (Auto) et GPU Spoofing (NVIDIA) avant d’installer SteamSetup.exe.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'shortcuts', num: '06', toc: 'Raccourcis clavier', title: 'Raccourcis clavier',
+        intro: 'Raccourcis intégrés sur macOS et Linux.',
+        blocks: [
+          {
+            type: 'table',
+            headers: ['Action', 'macOS', 'Linux'],
+            rows: [
+              ['Ouvrir les réglages', '⌘ ,', 'Ctrl + ,'],
+              ['Rechercher', '⌘ F', 'Ctrl + F'],
+              ['Actualiser la bibliothèque', '⌘ R', 'Ctrl + R'],
+              ['Afficher / masquer la barre latérale', '⌘ ⌃ S', 'Ctrl + Alt + S'],
+              ['Page précédente', '⌘ [', 'Alt + ←'],
+              ['Basculer les animations', '⌘ ⇧ M', 'Ctrl + Shift + M'],
+              ['Fermer la fenêtre modale', 'Esc', 'Esc'],
+              ['Réduire / Fermer / Quitter', '⌘ M / ⌘ W / ⌘ Q', 'Ctrl + M / Ctrl + W / Ctrl + Q'],
+              ['Sélecteur multi-EXE', '↑ ↓ Choisir · Entrée Lancer · → Réglages', '↑ ↓ Choisir · Entrée Lancer · → Réglages'],
+              ['Libérer la souris en jeu', 'Ctrl + Option + M', 'Activer Désactiver capture souris']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'troubleshooting', num: '07', toc: 'Dépannage', title: 'Dépannage et diagnostics',
+        intro: 'Ouvrez Diagnostics… dans une Bottle pour lancer les vérifications automatiques, un bip audio Wine WinMM 440 Hz et exporter un rapport sans secrets.',
+        blocks: [
+          {
+            type: 'list', heading: 'Solutions fréquentes',
+            items: [
+              ['Popups Trousseau macOS répétés', 'La signature ad-hoc change après mise à jour : passez le stockage des clés en Fichier local (0600) dans Traduction → Paramètres globaux, enregistrez, puis resauvegardez votre clé API.'],
+              ['Texte japonais illisible', 'Réglez la locale du programme sur Japonais et installez les polices CJK via Winetricks.'],
+              ['Avertissement LunaHook events_dropped', 'Passez les threads système bruyants sur Ignorer et ne gardez que le thread Corps (+ Locuteur).'],
+              ['Jeu figé', 'Cliquez sur Arrêter tous les processus dans l’onglet Processus actifs de la Bottle.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'paths', num: '08', toc: 'Chemins & désinstallation', title: 'Chemins locaux, variables et désinstallation',
+        intro: 'Supprimer l’application conserve vos Bottles et sauvegardes. Sauvegardez toujours vos parties avant un nettoyage complet.',
+        blocks: [
+          {
+            type: 'plat_cards',
+            cards: [
+              {
+                plat: 'mac', title: 'macOS : chemins et suppression complète', meta: 'Application Support & Containers',
+                bullets: [
+                  'Runtime Wine : ~/Library/Application Support/com.daydalek.Maltoria/Libraries/',
+                  'Bottles et métadonnées : ~/Library/Containers/com.daydalek.Maltoria/',
+                  'Commande de nettoyage complet :'
+                ],
+                cmd: 'rm -rf "/Applications/Maltoria.app" \\\n  ~/Library/Containers/com.daydalek.Maltoria \\\n  ~/Library/Containers/com.daydalek.Maltoria.WhiskyThumbnail \\\n  ~/Library/Application\\ Support/com.daydalek.Maltoria \\\n  ~/Library/Caches/com.daydalek.Maltoria \\\n  ~/Library/Logs/com.daydalek.Maltoria \\\n  ~/Library/HTTPStorages/com.daydalek.Maltoria \\\n  ~/Library/Preferences/com.daydalek.Maltoria.plist'
+              },
+              {
+                plat: 'linux', title: 'Linux : chemins et suppression complète', meta: '/opt/whisky & ~/.local/share/whisky',
+                bullets: [
+                  'Programme : /opt/whisky/ (lanceur /usr/bin/whisky)',
+                  'Wine géré : ~/.local/share/whisky/runtime/wine/',
+                  'Bottles et cache : ~/.local/share/whisky/Bottles/',
+                  'Pour supprimer les données utilisateur après désinstallation :'
+                ],
+                cmd: 'rm -rf ~/.local/share/whisky'
+              }
+            ]
+          },
+          {
+            type: 'note',
+            title: 'Variables d’environnement et mode hors ligne',
+            body: 'WHISKY_GPUI_LOCALE force la langue ; MALTORIA_LLAMA_DOWNLOAD_BASE redéfinit la source llama.cpp ; le Mode hors ligne dans Réglages → Réseau bloque les requêtes de Maltoria sans couper les jeux.'
+          }
+        ]
+      }
+    ]
+  },
+
+  es: {
+    doc_title: 'Maltoria — Guía de uso',
+    meta_desc: 'Guía completa de Maltoria: instalación en macOS Apple Silicon y Linux x86_64, Bottles, metadatos de 5 fuentes, traducción LunaHook, reescalado, atajos y solución de problemas.',
+    ui: {
+      nav_home: 'Inicio', nav_start: 'Primeros pasos', nav_trans: 'Traducción', nav_runtime: 'Entorno', nav_trouble: 'Solución',
+      nav_cta: 'Descargar v0.7.0', kicker: 'MANUAL · v0.7.0 · macOS & Linux',
+      title: 'Guía de uso de Maltoria',
+      lead: 'Manual completo basado en el código fuente: instalación, gestión de Bottles, metadatos en 5 fuentes, subtítulos en vivo LunaHook y modelos locales, reescalado, atajos y diagnóstico.',
+      plat_all: 'Todas las plataformas', meta_scope: 'Para v0.7.0 · Apple Silicon y Linux x86_64', meta_dl: 'Ir a descargas ↗',
+      toc_label: 'Índice', back_home: 'Volver al inicio',
+      copy: 'Copiar', copied: 'Copiado ✓',
+      ft_note: 'Gestor de novelas visuales y entorno Wine open source GPL-3.0', ft_home: 'Inicio', ft_dl: 'Descargar v0.7.0', ft_repo: 'Repositorio GitHub', ft_issues: 'Incidencias'
+    },
+    chapters: [
+      {
+        id: 'install', num: '01', toc: 'Instalación', title: 'Instalación y primer inicio',
+        intro: 'Maltoria es compatible con macOS (Apple Silicon) y Linux (x86_64). El asistente inicial de 3 pasos guarda tus preferencias sin escanear carpetas ni descargar nada por su cuenta.',
+        blocks: [
+          {
+            type: 'plat_cards',
+            cards: [
+              {
+                plat: 'mac', title: 'macOS (Apple Silicon)', meta: 'M1 o superior · .zip',
+                bullets: [
+                  'Descomprime Maltoria-0.7.0-arm64.zip y mueve Maltoria.app a Aplicaciones.',
+                  'Al usar firma ad-hoc, si Gatekeeper bloquea la apertura ve a Ajustes del Sistema → Privacidad y seguridad → Abrir de todos modos, o ejecuta el comando inferior.',
+                  'Instala Rosetta 2 (requerido para juegos x86_64) y el entorno Wine verificado por SHA-256 en Ajustes → Entorno.'
+                ],
+                cmd: 'xattr -dr com.apple.quarantine /Applications/Maltoria.app'
+              },
+              {
+                plat: 'linux', title: 'Linux (x86_64)', meta: '.deb / .rpm / AppImage',
+                bullets: [
+                  'Usa .deb en Ubuntu 24.04+, .rpm en Fedora 44+ o el AppImage portátil en otras distribuciones.',
+                  'En AppImage puedes registrar un acceso persistente desde Ajustes → General → Entrada de escritorio.',
+                  'El runtime Wine gestionado se instala en ~/.local/share/whisky/runtime/wine/ con verificación SHA-256.'
+                ],
+                cmd: 'chmod +x Maltoria-0.7.0-x86_64.AppImage && ./Maltoria-0.7.0-x86_64.AppImage'
+              }
+            ]
+          },
+          {
+            type: 'note',
+            title: 'Asistente de 3 pasos e interfaz en 9 idiomas',
+            body: '① Crear/importar Bottle → ② Añadir juegos y elegir .exe → ③ Elegir fuentes de metadatos. Cambia entre 9 idiomas en Ajustes → General o con WHISKY_GPUI_LOCALE.'
+          }
+        ]
+      },
+      {
+        id: 'bottles', num: '02', toc: 'Bottles y biblioteca', title: 'Gestión de Bottles e importación de juegos',
+        intro: 'Cada Bottle es una unidad C: de Windows aislada. Conviene crear una Bottle independiente para Steam.',
+        blocks: [
+          {
+            type: 'list', heading: 'Crear, importar y mantener Bottles',
+            items: [
+              ['Creación e importación masiva', 'Crea nuevas Bottles desde la barra lateral o importa hasta 128 Bottles existentes de Whisky en un lote.'],
+              ['Clonar, mover y exportar', 'Clic derecho para renombrar, duplicar, mover o exportar; al eliminar puedes conservar los archivos en disco o borrar todo.'],
+              ['Herramientas integradas', 'Abrir unidad C:, Terminal, Winetricks, Panel de control, Regedit, Wine Config y Procesos en ejecución.']
+            ]
+          },
+          {
+            type: 'list', heading: 'Añadir juegos y organizar estantería',
+            items: [
+              ['Carpetas de escaneo (recomendado)', 'Añade carpetas raíz en Gestionar carpetas de escaneo…: cada subcarpeta directa se registra como juego (Folder Games.json). También puedes añadir una carpeta de juego individual.'],
+              ['Modo multi-EXE', 'Actívalo en Ajustes de ejecución si un juego tiene configurador o varios .exe (↑↓ elegir, Enter iniciar, → ajustes).'],
+              ['5 vistas y calendario', 'Inmersiva, Galería, Cuadrícula, Lista y Doble; agrupación por estudio, barra desplegable de etiquetas, ocultado no destructivo y calendario de 26 semanas.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'metadata', num: '03', toc: 'Metadatos y portadas', title: 'Metadatos de 5 fuentes y escalado de portadas',
+        intro: 'Combina 5 fuentes públicas con prioridad por campo (datos básicos, sinopsis, portada, personajes) sin sobrescribir cambios manuales.',
+        blocks: [
+          {
+            type: 'table',
+            headers: ['Fuente', 'Campos', 'Personajes', 'Consejo'],
+            rows: [
+              ['Bangumi', 'Títulos, sinopsis, fecha, portadas', 'Sí', 'Admite pegar URL o ID directo'],
+              ['VNDB', 'Títulos multilingües, alias, estudios, portadas', 'Sí', 'Búsqueda directa por v<id> (ej. v17)'],
+              ['Steam Store', 'Título, descripción, portada 600×900', 'No', 'Ideal para lanzamientos de Steam'],
+              ['YMGal', 'Fichas Galgame, fecha y portadas', 'No', 'Cliente OAuth público integrado'],
+              ['NextMoe', 'Títulos, portadas, estudios y reparto', 'Sí', 'Catálogo de solo lectura con retratos y voces']
+            ]
+          },
+          {
+            type: 'list', heading: 'Edición manual y escalado 2× / 4×',
+            items: [
+              ['Protección manual', 'El emparejado automático solo corre al añadir una carpeta nueva; los textos manuales y portadas locales siempre tienen prioridad.'],
+              ['Escalado por lotes', 'Activa 2× o 4× en Ajustes → Biblioteca → Escalado de portadas: Real-CUGAN (Core ML) o Anime4K (Metal) en macOS; realcugan-ncnn-vulkan en Linux (WHISKY_REALCUGAN_HELPER / WHISKY_REALCUGAN_MODELS).']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'translation', num: '04', toc: 'Traducción LunaHook', title: 'Traducción en vivo LunaHook y subtítulos',
+        intro: 'Abre Traducción y captura… desde un juego para enganchar diálogos y proyectarlos en una capa transparente sobre pantalla completa.',
+        blocks: [
+          {
+            type: 'list', heading: 'Paso 1: Configurar el motor de traducción',
+            items: [
+              ['Modelos locales integrados (offline y gratis)', 'Descarga y verificación SHA-256 automática de llama.cpp (Metal / Vulkan / CPU) y pesos GGUF, liberación tras 5 min inactivo y espejo hf-mirror.com opcional.'],
+              ['Ollama local', 'Conecta con localhost:11434 sin clave API y descubre los modelos instalados.'],
+              ['APIs en la nube y personalizadas', 'OpenAI Chat (DeepSeek, OpenRouter, OneAPI, vLLM, LM Studio), Anthropic, Gemini, DeepL (https://api-free.deepl.com en plan Free) y /completions. Baja el nivel Thinking para reducir latencia.']
+            ]
+          },
+          {
+            type: 'table',
+            headers: ['Modelo local', 'Tamaño', 'RAM rec.', 'Notas'],
+            rows: [
+              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '~1,68 GB', '8 GB+', 'Contexto de 32K; ~2,2–2,7 GB en ejecución'],
+              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '~546 MB', '4 GB+', 'Contexto de 32K; ~1,0 GB en ejecución'],
+              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '~1,26 GB', '8 GB+', 'Contexto de 8K; 102 idiomas; ~1,8–2,3 GB en ejecución']
+            ]
+          },
+          {
+            type: 'list', heading: 'Paso 2: Enganche, hilos y capa flotante',
+            items: [
+              ['Autoenganche y códigos H', 'Inicia el juego, escanea y adjunta el proceso principal. El autoenganche recuerda proceso y direcciones ASLR; admite códigos H (UTF-8 ≤ 2048 B).'],
+              ['Roles de hilo', 'Activa «Solo con texto» y asigna Cuerpo (máx. 1), Hablante (máx. 1), Opción o Ignorar (máx. 8 hilos).'],
+              ['HUD y pantalla completa', 'Configura 1–10 líneas, fuente y opacidad. Alterna visibilidad y clic pasante desde el HUD (Space nativo en macOS; X11 / Wayland LayerShell en Linux).'],
+              ['Antirrebote y caché', 'Antirrebote de avance rápido (0–5000 ms, 150 ms recomendado), turnos de contexto, caché persistente de frases y bloqueo de APIs remotas.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'runtime', num: '05', toc: 'Entorno y reescalado', title: 'Ajuste de Wine y reescalado en tiempo real',
+        intro: 'Sobre CrossOver Wine 26.3 con parches multimedia GE-Proton, permite ajustes específicos por Bottle o por .exe.',
+        blocks: [
+          {
+            type: 'list', heading: 'Vídeo, gráficos y compatibilidad',
+            items: [
+              ['Corrección de vídeos OP', 'Los parches GE-Proton evitan pantallas negras; activa el ajuste de marca de tiempo ASF si los WMV/ASF se desincronizan.'],
+              ['Backends y motores externos', 'Deja Recomendado por defecto; importa Apple GPTK en macOS para D3DMetal. Soporta DXVK, DXMT, WineD3D y motores externos de solo lectura.'],
+              ['Esenciales de novelas visuales', 'Preajustes de idioma (japonés/chino/inglés), Compatibilidad de pantalla completa heredada y Desactivar captura de ratón (Ctrl+Option+M en juego).']
+            ]
+          },
+          {
+            type: 'sub', heading: 'Reescalado GDI / Retina (macOS) y zonas excluidas',
+            body: 'Seis modos híbridos combinan MetalFX o Anime4K en movimiento con Real-CUGAN o AnimeVideo-v3 tras ~200 ms de imagen fija.',
+            items: [
+              ['Caché LRU entre escenas', 'Desactivada, memoria de sesión o disco (256 MiB RAM + 4 GiB disco por juego por defecto). La caché en disco puede aumentar las escrituras y el desgaste del SSD.'],
+              ['Zonas excluidas', 'Selecciona el cuadro de diálogo al iniciar o introduce x,y,ancho,alto (ej. 0,520,1280,200) para mantener el texto nítido mientras se reescalan los fondos.']
+            ]
+          },
+          {
+            type: 'list', heading: 'Winetricks y Bottle para Steam',
+            items: [
+              ['Winetricks y DLL', 'Instala Visual C++, fuentes CJK y personaliza el orden de carga DLL.'],
+              ['Bottle dedicada a Steam', 'Usa una Bottle Windows 10 con Compatibilidad de lanzador (Auto) y GPU Spoofing (NVIDIA) antes de instalar SteamSetup.exe.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'shortcuts', num: '06', toc: 'Atajos de teclado', title: 'Atajos de teclado',
+        intro: 'Atajos integrados en macOS y Linux.',
+        blocks: [
+          {
+            type: 'table',
+            headers: ['Acción', 'macOS', 'Linux'],
+            rows: [
+              ['Abrir ajustes', '⌘ ,', 'Ctrl + ,'],
+              ['Buscar biblioteca', '⌘ F', 'Ctrl + F'],
+              ['Actualizar biblioteca', '⌘ R', 'Ctrl + R'],
+              ['Mostrar / ocultar barra lateral', '⌘ ⌃ S', 'Ctrl + Alt + S'],
+              ['Volver atrás', '⌘ [', 'Alt + ←'],
+              ['Alternar animaciones UI', '⌘ ⇧ M', 'Ctrl + Shift + M'],
+              ['Cerrar modal / vista previa', 'Esc', 'Esc'],
+              ['Minimizar / Cerrar / Salir', '⌘ M / ⌘ W / ⌘ Q', 'Ctrl + M / Ctrl + W / Ctrl + Q'],
+              ['Selector multi-EXE', '↑ ↓ Mover · Enter Abrir · → Ajustes', '↑ ↓ Mover · Enter Abrir · → Ajustes'],
+              ['Liberar ratón en juego', 'Ctrl + Option + M', 'Usar Desactivar captura de ratón']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'troubleshooting', num: '07', toc: 'Solución de problemas', title: 'Diagnóstico y solución de problemas',
+        intro: 'Desde Diagnóstico… en cada Bottle puedes ejecutar comprobaciones automáticas, un tono de prueba Wine WinMM 440 Hz y exportar un informe sin claves secretas.',
+        blocks: [
+          {
+            type: 'list', heading: 'Soluciones rápidas',
+            items: [
+              ['Ventanas repetidas del Llavero en macOS', 'La firma ad-hoc cambia en cada actualización. Cambia el almacenamiento de credenciales a Archivo local (0600) en Traducción → Ajustes globales, guarda y vuelve a guardar tu clave API.'],
+              ['Texto japonés corrupto', 'Configura el idioma del programa a Japonés e instala fuentes CJK con Winetricks.'],
+              ['Aviso events_dropped en LunaHook', 'Marca los hilos ruidosos del sistema como Ignorar y conserva solo 1 hilo de Cuerpo (+ Hablante).'],
+              ['Juego bloqueado', 'Usa Detener todos los procesos en la pestaña Procesos en ejecución de la Bottle.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'paths', num: '08', toc: 'Rutas y desinstalación', title: 'Rutas locales, variables y desinstalación',
+        intro: 'Eliminar la aplicación mantiene intactas tus Bottles y partidas. Haz copia de seguridad de tus guardados antes de limpiar todo.',
+        blocks: [
+          {
+            type: 'plat_cards',
+            cards: [
+              {
+                plat: 'mac', title: 'macOS: rutas y limpieza total', meta: 'Application Support & Containers',
+                bullets: [
+                  'Runtime Wine: ~/Library/Application Support/com.daydalek.Maltoria/Libraries/',
+                  'Bottles y metadatos: ~/Library/Containers/com.daydalek.Maltoria/',
+                  'Comando para borrar todo tras respaldar partidas:'
+                ],
+                cmd: 'rm -rf "/Applications/Maltoria.app" \\\n  ~/Library/Containers/com.daydalek.Maltoria \\\n  ~/Library/Containers/com.daydalek.Maltoria.WhiskyThumbnail \\\n  ~/Library/Application\\ Support/com.daydalek.Maltoria \\\n  ~/Library/Caches/com.daydalek.Maltoria \\\n  ~/Library/Logs/com.daydalek.Maltoria \\\n  ~/Library/HTTPStorages/com.daydalek.Maltoria \\\n  ~/Library/Preferences/com.daydalek.Maltoria.plist'
+              },
+              {
+                plat: 'linux', title: 'Linux: rutas y limpieza total', meta: '/opt/whisky & ~/.local/share/whisky',
+                bullets: [
+                  'Aplicación: /opt/whisky/ (lanzador /usr/bin/whisky)',
+                  'Wine gestionado: ~/.local/share/whisky/runtime/wine/',
+                  'Bottles y caché: ~/.local/share/whisky/Bottles/',
+                  'Para borrar los datos de usuario tras desinstalar:'
+                ],
+                cmd: 'rm -rf ~/.local/share/whisky'
+              }
+            ]
+          },
+          {
+            type: 'note',
+            title: 'Variables de entorno y modo sin conexión',
+            body: 'WHISKY_GPUI_LOCALE fuerza el idioma de la interfaz; MALTORIA_LLAMA_DOWNLOAD_BASE cambia el origen de llama.cpp; el Modo sin conexión en Ajustes → Red bloquea peticiones de Maltoria sin afectar a los juegos.'
+          }
+        ]
+      }
+    ]
+  },
+
+  it: {
+    doc_title: 'Maltoria — Guida utente',
+    meta_desc: 'Guida completa a Maltoria: installazione su macOS Apple Silicon e Linux x86_64, Bottle, metadati da 5 fonti, traduzione LunaHook, upscaling, scorciatoie e risoluzione problemi.',
+    ui: {
+      nav_home: 'Home', nav_start: 'Avvio rapido', nav_trans: 'Traduzione', nav_runtime: 'Runtime', nav_trouble: 'Problemi',
+      nav_cta: 'Scarica v0.7.0', kicker: 'MANUALE · v0.7.0 · macOS & Linux',
+      title: 'Guida utente di Maltoria',
+      lead: 'Manuale completo verificato sul codice: installazione, Bottle, scraping da 5 fonti, sottotitoli live LunaHook e modelli locali, upscaling, scorciatoie e diagnostica.',
+      plat_all: 'Tutte le piattaforme', meta_scope: 'Per v0.7.0 · Apple Silicon & Linux x86_64', meta_dl: 'Vai ai download ↗',
+      toc_label: 'Indice', back_home: 'Torna alla home',
+      copy: 'Copia', copied: 'Copiato ✓',
+      ft_note: 'Libreria visual novel e runtime Wine open source GPL-3.0', ft_home: 'Home', ft_dl: 'Scarica v0.7.0', ft_repo: 'Repo GitHub', ft_issues: 'Segnalazioni'
+    },
+    chapters: [
+      {
+        id: 'install', num: '01', toc: 'Installazione', title: 'Installazione e primo avvio',
+        intro: 'Maltoria supporta macOS (Apple Silicon) e Linux (x86_64). La procedura iniziale in 3 passaggi salva solo le preferenze senza avviare scansioni o download automatici.',
+        blocks: [
+          {
+            type: 'plat_cards',
+            cards: [
+              {
+                plat: 'mac', title: 'macOS (Apple Silicon)', meta: 'M1 o successivo · .zip',
+                bullets: [
+                  'Estrai Maltoria-0.7.0-arm64.zip e sposta Maltoria.app in Applicazioni.',
+                  'Con firma ad-hoc, se Gatekeeper blocca l’avvio apri Impostazioni di Sistema → Privacy e sicurezza → Apri comunque, oppure esegui il comando sotto.',
+                  'Installa Rosetta 2 (necessario per x86_64) e il runtime Wine verificato SHA-256 in Impostazioni → Runtime.'
+                ],
+                cmd: 'xattr -dr com.apple.quarantine /Applications/Maltoria.app'
+              },
+              {
+                plat: 'linux', title: 'Linux (x86_64)', meta: '.deb / .rpm / AppImage',
+                bullets: [
+                  'Installa .deb su Ubuntu 24.04+, .rpm su Fedora 44+ oppure usa l’AppImage portatile.',
+                  'Per AppImage puoi creare un lanciatore persistente in Impostazioni → Generali → Voce desktop.',
+                  'Il runtime Wine gestito viene installato in ~/.local/share/whisky/runtime/wine/ con verifica SHA-256.'
+                ],
+                cmd: 'chmod +x Maltoria-0.7.0-x86_64.AppImage && ./Maltoria-0.7.0-x86_64.AppImage'
+              }
+            ]
+          },
+          {
+            type: 'note',
+            title: 'Configurazione guidata e 9 lingue',
+            body: '① Crea/importa Bottle → ② Aggiungi giochi e seleziona .exe → ③ Scegli fonti metadati. Cambia lingua in Impostazioni → Generali o con WHISKY_GPUI_LOCALE.'
+          }
+        ]
+      },
+      {
+        id: 'bottles', num: '02', toc: 'Bottle e libreria', title: 'Gestione Bottle e aggiunta giochi',
+        intro: 'Ogni Bottle è un prefisso Windows C: separato. Dedica una Bottle esclusiva a Steam per la massima stabilità.',
+        blocks: [
+          {
+            type: 'list', heading: 'Creare, importare e gestire Bottle',
+            items: [
+              ['Creazione e importazione', 'Crea una Bottle dalla barra laterale o importa fino a 128 Bottle Whisky esistenti in un blocco.'],
+              ['Clonazione, spostamento, export', 'Clic destro per rinominare, duplicare, spostare o esportare; l’eliminazione permette di tenere o rimuovere i file su disco.'],
+              ['Strumenti inclusi', 'Apri C:, Terminale, Winetricks, Pannello di controllo, Regedit, Wine Config e Processi attivi.']
+            ]
+          },
+          {
+            type: 'list', heading: 'Aggiungere giochi e viste scaffale',
+            items: [
+              ['Cartelle di scansione (consigliato)', 'Aggiungi directory radice in Gestisci cartelle di scansione…: ogni sottocartella diretta diventa un gioco (Folder Games.json). Supporta anche cartella singolo gioco.'],
+              ['Modalità multi-EXE', 'Attivala in Impostazioni avvio per titoli con più eseguibili (↑↓ scegli, Invio avvia, → impostazioni).'],
+              ['5 viste e calendario', 'Immersiva, Galleria, Griglia, Elenco e Doppia; raggruppamento per studio, barra tag a discesa, occultamento sicuro e calendario di 26 settimane.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'metadata', num: '03', toc: 'Metadati e copertine', title: 'Metadati da 5 fonti e upscaling copertine',
+        intro: 'Combina 5 fonti pubbliche con priorità per campo (info, trama, copertina, personaggi) proteggendo sempre le modifiche manuali.',
+        blocks: [
+          {
+            type: 'table',
+            headers: ['Fonte', 'Dati', 'Personaggi', 'Suggerimento'],
+            rows: [
+              ['Bangumi', 'Titoli, trama, uscita, copertine', 'Sì', 'Supporta URL o ID diretto'],
+              ['VNDB', 'Titoli multilingua, alias, studi, copertine', 'Sì', 'Ricerca diretta v<id> (es. v17)'],
+              ['Steam Store', 'Nome, descrizione, copertina 600×900', 'No', 'Perfetto per titoli Steam'],
+              ['YMGal', 'Schede Galgame, uscita e copertine', 'No', 'Client OAuth pubblico integrato'],
+              ['NextMoe', 'Titoli, copertine, studi e doppiatori', 'Sì', 'Catalogo pubblico in sola lettura']
+            ]
+          },
+          {
+            type: 'list', heading: 'Protezione manuale e upscaling 2× / 4×',
+            items: [
+              ['Nessuna sovrascrittura', 'L’abbinamento automatico avviene una sola volta per nuova cartella; testi manuali e copertine locali prevalgono sempre.'],
+              ['Upscaling copertine', 'Attiva 2× o 4× in Impostazioni → Libreria: Real-CUGAN (Core ML) o Anime4K (Metal) su macOS; realcugan-ncnn-vulkan su Linux (WHISKY_REALCUGAN_HELPER / WHISKY_REALCUGAN_MODELS).']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'translation', num: '04', toc: 'Traduzione LunaHook', title: 'Traduzione live LunaHook e overlay sottotitoli',
+        intro: 'Apri Traduzione e cattura… da un gioco per agganciare i dialoghi e visualizzarli in overlay trasparente anche a schermo intero.',
+        blocks: [
+          {
+            type: 'list', heading: 'Passo 1: Configura un provider AI',
+            items: [
+              ['Modelli locali integrati (offline, gratuiti)', 'Download e verifica SHA-256 automatica di llama.cpp (Metal / Vulkan / CPU) e pesi GGUF, scaricamento dopo 5 min di inattività, mirror hf-mirror.com opzionale.'],
+              ['Ollama locale', 'Connessione a localhost:11434 senza chiave API con rilevamento modelli.'],
+              ['API cloud e custom', 'OpenAI Chat (DeepSeek, OpenRouter, OneAPI, vLLM, LM Studio), Anthropic, Gemini, DeepL (https://api-free.deepl.com per Free) e /completions. Abbassa il livello Thinking per ridurre la latenza.']
+            ]
+          },
+          {
+            type: 'table',
+            headers: ['Modello locale', 'Dimensione', 'RAM cons.', 'Note'],
+            rows: [
+              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '~1,68 GB', '8 GB+', 'Contesto 32K; circa 2,2–2,7 GB in esecuzione'],
+              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '~546 MB', '4 GB+', 'Contesto 32K; circa 1,0 GB in esecuzione'],
+              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '~1,26 GB', '8 GB+', 'Contesto 8K; 102 lingue; circa 1,8–2,3 GB in esecuzione']
+            ]
+          },
+          {
+            type: 'list', heading: 'Passo 2: Aggancio, thread e overlay',
+            items: [
+              ['Auto-aggancio e H-code', 'Avvia il gioco, scansiona e aggancia il processo principale. L’auto-aggancio ricorda processo e ASLR; supporta H-code personalizzati (UTF-8 ≤ 2048 B).'],
+              ['Ruoli dei thread', 'Filtra «Solo con testo» e assegna Corpo (max 1), Parlante (max 1), Scelta o Ignora (max 8 thread).'],
+              ['HUD fluttuante e schermo intero', 'Imposta 1–10 righe di cronologia, carattere e opacità. Attiva visibilità e click-through dal HUD (Space nativo macOS; X11 / Wayland LayerShell Linux).'],
+              ['Anti-rimbalzo e cache', 'Anti-rimbalzo skip (0–5000 ms, 150 ms consigliati), turni di contesto, cache frasi persistente e blocco provider remoti.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'runtime', num: '05', toc: 'Runtime e upscaling', title: 'Ottimizzazione Wine e upscaling in tempo reale',
+        intro: 'Basato su CrossOver Wine 26.3 con patch multimediali GE-Proton e controlli dedicati per Bottle e singolo eseguibile.',
+        blocks: [
+          {
+            type: 'list', heading: 'Video, grafica e compatibilità',
+            items: [
+              ['Fix video OP', 'Le patch GE-Proton eliminano le schermate nere; attiva ASF Timestamp Fix per video WMV/ASF fuori sincrono.'],
+              ['Backend e motori esterni', 'Lascia Consigliato; importa Apple GPTK su macOS per D3DMetal. Supporta DXVK, DXMT, WineD3D e motori esterni in sola lettura.'],
+              ['Essenziali visual novel', 'Preset lingua (giapponese/cinese/inglese), Compatibilità schermo intero legacy e Disattiva cattura mouse (Ctrl+Option+M in gioco).']
+            ]
+          },
+          {
+            type: 'sub', heading: 'Upscaling GDI / Retina (macOS) e aree escluse',
+            body: 'Sei modalità ibride combinano MetalFX o Anime4K in movimento con Real-CUGAN o AnimeVideo-v3 su fotogrammi fissi (~200 ms).',
+            items: [
+              ['Cache LRU tra scene', 'Disattivata, memoria di sessione o disco (predefinito 256 MiB RAM + 4 GiB disco per gioco). La cache su disco può aumentare le scritture e l’usura dell’SSD.'],
+              ['Aree escluse (box testo)', 'Seleziona l’area di dialogo o inserisci x,y,l,h (es. 0,520,1280,200) per mantenere i caratteri nitidi mentre gli sfondi vengono scalati.']
+            ]
+          },
+          {
+            type: 'list', heading: 'Winetricks e Bottle Steam',
+            items: [
+              ['Winetricks e DLL', 'Installa Visual C++, font CJK e imposta l’ordine DLL per Bottle o programma.'],
+              ['Bottle dedicata Steam', 'Crea una Bottle Windows 10 con Compatibilità launcher (Auto) e GPU Spoofing (NVIDIA) prima di installare SteamSetup.exe.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'shortcuts', num: '06', toc: 'Scorciatoie', title: 'Scorciatoie da tastiera',
+        intro: 'Scorciatoie integrate per macOS e Linux.',
+        blocks: [
+          {
+            type: 'table',
+            headers: ['Azione', 'macOS', 'Linux'],
+            rows: [
+              ['Apri impostazioni', '⌘ ,', 'Ctrl + ,'],
+              ['Cerca libreria', '⌘ F', 'Ctrl + F'],
+              ['Aggiorna libreria', '⌘ R', 'Ctrl + R'],
+              ['Mostra / nascondi barra laterale', '⌘ ⌃ S', 'Ctrl + Alt + S'],
+              ['Indietro', '⌘ [', 'Alt + ←'],
+              ['Attiva / disattiva animazioni', '⌘ ⇧ M', 'Ctrl + Shift + M'],
+              ['Chiudi modale / anteprima', 'Esc', 'Esc'],
+              ['Riduci / Chiudi / Esci', '⌘ M / ⌘ W / ⌘ Q', 'Ctrl + M / Ctrl + W / Ctrl + Q'],
+              ['Selettore multi-EXE', '↑ ↓ Sposta · Invio Avvia · → Impostazioni', '↑ ↓ Sposta · Invio Avvia · → Impostazioni'],
+              ['Rilascia mouse in gioco', 'Ctrl + Option + M', 'Usa Disattiva cattura mouse']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'troubleshooting', num: '07', toc: 'Risoluzione problemi', title: 'Diagnostica e risoluzione problemi',
+        intro: 'Apri Diagnostica… in una Bottle per eseguire controlli automatici, test audio Wine WinMM 440 Hz ed esportare un report privo di chiavi segrete.',
+        blocks: [
+          {
+            type: 'list', heading: 'Soluzioni rapide',
+            items: [
+              ['Richieste ripetute Portachiavi macOS', 'Con firma ad-hoc ogni aggiornamento richiede nuova autorizzazione. Passa a File locale (0600) in Traduzione → Impostazioni globali, salva e risalva la chiave API.'],
+              ['Testo giapponese illeggibile', 'Imposta la lingua del programma su Giapponese e installa i font CJK con Winetricks.'],
+              ['Avviso events_dropped in LunaHook', 'Imposta i thread di sistema rumorosi su Ignora mantenendo solo 1 thread Corpo (+ Parlante).'],
+              ['Gioco bloccato', 'Usa Arresta tutti i processi nella scheda Processi attivi della Bottle.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'paths', num: '08', toc: 'Percorsi e disinstallazione', title: 'Percorsi dati, variabili e disinstallazione',
+        intro: 'Rimuovere l’app conserva Bottle e salvataggi. Esegui un backup prima della rimozione completa.',
+        blocks: [
+          {
+            type: 'plat_cards',
+            cards: [
+              {
+                plat: 'mac', title: 'macOS: percorsi e rimozione completa', meta: 'Application Support & Containers',
+                bullets: [
+                  'Runtime Wine: ~/Library/Application Support/com.daydalek.Maltoria/Libraries/',
+                  'Bottle e metadati: ~/Library/Containers/com.daydalek.Maltoria/',
+                  'Pulizia completa dopo il backup dei salvataggi:'
+                ],
+                cmd: 'rm -rf "/Applications/Maltoria.app" \\\n  ~/Library/Containers/com.daydalek.Maltoria \\\n  ~/Library/Containers/com.daydalek.Maltoria.WhiskyThumbnail \\\n  ~/Library/Application\\ Support/com.daydalek.Maltoria \\\n  ~/Library/Caches/com.daydalek.Maltoria \\\n  ~/Library/Logs/com.daydalek.Maltoria \\\n  ~/Library/HTTPStorages/com.daydalek.Maltoria \\\n  ~/Library/Preferences/com.daydalek.Maltoria.plist'
+              },
+              {
+                plat: 'linux', title: 'Linux: percorsi e rimozione completa', meta: '/opt/whisky & ~/.local/share/whisky',
+                bullets: [
+                  'Applicazione: /opt/whisky/ (lanciatore /usr/bin/whisky)',
+                  'Wine gestito: ~/.local/share/whisky/runtime/wine/',
+                  'Bottle e cache: ~/.local/share/whisky/Bottles/',
+                  'Per rimuovere tutti i dati utente dopo la disinstallazione:'
+                ],
+                cmd: 'rm -rf ~/.local/share/whisky'
+              }
+            ]
+          },
+          {
+            type: 'note',
+            title: 'Variabili d’ambiente e modalità offline',
+            body: 'WHISKY_GPUI_LOCALE forza la lingua UI; MALTORIA_LLAMA_DOWNLOAD_BASE sovrascrive l’URL di llama.cpp; Modalità offline in Impostazioni → Rete blocca le richieste di Maltoria senza influenzare i giochi.'
+          }
+        ]
+      }
+    ]
+  },
+
+  de: {
+    doc_title: 'Maltoria — Benutzerhandbuch',
+    meta_desc: 'Vollständiges Maltoria-Handbuch: Installation unter macOS Apple Silicon & Linux x86_64, Bottles, 5 Metadatenquellen, LunaHook-Übersetzung, Upscaling, Tastenkürzel & Fehlerbehebung.',
+    ui: {
+      nav_home: 'Start', nav_start: 'Einstieg', nav_trans: 'Übersetzung', nav_runtime: 'Laufzeit', nav_trouble: 'Hilfe',
+      nav_cta: 'Download v0.7.0', kicker: 'HANDBUCH · v0.7.0 · macOS & Linux',
+      title: 'Maltoria Benutzerhandbuch',
+      lead: 'Aus dem Quellcode verifiziertes Handbuch: Installation, Bottle-Verwaltung, 5 Metadatenquellen, LunaHook- & Lokalmodell-Untertitel, Upscaling, Tastenkürzel und Fehlerbehebung.',
+      plat_all: 'Alle Plattformen', meta_scope: 'Für v0.7.0 · Apple Silicon & Linux x86_64', meta_dl: 'Zu den Downloads ↗',
+      toc_label: 'Inhalt', back_home: 'Zur Startseite',
+      copy: 'Kopieren', copied: 'Kopiert ✓',
+      ft_note: 'GPL-3.0 Open-Source Visual-Novel-Manager & Wine-Laufzeit', ft_home: 'Start', ft_dl: 'Download v0.7.0', ft_repo: 'GitHub-Repo', ft_issues: 'Fehler melden'
+    },
+    chapters: [
+      {
+        id: 'install', num: '01', toc: 'Installation', title: 'Installation & erster Start',
+        intro: 'Maltoria unterstützt macOS (Apple Silicon) und Linux (x86_64). Der 3-Schritte-Assistent speichert zunächst nur Einstellungen ohne automatische Scans oder Downloads.',
+        blocks: [
+          {
+            type: 'plat_cards',
+            cards: [
+              {
+                plat: 'mac', title: 'macOS (Apple Silicon)', meta: 'M1 oder neuer · .zip',
+                bullets: [
+                  'Entpacke Maltoria-0.7.0-arm64.zip und ziehe Maltoria.app in Programme.',
+                  'Da Builds ad-hoc signiert sind, öffne bei Gatekeeper-Warnung Systemeinstellungen → Datenschutz & Sicherheit → Dennoch öffnen oder nutze den Befehl unten.',
+                  'Installiere Rosetta 2 (für x86_64 erforderlich) und die SHA-256-geprüfte Wine-Laufzeit unter Einstellungen → Laufzeit.'
+                ],
+                cmd: 'xattr -dr com.apple.quarantine /Applications/Maltoria.app'
+              },
+              {
+                plat: 'linux', title: 'Linux (x86_64)', meta: '.deb / .rpm / AppImage',
+                bullets: [
+                  'Installiere .deb (Ubuntu 24.04+), .rpm (Fedora 44+) oder nutze das portable AppImage.',
+                  'Für AppImage lässt sich unter Einstellungen → Allgemein → Desktop-Eintrag ein dauerhafter Starter anlegen.',
+                  'Die verwaltete Wine-Laufzeit wird SHA-256-geprüft nach ~/.local/share/whisky/runtime/wine/ geladen.'
+                ],
+                cmd: 'chmod +x Maltoria-0.7.0-x86_64.AppImage && ./Maltoria-0.7.0-x86_64.AppImage'
+              }
+            ]
+          },
+          {
+            type: 'note',
+            title: '3-Schritte-Assistent & 9 Sprachen',
+            body: '① Bottle anlegen/importieren → ② Spiele hinzufügen & .exe wählen → ③ Metadatenquellen wählen. Sprachwechsel jederzeit unter Einstellungen → Allgemein oder via WHISKY_GPUI_LOCALE.'
+          }
+        ]
+      },
+      {
+        id: 'bottles', num: '02', toc: 'Bottles & Bibliothek', title: 'Bottle-Verwaltung & Spiele hinzufügen',
+        intro: 'Jede Bottle kapselt ein eigenes Windows-C:-Präfix. Für Steam empfiehlt sich eine eigene Bottle.',
+        blocks: [
+          {
+            type: 'list', heading: 'Bottles erstellen, importieren & pflegen',
+            items: [
+              ['Erstellen & Massenimport', 'Neue Bottles über die Seitenleiste anlegen oder bis zu 128 bestehende Whisky-Bottles auf einmal importieren.'],
+              ['Klonen, Verschieben & Export', 'Per Rechtsklick umbenennen, klonen, verschieben oder exportieren; beim Löschen zwischen Listen-Entfernung und vollständigem Löschen wählen.'],
+              ['Integrierte Werkzeuge', 'C:-Laufwerk öffnen, Terminal, Winetricks, Systemsteuerung, Regedit, Wine-Konfiguration und Laufende Prozesse.']
+            ]
+          },
+          {
+            type: 'list', heading: 'Spiele importieren & sortieren',
+            items: [
+              ['Scan-Ordner (empfohlen)', 'Stammordner unter Scan-Ordner verwalten… hinzufügen – jeder direkte Unterordner wird ein Eintrag (Folder Games.json). Einzelspiel-Ordner sind ebenfalls möglich.'],
+              ['Multi-EXE-Modus', 'In den Starteinstellungen aktivierbar für Titel mit Konfigurator oder mehreren .exe (↑↓ wählen, Enter starten, → Einstellungen).'],
+              ['5 Ansichten & Spielkalender', 'Immersiv, Galerie, Raster, Liste und Doppelt; Studio-Gruppierung, ausziehbare Tag-Leiste, zerstörungsfreies Ausblenden und 26-Wochen-Kalender.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'metadata', num: '03', toc: 'Metadaten & Cover', title: '5 Metadatenquellen & Cover-Upscaling',
+        intro: 'Kombiniere 5 Quellen mit feldgenauer Priorität (Basis, Beschreibung, Cover, Figuren). Manuelle Änderungen werden nie überschrieben.',
+        blocks: [
+          {
+            type: 'table',
+            headers: ['Quelle', 'Felder', 'Figuren/Sprecher', 'Hinweis'],
+            rows: [
+              ['Bangumi', 'Titel, Beschreibung, Release, Cover', 'Ja', 'URL oder ID direkt einfügbar'],
+              ['VNDB', 'Mehrsprachige Titel, Aliase, Studios, Cover', 'Ja', 'Direktsuche über v<id> (z. B. v17)'],
+              ['Steam-Shop', 'Name, Beschreibung, 600×900-Cover', 'Nein', 'Ideal für Steam-Releases'],
+              ['YMGal', 'Galgame-Einträge, Release, Cover', 'Nein', 'Öffentlicher OAuth-Client integriert'],
+              ['NextMoe', 'Titel, Cover, Studios, Figuren & Sprecher', 'Ja', 'Öffentlicher Katalog mit Porträts']
+            ]
+          },
+          {
+            type: 'list', heading: 'Manueller Schutz & 2× / 4× Cover-Upscaling',
+            items: [
+              ['Sichere Aktualisierung', 'Automatischer Abgleich läuft einmalig pro neuem Scan-Ordner; manuelle Titel und lokale Cover haben stets Vorrang.'],
+              ['Batch-Upscaling', 'Unter Einstellungen → Bibliothek 2× oder 4× wählen: Real-CUGAN (Core ML) oder Anime4K (Metal) auf macOS; realcugan-ncnn-vulkan auf Linux (WHISKY_REALCUGAN_HELPER / WHISKY_REALCUGAN_MODELS).']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'translation', num: '04', toc: 'LunaHook-Übersetzung', title: 'LunaHook-Live-Übersetzung & Overlay',
+        intro: 'Öffne Spielübersetzung & Erfassung… im Spielmenü, um Dialoge abzugreifen und im Vollbild als transparentes Overlay anzuzeigen.',
+        blocks: [
+          {
+            type: 'list', heading: 'Schritt 1: KI-Anbieter einrichten',
+            items: [
+              ['Integrierte Lokalmodelle (offline & kostenlos)', 'Automatischer SHA-256-Download von llama.cpp (Metal / Vulkan / CPU) und GGUF-Gewichten, automatische RAM-Freigabe nach 5 Min. Leerlauf, optionaler hf-mirror.com-Spiegel.'],
+              ['Lokales Ollama', 'Verbindet sich ohne Schlüssel mit localhost:11434 und erkennt installierte Modelle.'],
+              ['Cloud- & Custom-APIs', 'OpenAI Chat (DeepSeek, OpenRouter, OneAPI, vLLM, LM Studio), Anthropic, Gemini, DeepL (https://api-free.deepl.com für Free) und /completions. Thinking-Stufe senken reduziert Latenz.']
+            ]
+          },
+          {
+            type: 'table',
+            headers: ['Lokalmodell', 'Größe', 'Empf. RAM', 'Hinweise'],
+            rows: [
+              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '~1,68 GB', '8 GB+', '32K Kontext; ca. 2,2–2,7 GB im Betrieb'],
+              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '~546 MB', '4 GB+', '32K Kontext; ca. 1,0 GB im Betrieb'],
+              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '~1,26 GB', '8 GB+', '8K Kontext; 102 Sprachen; ca. 1,8–2,3 GB im Betrieb']
+            ]
+          },
+          {
+            type: 'list', heading: 'Schritt 2: Anhängen, Threads & Overlay',
+            items: [
+              ['Auto-Attach & H-Codes', 'Spiel starten, scannen und Hauptprozess anhängen. Auto-Attach merkt Prozess & ASLR-Adressen; eigene H-Codes (UTF-8 ≤ 2048 B) möglich.'],
+              ['Thread-Rollen', '„Nur mit Text“ aktivieren und Haupttext (max. 1), Sprecher (max. 1), Auswahl oder Ignorieren wählen (max. 8 Threads).'],
+              ['Schwebendes HUD & Vollbild', '1–10 Verlaufszeilen, Schriftgröße und Deckkraft einstellbar; Sichtbarkeit & Klick-durch direkt am HUD umschaltbar (macOS Space; Linux X11 / Wayland LayerShell).'],
+              ['Entprellung & Cache', 'Skip-Entprellung (0–5000 ms, 150 ms empfohlen), Kontextrunden, dauerhafter Satz-Cache und Sperre für Remote-APIs.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'runtime', num: '05', toc: 'Laufzeit & Upscaling', title: 'Wine-Feintuning & Echtzeit-Upscaling',
+        intro: 'Auf Basis von CrossOver Wine 26.3 mit GE-Proton-Medienpatches bietet Maltoria feine Optionen pro Bottle und pro .exe.',
+        blocks: [
+          {
+            type: 'list', heading: 'Video, Grafik-Backends & Kompatibilität',
+            items: [
+              ['OP- & Video-Korrekturen', 'GE-Proton-Patches verhindern schwarze Zwischensequenzen; bei ASF/WMV-Rucklern ASF-Zeitstempel-Fix aktivieren.'],
+              ['Backends & externe Engines', 'Empfohlen beibehalten; auf macOS Apple GPTK für D3DMetal importieren. DXVK, DXMT, WineD3D und schreibgeschützte externe Engines werden unterstützt.'],
+              ['Visual-Novel-Optionen', 'Sprachpresets (Japanisch/Chinesisch/Englisch), Legacy-Vollbild für ältere Spiele sowie Maus-Capture deaktivieren (Ctrl+Option+M im Spiel).']
+            ]
+          },
+          {
+            type: 'sub', heading: 'macOS GDI / Retina-Upscaling & Ausschlussbereiche',
+            body: 'Sechs Hybridmodi kombinieren MetalFX oder Anime4K bei Bewegung mit Real-CUGAN oder AnimeVideo-v3 nach ~200 ms Standbild.',
+            items: [
+              ['Szenenübergreifender LRU-Cache', 'Aus, Sitzungs-RAM oder Festplatten-Cache (Standard: 256 MiB RAM + 4 GiB Disk je Spiel). Festplatten-Caching kann Schreibzugriffe und SSD-Verschleiß erhöhen.'],
+              ['Textfeld-Ausschlussbereich', 'Beim ersten Start aufziehen oder x,y,b,h eingeben (z. B. 0,520,1280,200), damit Dialogtext gestochen scharf bleibt.']
+            ]
+          },
+          {
+            type: 'list', heading: 'Winetricks & Steam-Bottle',
+            items: [
+              ['Winetricks & DLL-Overrides', 'Visual C++, CJK-Schriften und DLL-Ladereihenfolge bequem per GUI verwalten.'],
+              ['Eigene Steam-Bottle', 'Windows-10-Bottle anlegen, Launcher-Kompatibilität (Auto) und GPU-Spoofing (NVIDIA) aktivieren, dann SteamSetup.exe installieren.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'shortcuts', num: '06', toc: 'Tastenkürzel', title: 'Tastenkürzel',
+        intro: 'Alle integrierten Desktop-Tastenkürzel für macOS und Linux.',
+        blocks: [
+          {
+            type: 'table',
+            headers: ['Aktion', 'macOS', 'Linux'],
+            rows: [
+              ['Einstellungen öffnen', '⌘ ,', 'Ctrl + ,'],
+              ['Bibliothek durchsuchen', '⌘ F', 'Ctrl + F'],
+              ['Bibliothek aktualisieren', '⌘ R', 'Ctrl + R'],
+              ['Seitenleiste umschalten', '⌘ ⌃ S', 'Ctrl + Alt + S'],
+              ['Zurück navigieren', '⌘ [', 'Alt + ←'],
+              ['UI-Animationen umschalten', '⌘ ⇧ M', 'Ctrl + Shift + M'],
+              ['Dialog / Vorschau schließen', 'Esc', 'Esc'],
+              ['Minimieren / Schließen / Beenden', '⌘ M / ⌘ W / ⌘ Q', 'Ctrl + M / Ctrl + W / Ctrl + Q'],
+              ['Multi-EXE-Auswahl', '↑ ↓ Wählen · Enter Start · → Optionen', '↑ ↓ Wählen · Enter Start · → Optionen'],
+              ['Maus im Spiel freigeben', 'Ctrl + Option + M', 'Maus-Capture deaktivieren nutzen']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'troubleshooting', num: '07', toc: 'Fehlerbehebung', title: 'Diagnose & Fehlerbehebung',
+        intro: 'Starte Diagnose… in einer Bottle für automatische Vorprüfungen, den Wine-WinMM-440-Hz-Audiotest und einen datensicheren Diagnosebericht ohne Geheimnisse.',
+        blocks: [
+          {
+            type: 'list', heading: 'Häufige Lösungen',
+            items: [
+              ['Wiederholte macOS-Schlüsselbund-Abfragen', 'Ad-hoc-Builds ändern bei Updates ihre Signatur. Stelle unter Übersetzung → Globale Einstellungen auf Lokale Datei (0600) um, speichere und hinterlege den API-Key einmal neu.'],
+              ['Kaputter japanischer Text', 'Programmsprache auf Japanisch setzen und CJK-Schriften über Winetricks installieren.'],
+              ['LunaHook events_dropped', 'System-Rauschthreads auf Ignorieren stellen und nur 1 Haupttext-Thread (+ Sprecher) behalten.'],
+              ['Spiel hängt', 'Unter Laufende Prozesse in der Bottle „Alle Prozesse beenden“ ausführen.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'paths', num: '08', toc: 'Pfade & Deinstallation', title: 'Speicherpfade, Umgebungsvariablen & Deinstallation',
+        intro: 'Das Entfernen der App behält Bottles und Spielstände. Sichere wichtige Spielstände vor einer vollständigen Bereinigung.',
+        blocks: [
+          {
+            type: 'plat_cards',
+            cards: [
+              {
+                plat: 'mac', title: 'macOS: Pfade & vollständige Deinstallation', meta: 'Application Support & Containers',
+                bullets: [
+                  'Wine-Laufzeit: ~/Library/Application Support/com.daydalek.Maltoria/Libraries/',
+                  'Bottles & Metadaten: ~/Library/Containers/com.daydalek.Maltoria/',
+                  'Vollständige Bereinigung nach Spielstand-Backup:'
+                ],
+                cmd: 'rm -rf "/Applications/Maltoria.app" \\\n  ~/Library/Containers/com.daydalek.Maltoria \\\n  ~/Library/Containers/com.daydalek.Maltoria.WhiskyThumbnail \\\n  ~/Library/Application\\ Support/com.daydalek.Maltoria \\\n  ~/Library/Caches/com.daydalek.Maltoria \\\n  ~/Library/Logs/com.daydalek.Maltoria \\\n  ~/Library/HTTPStorages/com.daydalek.Maltoria \\\n  ~/Library/Preferences/com.daydalek.Maltoria.plist'
+              },
+              {
+                plat: 'linux', title: 'Linux: Pfade & vollständige Deinstallation', meta: '/opt/whisky & ~/.local/share/whisky',
+                bullets: [
+                  'Programm: /opt/whisky/ (Starter /usr/bin/whisky)',
+                  'Verwaltetes Wine: ~/.local/share/whisky/runtime/wine/',
+                  'Bottles & Cache: ~/.local/share/whisky/Bottles/',
+                  'Benutzerdaten nach Paketentfernung löschen:'
+                ],
+                cmd: 'rm -rf ~/.local/share/whisky'
+              }
+            ]
+          },
+          {
+            type: 'note',
+            title: 'Umgebungsvariablen & Offline-Modus',
+            body: 'WHISKY_GPUI_LOCALE erzwingt die UI-Sprache; MALTORIA_LLAMA_DOWNLOAD_BASE überschreibt die llama.cpp-Quelle; der Offline-Modus unter Einstellungen → Netzwerk blockiert nur Maltorias eigene Anfragen.'
+          }
+        ]
+      }
+    ]
+  },
+
+  ru: {
+    doc_title: 'Maltoria — Руководство пользователя',
+    meta_desc: 'Полное руководство по Maltoria: установка на macOS Apple Silicon и Linux x86_64, Bottle, метаданные из 5 источников, перевод LunaHook, апскейлинг, горячие клавиши и диагностика.',
+    ui: {
+      nav_home: 'Главная', nav_start: 'Старт', nav_trans: 'Перевод', nav_runtime: 'Среда', nav_trouble: 'Решение',
+      nav_cta: 'Скачать v0.7.0', kicker: 'РУКОВОДСТВО · v0.7.0 · macOS & Linux',
+      title: 'Руководство пользователя Maltoria',
+      lead: 'Подробная инструкция по реальным возможностям кода: установка, контейнеры Bottle, сбор метаданных из 5 источников, перевод LunaHook и локальные модели, апскейлинг, клавиши и диагностика.',
+      plat_all: 'Все платформы', meta_scope: 'Для v0.7.0 · Apple Silicon и Linux x86_64', meta_dl: 'К загрузкам ↗',
+      toc_label: 'Содержание', back_home: 'На главную',
+      copy: 'Копировать', copied: 'Скопировано ✓',
+      ft_note: 'Менеджер визуальных новелл и среда Wine под GPL-3.0', ft_home: 'Главная', ft_dl: 'Скачать v0.7.0', ft_repo: 'GitHub', ft_issues: 'Обратная связь'
+    },
+    chapters: [
+      {
+        id: 'install', num: '01', toc: 'Установка и запуск', title: 'Установка и первый запуск',
+        intro: 'Maltoria работает на macOS (Apple Silicon) и Linux (x86_64). Мастер первого запуска из 3 шагов сохраняет лишь настройки и не запускает сканирование или скачивание без вашего участия.',
+        blocks: [
+          {
+            type: 'plat_cards',
+            cards: [
+              {
+                plat: 'mac', title: 'macOS (Apple Silicon)', meta: 'M1 и новее · .zip',
+                bullets: [
+                  'Распакуйте Maltoria-0.7.0-arm64.zip и перенесите Maltoria.app в «Программы».',
+                  'Из-за ad-hoc подписи при блокировке Gatekeeper откройте «Системные настройки → Конфиденциальность и безопасность → Всё равно открыть» или выполните команду ниже.',
+                  'В «Настройки → Среда и движок» установите Rosetta 2 (нужна для x86_64) и управляемую среду Wine с проверкой SHA-256.'
+                ],
+                cmd: 'xattr -dr com.apple.quarantine /Applications/Maltoria.app'
+              },
+              {
+                plat: 'linux', title: 'Linux (x86_64)', meta: '.deb / .rpm / AppImage',
+                bullets: [
+                  'Установите .deb (Ubuntu 24.04+), .rpm (Fedora 44+) или запустите портативный AppImage.',
+                  'Для AppImage постоянный ярлык создаётся в «Настройки → Общие → Ярлык рабочего стола».',
+                  'Среда Wine загружается в ~/.local/share/whisky/runtime/wine/ с проверкой SHA-256.'
+                ],
+                cmd: 'chmod +x Maltoria-0.7.0-x86_64.AppImage && ./Maltoria-0.7.0-x86_64.AppImage'
+              }
+            ]
+          },
+          {
+            type: 'note',
+            title: '3 шага настройки и 9 языков',
+            body: '① Создать/импортировать Bottle → ② Добавить игры и выбрать .exe → ③ Выбрать источники метаданных. Язык интерфейса переключается в «Настройки → Общие» или через WHISKY_GPUI_LOCALE.'
+          }
+        ]
+      },
+      {
+        id: 'bottles', num: '02', toc: 'Bottle и библиотека', title: 'Контейнеры Bottle и добавление игр',
+        intro: 'Каждая Bottle — отдельный префикс Windows C:. Для Steam рекомендуется завести отдельную Bottle.',
+        blocks: [
+          {
+            type: 'list', heading: 'Создание, импорт и обслуживание',
+            items: [
+              ['Создание и пакетный импорт', 'Создайте Bottle через боковую панель или импортируйте до 128 существующих Bottle Whisky за раз.'],
+              ['Клонирование, перенос, экспорт', 'Контекстное меню позволяет переименовать, клонировать, переместить или экспортировать; при удалении можно оставить файлы на диске или удалить префикс полностью.'],
+              ['Встроенные инструменты', 'Диск C:, Терминал, Winetricks, Панель управления, Regedit, Wine Config и Активные процессы.']
+            ]
+          },
+          {
+            type: 'list', heading: 'Импорт игр и режимы полки',
+            items: [
+              ['Папки сканирования (рекомендуется)', 'Добавьте корневые каталоги в «Управление папками сканирования…»: каждая подпапка первого уровня станет игрой (Folder Games.json). Можно добавить и папку одной игры.'],
+              ['Режим нескольких .exe', 'Включите в настройках запуска, если у игры есть конфигуратор или доп. модули (↑↓ выбор, Enter запуск, → настройки).'],
+              ['5 видов и календарь', 'Погружение, Галерея, Сетка, Список и Две колонки; группировка по студиям, выдвижная панель тегов, безопасное скрытие и календарь на 26 недель.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'metadata', num: '03', toc: 'Метаданные и обложки', title: 'Сбор метаданных из 5 источников и апскейл обложек',
+        intro: 'Настраивайте приоритет 5 источников по полям (основное, описание, обложка, персонажи). Ручные правки никогда не перезаписываются.',
+        blocks: [
+          {
+            type: 'table',
+            headers: ['Источник', 'Поля', 'Персонажи/сейю', 'Совет'],
+            rows: [
+              ['Bangumi', 'Названия, описание, дата, обложки', 'Да', 'Привязка по URL или ID'],
+              ['VNDB', 'Мультиязычные названия, алиасы, студии, обложки', 'Да', 'Прямой поиск по v<id> (напр. v17)'],
+              ['Магазин Steam', 'Название, описание, обложка 600×900', 'Нет', 'Удобно для версий Steam'],
+              ['YMGal', 'Карточки Galgame, дата и обложки', 'Нет', 'Встроен публичный OAuth-клиент'],
+              ['NextMoe', 'Названия, обложки, студии, персонажи', 'Да', 'Публичный каталог с портретами и сейю']
+            ]
+          },
+          {
+            type: 'list', heading: 'Защита правок и апскейл 2× / 4×',
+            items: [
+              ['Без перезаписи', 'Автоподбор выполняется один раз при добавлении новой папки; ручные тексты и локальные обложки всегда в приоритете.'],
+              ['Пакетный апскейл обложек', 'В «Настройки → Библиотека» выберите 2× или 4×: Real-CUGAN (Core ML) или Anime4K (Metal) на macOS; realcugan-ncnn-vulkan на Linux (WHISKY_REALCUGAN_HELPER / WHISKY_REALCUGAN_MODELS).']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'translation', num: '04', toc: 'Перевод LunaHook', title: 'Живой перевод LunaHook и оверлей субтитров',
+        intro: 'Откройте «Перевод и захват…» из меню игры, чтобы перехватывать реплики и выводить перевод поверх полноэкранного окна.',
+        blocks: [
+          {
+            type: 'list', heading: 'Шаг 1: Подключение провайдера ИИ',
+            items: [
+              ['Встроенные локальные модели (офлайн, бесплатно)', 'Автозагрузка с проверкой SHA-256 движка llama.cpp (Metal / Vulkan / CPU) и весов GGUF, выгрузка из RAM через 5 мин простоя, опциональное зеркало hf-mirror.com.'],
+              ['Локальный Ollama', 'Подключение к localhost:11434 без API-ключа с автопоиском установленных моделей.'],
+              ['Облачные и свои API', 'OpenAI Chat (DeepSeek, OpenRouter, OneAPI, vLLM, LM Studio), Anthropic, Gemini, DeepL (https://api-free.deepl.com для Free) и /completions. Снизьте Thinking для уменьшения задержки.']
+            ]
+          },
+          {
+            type: 'table',
+            headers: ['Локальная модель', 'Размер', 'Рек. ОЗУ', 'Примечания'],
+            rows: [
+              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '~1,68 ГБ', '8 ГБ+', 'Контекст 32K; около 2,2–2,7 ГБ при работе'],
+              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '~546 МБ', '4 ГБ+', 'Контекст 32K; около 1,0 ГБ при работе'],
+              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '~1,26 ГБ', '8 ГБ+', 'Контекст 8K; 102 языка; около 1,8–2,3 ГБ при работе']
+            ]
+          },
+          {
+            type: 'list', heading: 'Шаг 2: Присоединение, потоки и оверлей',
+            items: [
+              ['Автоприсоединение и H-коды', 'Запустите игру, просканируйте и присоединитесь к главному процессу. Автоприсоединение запоминает процесс и ASLR; поддерживаются свои H-коды (UTF-8 ≤ 2048 Б).'],
+              ['Роли потоков', 'Включите «Только с текстом» и назначьте Основной (макс. 1), Говорящий (макс. 1), Выбор или Игнорировать (до 8 потоков).'],
+              ['Плавающий HUD и полный экран', '1–10 строк истории, шрифт, прозрачность; переключение видимости и клика сквозь окно прямо с HUD (macOS Space; Linux X11 / Wayland LayerShell).'],
+              ['Защита от перемотки и кэш', 'Задержка стабилизации (0–5000 мс, рек. 150 мс), глубина контекста, постоянный кэш фраз и запрет удалённых API.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'runtime', num: '05', toc: 'Среда и апскейлинг', title: 'Настройка Wine и апскейлинг в реальном времени',
+        intro: 'На базе CrossOver Wine 26.3 с медиапатчами GE-Proton доступны тонкие переопределения для каждой Bottle и отдельной игры.',
+        blocks: [
+          {
+            type: 'list', heading: 'Видео, графика и совместимость',
+            items: [
+              ['Исправление роликов OP', 'Патчи GE-Proton устраняют чёрный экран в видео; при рассинхроне ASF/WMV включите исправление меток времени ASF.'],
+              ['Бэкенды и внешние движки', 'Оставьте «Рекомендуется»; на macOS можно импортировать Apple GPTK для D3DMetal. Поддерживаются DXVK, DXMT, WineD3D и внешние движки Wine (только чтение).'],
+              ['Опции для визуальных новелл', 'Пресеты локали (японский/китайский/английский), совместимость старого полноэкранного режима и отключение захвата мыши (Ctrl+Option+M в игре).']
+            ]
+          },
+          {
+            type: 'sub', heading: 'GDI / Retina апскейлинг (macOS) и зоны исключения',
+            body: '6 гибридных режимов сочетают MetalFX или Anime4K в движении с Real-CUGAN или AnimeVideo-v3 после ~200 мс статики.',
+            items: [
+              ['Межсценовый LRU-кэш', 'Выкл / RAM сессии / дисковый кэш (по умолчанию 256 МиБ RAM + 4 ГиБ на диске на игру). Дисковый кэш может увеличить количество записей и износ SSD.'],
+              ['Зона исключения для текста', 'Выделите рамкой окно диалога или введите x,y,ш,в (напр. 0,520,1280,200), чтобы шрифт оставался чётким при апскейле CG.']
+            ]
+          },
+          {
+            type: 'list', heading: 'Winetricks и Bottle для Steam',
+            items: [
+              ['Winetricks и DLL', 'Установка Visual C++, шрифтов CJK и порядок загрузки DLL в интерфейсе.'],
+              ['Отдельная Bottle для Steam', 'Создайте Bottle Windows 10, включите «Совместимость лаунчеров (Авто)» и «Подмену GPU (NVIDIA)» до установки SteamSetup.exe.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'shortcuts', num: '06', toc: 'Горячие клавиши', title: 'Горячие клавиши',
+        intro: 'Сводка встроенных комбинаций клавиш для macOS и Linux.',
+        blocks: [
+          {
+            type: 'table',
+            headers: ['Действие', 'macOS', 'Linux'],
+            rows: [
+              ['Открыть настройки', '⌘ ,', 'Ctrl + ,'],
+              ['Поиск по библиотеке', '⌘ F', 'Ctrl + F'],
+              ['Обновить библиотеку', '⌘ R', 'Ctrl + R'],
+              ['Показать / скрыть боковую панель', '⌘ ⌃ S', 'Ctrl + Alt + S'],
+              ['Назад', '⌘ [', 'Alt + ←'],
+              ['Переключить анимации UI', '⌘ ⇧ M', 'Ctrl + Shift + M'],
+              ['Закрыть окно / предпросмотр', 'Esc', 'Esc'],
+              ['Свернуть / Закрыть / Выйти', '⌘ M / ⌘ W / ⌘ Q', 'Ctrl + M / Ctrl + W / Ctrl + Q'],
+              ['Выбор нескольких .exe', '↑ ↓ Выбор · Enter Запуск · → Настройки', '↑ ↓ Выбор · Enter Запуск · → Настройки'],
+              ['Освободить мышь в игре', 'Ctrl + Option + M', 'Включите отключение захвата мыши']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'troubleshooting', num: '07', toc: 'Диагностика', title: 'Диагностика и решение проблем',
+        intro: 'Откройте «Диагностика…» в Bottle для автопроверок, звукового теста Wine WinMM 440 Гц и экспорта безопасного отчёта (без секретных значений).',
+        blocks: [
+          {
+            type: 'list', heading: 'Частые проблемы',
+            items: [
+              ['Повторные запросы Связки ключей macOS', 'Подпись ad-hoc меняется при обновлении. Переключите хранение ключей на «Локальный файл (0600)» в «Перевод → Общие настройки», сохраните и заново сохраните API-ключ.'],
+              ['Кракозябры в японском тексте', 'Выберите японскую локаль в настройках игры и установите шрифты CJK через Winetricks.'],
+              ['Предупреждение events_dropped в LunaHook', 'Переведите шумные системные потоки в «Игнорировать», оставив только 1 Основной поток (+ Говорящий).'],
+              ['Игра зависла', 'Нажмите «Остановить все процессы» во вкладке «Активные процессы» нужной Bottle.']
+            ]
+          }
+        ]
+      },
+      {
+        id: 'paths', num: '08', toc: 'Пути и удаление', title: 'Пути хранения, переменные и полное удаление',
+        intro: 'Удаление приложения не затрагивает ваши Bottle и сохранения. Сделайте резервную копию сохранений перед полной очисткой.',
+        blocks: [
+          {
+            type: 'plat_cards',
+            cards: [
+              {
+                plat: 'mac', title: 'macOS: пути и полная очистка', meta: 'Application Support & Containers',
+                bullets: [
+                  'Среда Wine: ~/Library/Application Support/com.daydalek.Maltoria/Libraries/',
+                  'Bottle и кэш метаданных: ~/Library/Containers/com.daydalek.Maltoria/',
+                  'Команда полной очистки после бэкапа сохранений:'
+                ],
+                cmd: 'rm -rf "/Applications/Maltoria.app" \\\n  ~/Library/Containers/com.daydalek.Maltoria \\\n  ~/Library/Containers/com.daydalek.Maltoria.WhiskyThumbnail \\\n  ~/Library/Application\\ Support/com.daydalek.Maltoria \\\n  ~/Library/Caches/com.daydalek.Maltoria \\\n  ~/Library/Logs/com.daydalek.Maltoria \\\n  ~/Library/HTTPStorages/com.daydalek.Maltoria \\\n  ~/Library/Preferences/com.daydalek.Maltoria.plist'
+              },
+              {
+                plat: 'linux', title: 'Linux: пути и полная очистка', meta: '/opt/whisky & ~/.local/share/whisky',
+                bullets: [
+                  'Приложение: /opt/whisky/ (запуск /usr/bin/whisky)',
+                  'Среда Wine: ~/.local/share/whisky/runtime/wine/',
+                  'Bottle и кэш: ~/.local/share/whisky/Bottles/',
+                  'Удаление пользовательских данных после деинсталляции:'
+                ],
+                cmd: 'rm -rf ~/.local/share/whisky'
+              }
+            ]
+          },
+          {
+            type: 'note',
+            title: 'Переменные среды и офлайн-режим',
+            body: 'WHISKY_GPUI_LOCALE принудительно задаёт язык интерфейса; MALTORIA_LLAMA_DOWNLOAD_BASE меняет источник llama.cpp; «Офлайн-режим» в «Настройки → Сеть» блокирует только сетевые запросы самого Maltoria.'
+          }
+        ]
+      }
+    ]
+  }
+};
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function makeCopyBlock(cmdText, copyLabel, copiedLabel) {
+  const box = el('div', 'cmd-block');
+  const pre = el('pre', '', cmdText);
+  const btn = el('button', 'copy-btn', copyLabel);
+  btn.type = 'button';
+  let t = null;
+  btn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(cmdText);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = cmdText;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    }
+    clearTimeout(t);
+    btn.textContent = copiedLabel;
+    btn.classList.add('copied');
+    t = setTimeout(() => {
+      btn.textContent = copyLabel;
+      btn.classList.remove('copied');
+    }, 2000);
+  });
+  box.append(pre, btn);
+  return box;
+}
+
+let currentLang = 'zh-Hans';
+let observer = null;
+
+const CHAPTER_FIGURES = {
+  install: ['assets/guide-welcome.jpg', 'assets/guide-settings.jpg'],
+  bottles: ['assets/guide-scan.jpg', 'assets/guide-bottle.jpg'],
+  metadata: ['assets/guide-source-preferences.jpg', 'assets/guide-metadata-editor.jpg'],
+  translation: ['assets/guide-translation-settings.jpg', 'assets/guide-capture-panel.jpg'],
+  runtime: ['assets/guide-configure-bottle.jpg', 'assets/guide-run-settings.jpg'],
+  shortcuts: ['assets/demo-grid-layout.jpg'],
+  troubleshooting: []
+};
+
+const TROUBLESHOOTING_FIGURES = [
+  {
+    src: 'assets/guide-translation-settings.jpg',
+    'zh-Hans': '凭证存储与 AI 翻译设置入口',
+    en: 'Credential storage and AI translation settings'
+  },
+  {
+    src: 'assets/guide-run-settings.jpg',
+    'zh-Hans': '语言区域与单游戏运行覆盖',
+    en: 'Locale and per-game runtime overrides'
+  },
+  {
+    src: 'assets/guide-winetricks.jpg',
+    'zh-Hans': 'Winetricks 字体与运行库安装',
+    en: 'Winetricks font and runtime installation'
+  },
+  {
+    src: 'assets/guide-capture-panel.jpg',
+    'zh-Hans': 'LunaHook 线程角色与捕获状态',
+    en: 'LunaHook thread roles and capture status'
+  },
+  {
+    src: 'assets/guide-bottle.jpg',
+    'zh-Hans': '容器页的运行进程与维护入口',
+    en: 'Bottle maintenance and running-process entry'
+  }
+];
+
+const FIGURE_CAPTIONS = {
+  install: {
+    'zh-Hans': ['首次启动引导：先保存资料来源偏好，不扫描目录。', '通用设置：语言、主题、游戏库视图与桥接状态。'],
+    en: ['First-launch onboarding: save source preferences without scanning yet.', 'General settings: language, theme, library layout and bridge status.']
+  },
+  bottles: {
+    'zh-Hans': ['扫描设置：选择入库目录、递归深度与过滤规则。', '容器详情：封面、已安装程序、配置与运行入口。'],
+    en: ['Scan settings: library folders, recursion depth and filters.', 'Bottle detail: covers, installed programs, configuration and launch actions.']
+  },
+  metadata: {
+    'zh-Hans': ['资料来源偏好：调整来源顺序与覆盖策略。', '元数据编辑：手动修正标题、封面、简介与标签。'],
+    en: ['Source preferences: ordering and overwrite behavior.', 'Metadata editor: manually correct title, cover, synopsis and tags.']
+  },
+  translation: {
+    'zh-Hans': ['实时翻译设置：选择提供商、模型与目标语言。', '捕获面板：确认进程、Hook 状态与字幕输出。'],
+    en: ['Translation settings: provider, model and target language.', 'Capture panel: process, hook status and subtitle output.']
+  },
+  runtime: {
+    'zh-Hans': ['容器配置：Wine、Windows 版本、Retina 与同步选项。', '运行设置：图形后端、环境变量与启动参数。'],
+    en: ['Bottle configuration: Wine, Windows version, Retina and sync options.', 'Run settings: graphics backend, environment variables and launch arguments.']
+  },
+  shortcuts: {
+    'zh-Hans': ['网格布局：快捷键作用的主要界面区域。'],
+    en: ['Grid layout: the main interface areas covered by shortcuts.']
+  },
+  troubleshooting: {
+    'zh-Hans': ['Winetricks 面板：安装组件前先确认容器与日志。'],
+    en: ['Winetricks panel: confirm the bottle and logs before installing components.']
+  }
+};
+
+function figureCaption(ch, index) {
+  const captions = FIGURE_CAPTIONS[ch.id] || {};
+  const localized = captions[currentLang] || captions.en || [];
+  return localized[index] || ch.title;
+}
+
+function appendChapterFigure(sec, ch, src, index) {
+  const caption = figureCaption(ch, index);
+  const fig = el('figure', 'chapter-figure');
+  const link = el('a');
+  link.href = src;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  const img = el('img');
+  img.src = src;
+  img.alt = caption;
+  img.width = 1600;
+  img.height = 1027;
+  if (index > 0) img.loading = 'lazy';
+  link.appendChild(img);
+  const cap = el('figcaption');
+  cap.append(
+    el('span', '', caption),
+    el('span', 'tnum', 'FIG.' + ch.num + (index ? '.' + (index + 1) : ''))
+  );
+  fig.append(link, cap);
+  sec.appendChild(fig);
+}
+
+function appendTroubleshootingFigures(wrap) {
+  const grid = el('div', 'inline-figure-grid');
+  TROUBLESHOOTING_FIGURES.forEach((item, index) => {
+    const caption = item[currentLang] || item.en;
+    const fig = el('figure', 'inline-figure');
+    const link = el('a');
+    link.href = item.src;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    const img = el('img');
+    img.src = item.src;
+    img.alt = caption;
+    img.width = 1600;
+    img.height = 1027;
+    if (index > 0) img.loading = 'lazy';
+    link.appendChild(img);
+    fig.append(link, el('figcaption', '', caption));
+    grid.appendChild(fig);
+  });
+  wrap.appendChild(grid);
+}
+
+function appendLinkedText(parent, text) {
+  const pattern = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
+  let last = 0;
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > last) parent.appendChild(document.createTextNode(text.slice(last, match.index)));
+    const a = el('a');
+    a.href = match[2];
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = match[1];
+    parent.appendChild(a);
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
+}
+
+function renderGuide(lang, persist = false) {
+  const next = GUIDE_DATA[lang] ? lang : 'zh-Hans';
+  currentLang = next;
+  const data = GUIDE_DATA[next];
+
+  document.documentElement.lang = next;
+  document.title = data.doc_title;
+  const metaDesc = document.querySelector('meta[name="description"]');
+  if (metaDesc) metaDesc.setAttribute('content', data.meta_desc);
+  const select = document.getElementById('lang-select');
+  if (select) select.value = next;
+
+  document.querySelectorAll('[data-ui]').forEach(node => {
+    const key = node.dataset.ui;
+    if (key in data.ui) node.textContent = data.ui[key];
+  });
+
+  if (persist) {
+    try { localStorage.setItem(LANG_STORAGE_KEY, next); } catch {}
+  }
+
+  // Render TOCs
+  const tocList = document.getElementById('toc-list');
+  const mobileToc = document.getElementById('mobile-toc-list');
+  tocList.replaceChildren();
+  mobileToc.replaceChildren();
+
+  data.chapters.forEach((ch, idx) => {
+    [tocList, mobileToc].forEach(list => {
+      const li = document.createElement('li');
+      const a = document.createElement('a');
+      a.href = '#' + ch.id;
+      if (idx === 0 && list === tocList) a.classList.add('active');
+      a.dataset.tocId = ch.id;
+      a.append(el('span', 'toc-num tnum', ch.num), el('span', '', ch.toc));
+      li.appendChild(a);
+      list.appendChild(li);
+    });
+  });
+
+  // Render Chapters
+  const root = document.getElementById('guide-root');
+  root.replaceChildren();
+
+  const quickstart = el('section', 'quickstart-card');
+  quickstart.appendChild(el('div', 'quickstart-label', data.ui.nav_start));
+  const quickSteps = el('ol', 'quickstart-steps');
+  data.chapters.slice(0, 5).forEach(ch => {
+    const li = document.createElement('li');
+    const a = document.createElement('a');
+    a.href = '#' + ch.id;
+    a.append(el('strong', 'tnum', ch.num), document.createTextNode(ch.toc));
+    li.appendChild(a);
+    quickSteps.appendChild(li);
+  });
+  quickstart.appendChild(quickSteps);
+  root.appendChild(quickstart);
+
+  data.chapters.forEach(ch => {
+    const sec = el('section', 'chapter');
+    sec.id = ch.id;
+
+    const head = el('div', 'chapter-head');
+    head.append(
+      el('p', 'chapter-kicker tnum', ch.num + ' / ' + ch.toc),
+      el('h2', '', ch.title),
+      el('p', 'chapter-intro', ch.intro)
+    );
+    sec.appendChild(head);
+
+    (CHAPTER_FIGURES[ch.id] || []).forEach((src, index) => {
+      appendChapterFigure(sec, ch, src, index);
+    });
+
+    ch.blocks.forEach(b => {
+      if (b.type === 'plat_cards') {
+        const grid = el('div', 'pair-grid plat-pair');
+        b.cards.forEach(c => {
+          const card = el('article', 'sheet-card');
+          card.dataset.platOnly = c.plat;
+          const h4 = el('h4');
+          h4.append(el('span', '', c.title), el('span', 'sheet-meta tnum', c.meta));
+          card.appendChild(h4);
+          const ul = document.createElement('ul');
+          c.bullets.forEach(line => ul.appendChild(el('li', '', line)));
+          card.appendChild(ul);
+          if (c.cmd) card.appendChild(makeCopyBlock(c.cmd, data.ui.copy, data.ui.copied));
+          grid.appendChild(card);
+        });
+        sec.appendChild(grid);
+      } else if (b.type === 'list') {
+        const wrap = el('div', 'sub-block');
+        if (b.heading) wrap.appendChild(el('h3', '', b.heading));
+        const ul = el('ul', 'guide-list');
+        b.items.forEach(([label, desc]) => {
+          const li = document.createElement('li');
+          li.append(el('strong', '', label), document.createTextNode(' — ' + desc));
+          ul.appendChild(li);
+        });
+        wrap.appendChild(ul);
+        if (ch.id === 'troubleshooting') appendTroubleshootingFigures(wrap);
+        sec.appendChild(wrap);
+      } else if (b.type === 'sub') {
+        const wrap = el('div', 'sub-block');
+        if (b.heading) wrap.appendChild(el('h3', '', b.heading));
+        if (b.body) wrap.appendChild(el('p', '', b.body));
+        if (b.items) {
+          const ul = el('ul', 'guide-list');
+          b.items.forEach(([label, desc]) => {
+            const li = document.createElement('li');
+            li.append(el('strong', '', label), document.createTextNode(' — ' + desc));
+            ul.appendChild(li);
+          });
+          wrap.appendChild(ul);
+        }
+        sec.appendChild(wrap);
+      } else if (b.type === 'table') {
+        const tw = el('div', 'table-wrap');
+        const tbl = el('table', 'guide-table');
+        const thead = document.createElement('thead');
+        const hr = document.createElement('tr');
+        b.headers.forEach(h => hr.appendChild(el('th', '', h)));
+        thead.appendChild(hr);
+        const tbody = document.createElement('tbody');
+        b.rows.forEach(r => {
+          const tr = document.createElement('tr');
+          r.forEach((cell, ci) => {
+            const td = document.createElement('td');
+            if (ci < r.length - 1 && typeof cell === 'string' && cell.length <= 18) {
+              td.className = 'cell-nowrap';
+            }
+            if (ci === 0) {
+              const strong = el('strong');
+              appendLinkedText(strong, cell);
+              td.appendChild(strong);
+            } else {
+              appendLinkedText(td, cell);
+            }
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+        tbl.append(thead, tbody);
+        tw.appendChild(tbl);
+        sec.appendChild(tw);
+      } else if (b.type === 'note') {
+        const box = el('div', 'note-box');
+        box.append(el('span', 'note-title', b.title), document.createTextNode(b.body));
+        sec.appendChild(box);
+      }
+    });
+
+    root.appendChild(sec);
+  });
+
+  // Scroll-spy for TOC
+  if (observer) observer.disconnect();
+  const sections = [...document.querySelectorAll('.chapter')];
+  const tocLinks = [...document.querySelectorAll('#toc-list a')];
+  if (typeof IntersectionObserver !== 'undefined') {
+    observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        tocLinks.forEach(a => a.classList.toggle('active', a.dataset.tocId === entry.target.id));
+      });
+    }, { rootMargin: '-90px 0px -65% 0px', threshold: 0 });
+    sections.forEach(s => observer.observe(s));
+  }
+}
+
+// Sticky nav & reading progress bar
+const nav = document.getElementById('nav');
+const progressBar = document.getElementById('read-progress');
+const menuBtn = document.getElementById('nav-menu-btn');
+const mobileDrawer = document.getElementById('mobile-drawer');
+
+const onScroll = () => {
+  nav.classList.toggle('solid', scrollY > 18);
+  const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+  progressBar.style.transform = `scaleX(${Math.min(1, Math.max(0, scrollY / max)).toFixed(4)})`;
+};
+onScroll();
+addEventListener('scroll', onScroll, { passive: true });
+
+menuBtn.addEventListener('click', () => {
+  const open = mobileDrawer.classList.toggle('open');
+  menuBtn.setAttribute('aria-expanded', String(open));
+});
+mobileDrawer.querySelectorAll('a').forEach(a => {
+  a.addEventListener('click', () => {
+    mobileDrawer.classList.remove('open');
+    menuBtn.setAttribute('aria-expanded', 'false');
+  });
+});
+
+// Platform filter tabs
+const platTabs = [...document.querySelectorAll('#plat-filter .plat-tab')];
+platTabs.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const plat = btn.dataset.plat;
+    document.body.dataset.platFilter = plat;
+    platTabs.forEach(b => {
+      const on = b === btn;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-selected', String(on));
+    });
+  });
+});
+
+// Language switcher
+const langSelect = document.getElementById('lang-select');
+langSelect.addEventListener('change', () => renderGuide(langSelect.value, true));
+
+renderGuide(detectInitialLang(), false);
+</script>
+</body>
+</html>
