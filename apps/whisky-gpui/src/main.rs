@@ -36,7 +36,9 @@ mod metadata_editor;
 mod platform;
 #[cfg(feature = "visual-test")]
 mod motion_capture;
+#[cfg(target_os = "windows")]
 mod native;
+#[cfg(target_os = "windows")]
 mod native_metadata;
 mod preferences;
 mod onboarding;

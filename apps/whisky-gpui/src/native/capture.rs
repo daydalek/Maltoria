@@ -87,27 +87,8 @@ pub(crate) struct CaptureInner {
     pub(crate) token: String,
     pub(crate) pending_commands: BTreeMap<String, String>,
     pub(crate) selected_thread: Option<String>,
-    pub(crate) overlay: Value,
     pub(crate) presets: BTreeMap<String, Value>,
     pub(crate) store_root: PathBuf,
-}
-
-fn default_overlay() -> Value {
-    json!({
-        "visible": true,
-        "clickThrough": false,
-        "showSource": true,
-        "showTranslation": true,
-        "maxEntries": 3,
-        "fontSize": 16.0,
-        "opacity": 0.85,
-        "width": 480.0,
-        "height": 160.0,
-        "x": null,
-        "y": null,
-        "textColor": "#FFFFFF",
-        "sourceTextColor": "#AAAAAA",
-    })
 }
 
 impl CaptureService {
@@ -140,7 +121,6 @@ impl CaptureService {
                 token: String::new(),
                 pending_commands: BTreeMap::new(),
                 selected_thread: None,
-                overlay: default_overlay(),
                 presets: BTreeMap::new(),
                 store_root: store.root.clone(),
             })),
@@ -863,29 +843,6 @@ pub(crate) fn dispatch(
             let guard = inner.lock().unwrap();
             Ok(snapshot_json(&guard))
         }
-        "translation.overlay.read" => {
-            let guard = inner.lock().unwrap();
-            Ok(guard.overlay.clone())
-        }
-        "translation.overlay.configure" => {
-            let mut guard = inner.lock().unwrap();
-            if let Some(patch) = params.get("settings").or_else(|| params.get("overlay")).or_else(|| params.get("patch")).cloned().or_else(|| {
-                // flat patch fields directly on params
-                let flat = params.as_object().map(|map| {
-                    json!(map.iter().filter(|(key, _)| {
-                        !matches!(key.as_str(), "container" | "entryID" | "gameID")
-                    }).map(|(k, v)| (k.clone(), v.clone())).collect::<BTreeMap<_, _>>())
-                });
-                flat
-            }) {
-                if let (Some(target), Some(patch)) = (guard.overlay.as_object_mut(), patch.as_object()) {
-                    for (key, value) in patch {
-                        target.insert(key.clone(), value.clone());
-                    }
-                }
-            }
-            Ok(guard.overlay.clone())
-        }
         "translation.capture.preset/get" => {
             let key = preset_key(params);
             let document = capture_presets::load(store);
@@ -1160,4 +1117,3 @@ fn write_overlay_settings(store: &Store, settings: &serde_json::Value) {
         let _ = std::fs::write(&path, text);
     }
 }
-

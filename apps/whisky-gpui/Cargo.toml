@@ -14,7 +14,6 @@ sha2 = "=0.10.9"
 smol = "=2.0.2"
 whisky-bridge = { path = "../../crates/whisky-bridge" }
 uuid = { version = "=1.28.0", features = ["v4"] }
-ureq = { version = "=3.5.2", features = ["json"] }
 
 [build-dependencies]
 toml = "=1.1.8"
@@ -43,3 +42,4 @@ lto = "thin"
 raw-window-handle = "=0.6.2"
 windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
 backtrace = "=0.3.76"
+ureq = { version = "=3.5.2", features = ["json"] }

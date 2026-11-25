@@ -1526,20 +1526,24 @@ impl CaptureState {
                     self.refresh_history(bridge, 0)
                 }
                 "translation.overlay.read" | "translation.overlay.configure" | "translation.capture.hud/show" => {
+                    let mut overlay_reply = false;
                     if let Some(settings) = value
                         .get("settings")
                         .cloned()
                         .and_then(|v| serde_json::from_value(v).ok())
                     {
                         self.overlay = Some(settings);
+                        overlay_reply = true;
                     }
-                    self.overlay_platform = value
-                        .get("platform")
-                        .and_then(Value::as_str)
-                        .unwrap_or("")
-                        .into();
-                    self.overlay_supports_click_through = value.get("supportsClickThrough").and_then(Value::as_bool).unwrap_or(false);
-                    if self.overlay.as_ref().is_some_and(|s| s.visible) { self.schedule_poll(cx); }
+                    if let Some(platform) = value.get("platform").and_then(Value::as_str) {
+                        self.overlay_platform = platform.into();
+                        overlay_reply = true;
+                    }
+                    if let Some(supports) = value.get("supportsClickThrough").and_then(Value::as_bool) {
+                        self.overlay_supports_click_through = supports;
+                        overlay_reply = true;
+                    }
+                    if overlay_reply && self.overlay.as_ref().is_some_and(|s| s.visible) { self.schedule_poll(cx); }
                 }
                 _ => {}
             },
@@ -2790,6 +2794,43 @@ mod tests {
                 let calls = drain();
                 assert!(calls.is_empty());
                 assert!(this.capture.error.is_some());
+            })
+            .unwrap();
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    #[gpui_kit::test]
+    fn hud_show_reply_without_overlay_fields_preserves_overlay_capabilities(
+        cx: &mut gpui_kit::TestAppContext,
+    ) {
+        cx.update(|app| gpui_kit::init(app));
+        let (_events_tx, events_rx) = smol::channel::unbounded();
+        let (bridge, drain) = BridgeSupervisor::recording_for_tests();
+        let window = cx.add_window(|window, cx| {
+            WhiskyApp::new_with_bridge(window, cx, bridge, events_rx, false)
+        });
+        window
+            .update(cx, |this, _, cx| {
+                this.capture.overlay = Some(OverlaySettings {
+                    visible: true,
+                    ..OverlaySettings::default()
+                });
+                this.capture.overlay_platform = "macOS".into();
+                this.capture.overlay_supports_click_through = true;
+                this.capture.open_capture_hud(&this.bridge, "c", "g");
+                let calls = drain();
+                assert_eq!(calls.len(), 1);
+                assert_eq!(calls[0].0, "translation.capture.hud/show");
+                let req_id = *this.capture.pending.keys().next().unwrap();
+                this.capture.reply(
+                    req_id,
+                    "translation.capture.hud/show",
+                    Ok(serde_json::json!({"visible": true, "collapsed": false})),
+                    &this.bridge,
+                    cx,
+                );
+                assert_eq!(this.capture.overlay_platform, "macOS");
+                assert!(this.capture.overlay_supports_click_through);
             })
             .unwrap();
     }
