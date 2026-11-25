@@ -1236,11 +1236,11 @@ const GUIDE_DATA = {
           },
           {
             type: 'table',
-            headers: ['内置本地模型', '下载体积', '建议内存', '适用场景'],
+            headers: ['内置本地模型', '下载体积', '建议内存', '备注'],
             rows: [
-              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '约 1.68 GB', '8 GB+', '推荐主力：日中准确度、人称指代与语境理解最佳（运行约占 2.2–2.7 GB）'],
-              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '约 546 MB', '4 GB+', '轻量极速：下载快、响应延迟最低，适合低内存设备'],
-              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '约 1.26 GB', '8 GB+', '腾讯混元 MT3：覆盖 102 种语言，多语种与指令遵循更强']
+              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '约 1.68 GB', '8 GB+', '32K 上下文；运行约占 2.2–2.7 GB'],
+              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '约 546 MB', '4 GB+', '32K 上下文；运行约占 1.0 GB'],
+              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '约 1.26 GB', '8 GB+', '8K 上下文；覆盖 102 种语言；运行约占 1.8–2.3 GB']
             ]
           },
           {
@@ -1467,11 +1467,11 @@ const GUIDE_DATA = {
           },
           {
             type: 'table',
-            headers: ['Built-In Model', 'Download', 'Rec. RAM', 'Best For'],
+            headers: ['Built-In Model', 'Download', 'Rec. RAM', 'Notes'],
             rows: [
-              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '~1.68 GB', '8 GB+', 'Recommended default: best JP→ZH/EN nuance and pronoun accuracy (~2.2–2.7 GB live)'],
-              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '~546 MB', '4 GB+', 'Ultra-light & fast for low-RAM devices and short lines'],
-              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '~1.26 GB', '8 GB+', '102 languages with strong context & instruction following']
+              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '~1.68 GB', '8 GB+', '32K context; ~2.2–2.7 GB while running'],
+              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '~546 MB', '4 GB+', '32K context; ~1.0 GB while running'],
+              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '~1.26 GB', '8 GB+', '8K context; 102 languages; ~1.8–2.3 GB while running']
             ]
           },
           {
@@ -1697,11 +1697,11 @@ const GUIDE_DATA = {
           },
           {
             type: 'table',
-            headers: ['内蔵ローカルモデル', 'サイズ', '推奨 RAM', '特徴'],
+            headers: ['内蔵ローカルモデル', 'サイズ', '推奨 RAM', '備考'],
             rows: [
-              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '約 1.68 GB', '8 GB+', '推奨主力：自然な日本語・中国語訳と人称維持に強い'],
-              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '約 546 MB', '4 GB+', '軽量・超低遅延、省メモリ環境向け'],
-              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '約 1.26 GB', '8 GB+', '102言語対応、多言語タイトルに好適']
+              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '約 1.68 GB', '8 GB+', '32K コンテキスト・実行時約 2.2–2.7 GB'],
+              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '約 546 MB', '4 GB+', '32K コンテキスト・実行時約 1.0 GB'],
+              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '約 1.26 GB', '8 GB+', '8K コンテキスト・102言語対応・実行時約 1.8–2.3 GB']
             ]
           },
           {
@@ -1927,11 +1927,11 @@ const GUIDE_DATA = {
           },
           {
             type: 'table',
-            headers: ['내장 로컬 모델', '용량', '권장 RAM', '특징'],
+            headers: ['내장 로컬 모델', '용량', '권장 RAM', '비고'],
             rows: [
-              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '약 1.68 GB', '8 GB+', '추천 주력: 높은 번역 자연스러움과 문맥 유지'],
-              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '약 546 MB', '4 GB+', '초경량·저지연, 저사양 환경에 적합'],
-              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '약 1.26 GB', '8 GB+', '102개 언어 지원, 다국어·지시 이행에 강점']
+              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '약 1.68 GB', '8 GB+', '32K 컨텍스트, 실행 시 약 2.2–2.7 GB'],
+              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '약 546 MB', '4 GB+', '32K 컨텍스트, 실행 시 약 1.0 GB'],
+              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '약 1.26 GB', '8 GB+', '8K 컨텍스트, 102개 언어, 실행 시 약 1.8–2.3 GB']
             ]
           },
           {
@@ -2157,11 +2157,11 @@ const GUIDE_DATA = {
           },
           {
             type: 'table',
-            headers: ['Modèle local', 'Taille', 'RAM rec.', 'Usage'],
+            headers: ['Modèle local', 'Taille', 'RAM rec.', 'Notes'],
             rows: [
-              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '~1,68 Go', '8 Go+', 'Recommandé : meilleure fidélité de contexte et pronoms'],
-              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '~546 Mo', '4 Go+', 'Ultra-léger et rapide sur machines modestes'],
-              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '~1,26 Go', '8 Go+', '102 langues avec excellent suivi du contexte']
+              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '~1,68 Go', '8 Go+', 'Contexte 32K ; environ 2,2–2,7 Go en exécution'],
+              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '~546 Mo', '4 Go+', 'Contexte 32K ; environ 1,0 Go en exécution'],
+              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '~1,26 Go', '8 Go+', 'Contexte 8K ; 102 langues ; environ 1,8–2,3 Go en exécution']
             ]
           },
           {
@@ -2387,11 +2387,11 @@ const GUIDE_DATA = {
           },
           {
             type: 'table',
-            headers: ['Modelo local', 'Tamaño', 'RAM rec.', 'Uso'],
+            headers: ['Modelo local', 'Tamaño', 'RAM rec.', 'Notas'],
             rows: [
-              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '~1,68 GB', '8 GB+', 'Recomendado: mejor precisión de contexto y pronombres'],
-              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '~546 MB', '4 GB+', 'Ultraligero y rápido en equipos con poca RAM'],
-              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '~1,26 GB', '8 GB+', '102 idiomas con gran seguimiento de instrucciones']
+              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '~1,68 GB', '8 GB+', 'Contexto de 32K; ~2,2–2,7 GB en ejecución'],
+              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '~546 MB', '4 GB+', 'Contexto de 32K; ~1,0 GB en ejecución'],
+              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '~1,26 GB', '8 GB+', 'Contexto de 8K; 102 idiomas; ~1,8–2,3 GB en ejecución']
             ]
           },
           {
@@ -2617,11 +2617,11 @@ const GUIDE_DATA = {
           },
           {
             type: 'table',
-            headers: ['Modello locale', 'Dimensione', 'RAM cons.', 'Uso'],
+            headers: ['Modello locale', 'Dimensione', 'RAM cons.', 'Note'],
             rows: [
-              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '~1,68 GB', '8 GB+', 'Consigliato: migliore resa di contesto e pronomi'],
-              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '~546 MB', '4 GB+', 'Ultraleggero e velocissimo con poca RAM'],
-              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '~1,26 GB', '8 GB+', '102 lingue e ottima fedeltà alle istruzioni']
+              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '~1,68 GB', '8 GB+', 'Contesto 32K; circa 2,2–2,7 GB in esecuzione'],
+              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '~546 MB', '4 GB+', 'Contesto 32K; circa 1,0 GB in esecuzione'],
+              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '~1,26 GB', '8 GB+', 'Contesto 8K; 102 lingue; circa 1,8–2,3 GB in esecuzione']
             ]
           },
           {
@@ -2847,11 +2847,11 @@ const GUIDE_DATA = {
           },
           {
             type: 'table',
-            headers: ['Lokalmodell', 'Größe', 'Empf. RAM', 'Einsatz'],
+            headers: ['Lokalmodell', 'Größe', 'Empf. RAM', 'Hinweise'],
             rows: [
-              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '~1,68 GB', '8 GB+', 'Empfohlen: beste Kontext- & Pronomen-Genauigkeit'],
-              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '~546 MB', '4 GB+', 'Ultraleicht & sehr schnell bei wenig RAM'],
-              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '~1,26 GB', '8 GB+', '102 Sprachen, stark bei Kontext & Anweisungen']
+              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '~1,68 GB', '8 GB+', '32K Kontext; ca. 2,2–2,7 GB im Betrieb'],
+              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '~546 MB', '4 GB+', '32K Kontext; ca. 1,0 GB im Betrieb'],
+              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '~1,26 GB', '8 GB+', '8K Kontext; 102 Sprachen; ca. 1,8–2,3 GB im Betrieb']
             ]
           },
           {
@@ -3077,11 +3077,11 @@ const GUIDE_DATA = {
           },
           {
             type: 'table',
-            headers: ['Локальная модель', 'Размер', 'Рек. ОЗУ', 'Назначение'],
+            headers: ['Локальная модель', 'Размер', 'Рек. ОЗУ', 'Примечания'],
             rows: [
-              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '~1,68 ГБ', '8 ГБ+', 'Рекомендуемая: лучшая передача контекста и местоимений'],
-              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '~546 МБ', '4 ГБ+', 'Сверхлёгкая и быстрая при малом объёме ОЗУ'],
-              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '~1,26 ГБ', '8 ГБ+', '102 языка и точное следование инструкциям']
+              ['[PLaMo 3 Translate 2B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-2b-GGUF)', '~1,68 ГБ', '8 ГБ+', 'Контекст 32K; около 2,2–2,7 ГБ при работе'],
+              ['[PLaMo 3 Translate 0.8B (Q4_K_M)](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)', '~546 МБ', '4 ГБ+', 'Контекст 32K; около 1,0 ГБ при работе'],
+              ['[Hy-MT3 1.8B (Q4_K_M)](https://huggingface.co/tencent/Hy-MT3-1.8B-GGUF)', '~1,26 ГБ', '8 ГБ+', 'Контекст 8K; 102 языка; около 1,8–2,3 ГБ при работе']
             ]
           },
           {
