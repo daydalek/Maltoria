@@ -176,7 +176,7 @@ fn kill_wait(child: &mut Child) {
     let _ = child.wait();
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::sync::atomic::AtomicU64;

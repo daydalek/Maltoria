@@ -123,6 +123,7 @@ impl Drop for CliFixture {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn test_cli_print_bridge_status_against_fixture_helper() {
     let fixture = CliFixture::new("status");
@@ -161,6 +162,7 @@ fn test_cli_print_bridge_status_against_fixture_helper() {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn test_cli_print_library_against_fixture_helper() {
     let fixture = CliFixture::new("library");
@@ -196,6 +198,7 @@ fn test_cli_print_library_against_fixture_helper() {
     assert_eq!(per_bottle[0]["entries"], json!(expected_entries));
 }
 
+#[cfg(unix)]
 #[test]
 fn test_cli_missing_helper_exits_one_even_with_demo_data() {
     let fixture = CliFixture::new("missing-helper");

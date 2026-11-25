@@ -66,6 +66,7 @@ mod tests {
     fn args(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| (*value).into()).collect()
     }
+    #[cfg(unix)]
     #[test]
     fn desktop_file_arguments_retain_literal_paths_and_prefix_identity() {
         let parsed = parse(&args(&[
@@ -81,6 +82,7 @@ mod tests {
         assert!(parse(&[]).unwrap().is_none());
         assert!(parse(&args(&["/tmp/game.exe"])).unwrap().is_some());
     }
+    #[cfg(unix)]
     #[test]
     fn incomplete_or_ambiguous_desktop_arguments_fail_before_startup() {
         for values in [
@@ -92,6 +94,7 @@ mod tests {
             assert!(parse(&args(&values)).is_err());
         }
     }
+    #[cfg(unix)]
     #[test]
     fn stable_container_ids_allow_safe_relative_program_paths() {
         let id = "4984B9E2-E62C-4B96-B120-B8B29D663840";

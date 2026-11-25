@@ -1,5 +1,15 @@
 use super::*;
 use std::sync::Arc;
+
+#[cfg(unix)]
+fn symlink_file(src: &std::path::Path, dst: &std::path::Path) {
+    std::os::unix::fs::symlink(src, dst).unwrap();
+}
+
+#[cfg(windows)]
+fn symlink_file(src: &std::path::Path, dst: &std::path::Path) {
+    std::os::windows::fs::symlink_file(src, dst).unwrap();
+}
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
 
@@ -585,7 +595,7 @@ fn test_cached_never_serves_truncated_wrong_dim_or_symlink_files() {
     let referent = dir.path().join("referent.png");
     create_test_image(&referent, 4, 4, [7, 7, 7, 255]);
     let referent_bytes = std::fs::read(&referent).unwrap();
-    std::os::unix::fs::symlink(&referent, &target).unwrap();
+    symlink_file(&referent, &target);
     let result =
         upscaled_cover_in(&src, 1, Engine::Synthetic, &cancel, dir.path());
     assert!(result.is_none(), "a symlinked cache target is not served or written");
@@ -603,7 +613,7 @@ fn test_symlink_target_is_rejected_and_untouched() {
     let real = dir.path().join("real.png");
     create_test_image(&real, 4, 4, [5, 5, 5, 255]);
     let link = dir.path().join("link.png");
-    std::os::unix::fs::symlink(&real, &link).unwrap();
+    symlink_file(&real, &link);
     let cancel = AtomicBool::new(false);
     assert!(
         cache::publish(&link, (8, 8), &cancel, |output| {

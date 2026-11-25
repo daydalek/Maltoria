@@ -24,7 +24,7 @@ pub(crate) mod synthetic;
 #[cfg(target_os = "macos")]
 mod anime4k;
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", all(test, unix)))]
 mod linux;
 
 /// Two passes are 4x. A third would be 8x, which no card asks for.
@@ -92,9 +92,9 @@ impl Engine {
         match self {
             Self::Anime4K => cfg!(target_os = "macos"),
             Self::RealCugan => {
-                cfg!(target_os = "macos") || cfg!(any(target_os = "linux", test))
+                cfg!(target_os = "macos") || cfg!(any(target_os = "linux", all(test, unix)))
             }
-            Self::RealCuganCpu => cfg!(any(target_os = "linux", test)),
+            Self::RealCuganCpu => cfg!(any(target_os = "linux", all(test, unix))),
             Self::Synthetic => true,
         }
     }
@@ -102,7 +102,7 @@ impl Engine {
     fn ncnn(self) -> bool {
         match self {
             Self::RealCugan => cfg!(target_os = "linux"),
-            Self::RealCuganCpu => cfg!(any(target_os = "linux", test)),
+            Self::RealCuganCpu => cfg!(any(target_os = "linux", all(test, unix))),
             Self::Anime4K | Self::Synthetic => false,
         }
     }
@@ -143,7 +143,7 @@ pub(crate) fn ready() -> bool {
 }
 
 fn cache_key(engine: Engine) -> Option<String> {
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", all(test, unix)))]
     if engine.ncnn() {
         return linux::config().map(|config| config.key(engine));
     }
@@ -283,7 +283,7 @@ pub(crate) fn upscaled_cover_in(
             return Some(derived.clone());
         }
         match engine {
-            #[cfg(any(target_os = "linux", test))]
+            #[cfg(any(target_os = "linux", all(test, unix)))]
             Engine::RealCugan | Engine::RealCuganCpu if engine.ncnn() => {
                 ncnn_cover(source, passes, engine, &derived, expected, cancel)
             }
@@ -305,7 +305,7 @@ fn cached(derived: &Path, expected: (u32, u32)) -> bool {
     cache::valid_output(derived, expected)
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", all(test, unix)))]
 fn ncnn_cover(
     source: &Path,
     passes: u8,
@@ -317,7 +317,7 @@ fn ncnn_cover(
     linux::derive(&linux::config()?, source, passes, engine, derived, expected, cancel)
 }
 
-#[cfg(not(any(target_os = "linux", test)))]
+#[cfg(not(any(target_os = "linux", all(test, unix))))]
 fn ncnn_cover(
     _source: &Path,
     _passes: u8,
