@@ -403,7 +403,7 @@ def doctor(args):
     if args.target.startswith('wine-'):
         checks.append(dict(name='Wine 仓库配方', passed=(args.wine_repo / 'configs/crossover-source-lock.json').is_file()))
     if args.target == 'wine-macos-arm64' and platform.system() == 'Darwin':
-        checks.append(dict(name='Wine 构建主机 macOS 27+', passed=int(platform.mac_ver()[0].split('.')[0]) >= 27))
+        checks.append(dict(name='Wine 构建主机 macOS 26+', passed=int(platform.mac_ver()[0].split('.')[0]) >= 26))
     if args.executor == 'docker' and shutil.which('docker'):
         try:
             check = subprocess.run(['docker', 'info', '--format', '{{.OSType}}'], capture_output=True, text=True, timeout=10)
