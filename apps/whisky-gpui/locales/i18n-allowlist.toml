@@ -534,3 +534,20 @@ reason = "technical abbreviation in de/fr"
 # Reserved for justified exceptions to the key/placeholder naming rules
 # enforced by scripts/i18n.py (semantically named keys <= 40 chars,
 # placeholders >= 2 chars and not p<digits>).
+[hardcoded."native_metadata.rs::开发"]
+reason = "bangumi infobox API key in the upstream wire payload, never displayed"
+
+[hardcoded."native_metadata.rs::主角"]
+reason = "bangumi character-relation enum value in the upstream wire payload, never displayed"
+
+[hardcoded."native/translation.rs::これは接続テストです。"]
+reason = "probe sentence sent to translation provider APIs during testConnection, not UI text"
+
+[hardcoded."native/local_llm.rs::推荐主力 · 日中准确度、人称指代与语境理解更强（运行约占 2.2~2.7 GB 内存）"]
+reason = "model catalog entry in the bridge wire payload, rendered verbatim like the Swift backend catalog"
+
+[hardcoded."native/local_llm.rs::轻量极速 · 下载更快、延迟更低，适合短句或低内存设备（运行约占 1.0 GB 内存）"]
+reason = "model catalog entry in the bridge wire payload, rendered verbatim like the Swift backend catalog"
+
+[hardcoded."native/local_llm.rs::腾讯混元 MT3 · 覆盖 102 种语言，指令遵循与上下文理解更强（运行约占 1.8~2.3 GB 内存）"]
+reason = "model catalog entry in the bridge wire payload, rendered verbatim like the Swift backend catalog"

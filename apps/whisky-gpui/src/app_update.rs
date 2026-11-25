@@ -1,6 +1,7 @@
 use serde::Deserialize;
 use std::fs::{self, File};
 use std::io::{self, Read};
+#[cfg(unix)]
 use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -181,6 +182,12 @@ impl InstalledApp {
                 destination,
             })
         }
+        // Windows has no published update channel yet; updates stay unavailable.
+        #[cfg(target_os = "windows")]
+        {
+            let _ = root;
+            None
+        }
     }
 
     pub(crate) fn prepare(&self, update: &Downloaded) -> io::Result<PreparedReplacement> {
@@ -193,7 +200,10 @@ impl InstalledApp {
             return Err(invalid_update());
         }
         let scratch = parent.join(format!(".maltoria-update-{}", uuid::Uuid::new_v4()));
+        #[cfg(unix)]
         fs::DirBuilder::new().mode(0o700).create(&scratch)?;
+        #[cfg(not(unix))]
+        fs::DirBuilder::new().create(&scratch)?;
         let pending = PendingReplacement {
             scratch,
             authorized: false,
@@ -224,8 +234,11 @@ impl InstalledApp {
                 if !is_appimage(&package)? {
                     return Err(invalid_update());
                 }
-                let mode = fs::metadata(dest)?.permissions().mode();
-                fs::set_permissions(&package, fs::Permissions::from_mode(mode & 0o777))?;
+                #[cfg(unix)]
+                {
+                    let mode = fs::metadata(dest)?.permissions().mode();
+                    fs::set_permissions(&package, fs::Permissions::from_mode(mode & 0o777))?;
+                }
                 File::open(&package)?.sync_all()?;
                 Ok(package)
             }
@@ -433,6 +446,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn cache_cleanup_accepts_symlinked_cache_root_not_package_symlinks() -> io::Result<()> {
         use std::os::unix::fs::symlink;
 

@@ -303,6 +303,17 @@ fn rust_lit(s: &str) -> String {
 }
 
 fn main() {
+    // Windows links the main thread with a 1 MiB default stack reserve, while
+    // macOS/Linux give the main thread 8 MiB. The translation settings and
+    // cache browser construct deep element trees whose frames overflow 1 MiB
+    // (observed as a crash in `__chkstk` under `language_preset_field`), so
+    // match the POSIX budget on MSVC builds.
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")
+        && env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc")
+    {
+        println!("cargo:rustc-link-arg=/STACK:8388608");
+    }
+
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let locales_dir = manifest.join("locales");
     println!("cargo:rerun-if-changed={}", locales_dir.display());

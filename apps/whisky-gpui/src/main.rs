@@ -25,6 +25,10 @@ mod library_layout;
 mod library_view;
 #[cfg(target_os = "linux")]
 mod linux_overlay;
+#[cfg(target_os = "windows")]
+mod windows_overlay;
+#[cfg(target_os = "windows")]
+mod overflow_trace;
 #[cfg(target_os = "linux")]
 mod linux_hud;
 mod model;
@@ -32,6 +36,8 @@ mod metadata_editor;
 mod platform;
 #[cfg(feature = "visual-test")]
 mod motion_capture;
+mod native;
+mod native_metadata;
 mod preferences;
 mod onboarding;
 mod processes;
@@ -771,6 +777,8 @@ pub(crate) fn bind_shortcuts(cx: &mut App) {
 }
 
 fn main() {
+    #[cfg(target_os = "windows")]
+    overflow_trace::install();
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     if arguments.iter().any(|argument| argument == "--print-bridge-status") {
         std::process::exit(bridge::print_status());
@@ -970,6 +978,10 @@ fn main() {
             {
                 linux_overlay::start(&_view, cx);
                 linux_hud::start(&_view, cx);
+            }
+            #[cfg(target_os = "windows")]
+            {
+                windows_overlay::start(&_view, cx);
             }
             if let Some(file) = startup_file.clone() {
                 let _ = _view.update(cx, |this, cx| this.receive_external_file(file, cx));

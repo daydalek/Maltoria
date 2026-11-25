@@ -1993,11 +1993,20 @@ impl Drop for BridgeSupervisor {
     }
 }
 
+#[cfg(not(target_os = "windows"))]
 fn default_spawner() -> Result<Client, String> {
     let helper = locate_helper()?;
     let helper_args = helper_arguments();
     Client::spawn(&helper, &helper_args, CALL_TIMEOUT)
         .map_err(|error| format!("Cannot start the helper at {}: {error}", helper.display()))
+}
+
+/// Windows has no Swift helper: the bridge service is the in-process native
+/// backend. Wine, bottles and runtimes are absent from its method set.
+#[cfg(target_os = "windows")]
+fn default_spawner() -> Result<Client, String> {
+    let server = crate::native::NativeServer::new();
+    Client::new_inprocess(server, CALL_TIMEOUT).map_err(|error| format!("Cannot start the native backend: {error}"))
 }
 
 fn run_with_spawner_and_backoff<F, B>(

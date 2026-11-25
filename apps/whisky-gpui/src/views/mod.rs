@@ -261,11 +261,12 @@ impl WhiskyApp {
         let strings = crate::i18n::s();
         let is_library = self.preview.page == PreviewPage::Library && !self.settings;
         let has_bottle = self.selected_bottle.is_some() && !self.settings;
-        let sort_names = [
-            strings.library.sort_recent,
-            strings.library.sort_name,
-            strings.library.sort_bottle,
-        ];
+        // Bottle grouping is meaningless where every program runs natively.
+        let sort_names: &[&'static str] = if cfg!(target_os = "windows") {
+            &[strings.library.sort_recent, strings.library.sort_name]
+        } else {
+            &[strings.library.sort_recent, strings.library.sort_name, strings.library.sort_bottle]
+        };
         let mut items = vec![];
         let tooltip = if is_library {
             let current_sort = sort_names
@@ -279,7 +280,7 @@ impl WhiskyApp {
         if is_library {
             // Library view actions only; appearance, motion and layout
             // preferences live in the settings page's library section.
-            for (i, label) in sort_names.into_iter().enumerate() {
+            for (i, label) in sort_names.iter().copied().enumerate() {
                 items.push(
                     self.menu_item(crate::i18n::s().library.sort_by(label), Command::Sort(i), cx)
                         .checked(self.preview.sort == i),
@@ -341,11 +342,15 @@ impl WhiskyApp {
             items.push(self.menu_item(strings.bottle.game_configs, Command::Page(PreviewPage::GameConfigs), cx));
             items.push(MenuEntry::separator(cx.entity().downgrade()));
             items.push(self.menu_item(strings.library.manage_scan_folders_btn, Command::Sheet(PreviewSheet::Scan), cx));
-            items.push(self.menu_item(strings.bottle.winetricks_ellipsis, Command::Sheet(PreviewSheet::Winetricks), cx));
-            items.push(self.menu_item(strings.library.create_new_bottle, Command::Sheet(PreviewSheet::CreateBottle), cx));
+            if cfg!(not(target_os = "windows")) {
+                items.push(self.menu_item(strings.bottle.winetricks_ellipsis, Command::Sheet(PreviewSheet::Winetricks), cx));
+                items.push(self.menu_item(strings.library.create_new_bottle, Command::Sheet(PreviewSheet::CreateBottle), cx));
+            }
         } else {
             items.push(self.menu_item(strings.library.back_to_library, Command::Page(PreviewPage::Library), cx));
-            items.push(self.menu_item(strings.library.create_bottle_btn, Command::Sheet(PreviewSheet::CreateBottle), cx));
+            if cfg!(not(target_os = "windows")) {
+                items.push(self.menu_item(strings.library.create_bottle_btn, Command::Sheet(PreviewSheet::CreateBottle), cx));
+            }
             items.push(MenuEntry::separator(cx.entity().downgrade()));
             items.push(self.menu_item(strings.library.refresh_data, Command::RefreshLibrary, cx));
         }

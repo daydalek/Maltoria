@@ -356,3 +356,15 @@ impl MockBridgeServer {
         }
     }
 }
+
+impl crate::InProcessServer for MockBridgeServer {
+    fn process_request(&self, request_bytes: &[u8]) -> Result<MockResponse, MockFaultAction> {
+        MockBridgeServer::process_request(self, request_bytes)
+    }
+    fn mark_closed(&self) {
+        MockBridgeServer::mark_closed(self)
+    }
+    fn is_closed(&self) -> bool {
+        MockBridgeServer::is_closed(self)
+    }
+}

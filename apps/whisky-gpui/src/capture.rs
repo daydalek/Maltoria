@@ -470,6 +470,8 @@ pub(crate) struct CaptureState {
     pub(crate) thread_filter_non_empty: bool,
     pub(crate) thread_filter_query: String,
     pub(crate) thread_filter_input: Option<Entity<InputState>>,
+    pub(crate) process_filter_query: String,
+    pub(crate) process_filter_input: Option<Entity<InputState>>,
     pub(crate) snapshot: Option<Snapshot>,
     pub(crate) processes: Vec<ProcessRecord>,
     pub(crate) truncated: bool,
@@ -520,6 +522,8 @@ impl Default for CaptureState {
             thread_filter_non_empty: true,
             thread_filter_query: String::new(),
             thread_filter_input: None,
+            process_filter_query: String::new(),
+            process_filter_input: None,
             snapshot: None,
             processes: Vec::new(),
             truncated: false,
@@ -903,10 +907,14 @@ impl CaptureState {
             self.error = Some(crate::i18n::s().capture.err_select_game_first.into());
             return;
         };
-        let Some(provider_id) = &self.provider_id else {
+        // Windows allows providerless capture: hooking is native and cheap,
+        // and entries simply surface their honest untranslated state.
+        let provider_required = !cfg!(target_os = "windows");
+        if provider_required && self.provider_id.is_none() {
             self.error = Some(crate::i18n::s().capture.err_select_saved_provider.into());
             return;
-        };
+        }
+        let provider_id = self.provider_id.clone().unwrap_or_default();
         if self.active_game.is_some() || self.is_pending("translation.capture.start") {
             return;
         }
@@ -1379,6 +1387,14 @@ impl CaptureState {
             return;
         };
         if !self.reply_is_current(&pending, method) {
+            // A stale snapshot reply must not kill the poll loop: the request
+            // captured a pre-session generation and dropping it without
+            // rescheduling freezes the capture UI for the rest of the session.
+            if method == "translation.snapshot"
+                && (self.active_game.is_some() || self.overlay.as_ref().is_some_and(|s| s.visible))
+            {
+                self.schedule_poll(cx);
+            }
             return;
         }
         if self.poll_request == Some(request) {
@@ -1509,7 +1525,7 @@ impl CaptureState {
                 "translation.history.clear" | "translation.cache.clear" => {
                     self.refresh_history(bridge, 0)
                 }
-                "translation.overlay.read" | "translation.overlay.configure" => {
+                "translation.overlay.read" | "translation.overlay.configure" | "translation.capture.hud/show" => {
                     if let Some(settings) = value
                         .get("settings")
                         .cloned()

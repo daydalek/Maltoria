@@ -56,7 +56,11 @@ impl WhiskyApp {
     ) -> AnyElement {
         let (cards, game_title, capture_status, is_live, attached) =
             self.capture_cards_body(window, cx);
-        let status_badge = if is_live {
+        // targetExited / error are terminal states, not "scanning": the live
+        // badge is reserved for states with an active channel or target.
+        let actively_capturing = is_live
+            && matches!(capture_status.as_str(), "selecting" | "attaching" | "attached" | "connecting" | "scanning" | "running");
+        let status_badge = if actively_capturing {
             live_badge(if attached { crate::i18n::s().capture.badge_capturing } else { crate::i18n::s().capture.badge_scanning }).into_any_element()
         } else {
             pill_badge(capture_status_label(&capture_status), badge_bg(), badge_text())
@@ -107,6 +111,8 @@ impl WhiskyApp {
     ) -> AnyElement {
         let (cards, game_title, capture_status, is_live, attached) =
             self.capture_cards_body(window, cx);
+        let actively_capturing = is_live
+            && matches!(capture_status.as_str(), "selecting" | "attaching" | "attached" | "connecting" | "scanning" | "running");
         let top_bar = row()
             .justify_between()
             .gap(px(12.))
@@ -132,7 +138,7 @@ impl WhiskyApp {
                             .child(crate::i18n::s().capture.title),
                     )
                     .child(pill_badge(game_title, badge_bg(), badge_text()))
-                    .child(if is_live {
+                    .child(if actively_capturing {
                         live_badge(if attached { crate::i18n::s().capture.badge_capturing } else { crate::i18n::s().capture.badge_scanning }).into_any_element()
                     } else {
                         pill_badge(
@@ -239,6 +245,14 @@ impl WhiskyApp {
             window,
             cx,
         );
+        let process_filter_input = ensure_capture_input(
+            &mut self.capture.process_filter_input,
+            crate::i18n::s().capture.process_filter_placeholder,
+            self.capture.process_filter_query.clone(),
+            |this, value| this.capture.process_filter_query = value,
+            window,
+            cx,
+        );
 
         let is_live = self.capture.active_game.is_some()
             || snap
@@ -276,7 +290,8 @@ impl WhiskyApp {
             .as_ref()
             .map(|g| crate::i18n::s().capture.capture_active_session(&g.2));
         let probe_pending = self.translation_page.provider_probe_pending();
-        let start_disabled = self.capture.provider_id.is_none()
+        let provider_gate = !cfg!(target_os = "windows") && self.capture.provider_id.is_none();
+        let start_disabled = provider_gate
             || context.is_none()
             || self.capture.active_game.is_some()
             || self.capture.is_pending("translation.capture.start")
@@ -506,9 +521,19 @@ impl WhiskyApp {
         );
 
         // Card 2 — 游戏进程清单
-        let process_cards: Vec<AnyElement> = processes
+        let process_query = self.capture.process_filter_query.trim().to_lowercase();
+        let visible_processes: Vec<&crate::capture::ProcessRecord> = processes
+            .iter()
+            .filter(|p| {
+                process_query.is_empty()
+                    || p.exe_path.to_lowercase().contains(&process_query)
+                    || p.guest_pid.to_string().contains(&process_query)
+            })
+            .collect();
+        let process_cards: Vec<AnyElement> = visible_processes
             .iter()
             .map(|p| {
+                let p = *p;
                 let record = p.clone();
                 let chosen = self.capture.selected_process.as_ref() == Some(p);
                 row()
@@ -581,12 +606,20 @@ impl WhiskyApp {
             } else {
                 crate::i18n::s().capture.process_list_hint
             }),
-            if process_cards.is_empty() {
-                muted(crate::i18n::s().capture.process_list_empty)
-                    .into_any_element()
-            } else {
-                col().gap(px(6.)).children(process_cards).into_any_element()
-            },
+            col()
+                .gap(px(6.))
+                .child(
+                    Input::new(&process_filter_input)
+                        .prefix(icon("search", 13.).text_color(rgb(muted_color())))
+                        .cleanable(true),
+                )
+                .child(if process_cards.is_empty() {
+                    muted(crate::i18n::s().capture.process_list_empty)
+                        .into_any_element()
+                } else {
+                    col().gap(px(6.)).children(process_cards).into_any_element()
+                })
+                .into_any_element(),
         );
 
         // Card 3 — 实时字幕预览
@@ -1827,6 +1860,7 @@ fn capture_status_label(status: &str) -> &str {
         "attached" => c.status_attached,
         "detaching" => c.status_detaching,
         "stopping" => c.status_stopping,
+        "targetExited" => c.status_target_exited,
         "failed" | "error" => c.status_abnormal,
         other => other,
     }

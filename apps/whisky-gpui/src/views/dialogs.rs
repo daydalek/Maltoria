@@ -861,7 +861,13 @@ impl WhiskyApp {
     ) -> AnyElement {
         let rows: Vec<_> = self.program_settings.env_rows.iter()
             .filter(|row| row.key != "WINE_GDI_UPSCALER_PICK").cloned().collect();
-        let mut children: Vec<AnyElement> = vec![self.program_env_presets(cx)];
+        // Locale/renderer presets only rewrite Wine variables (LANG,
+        // WINE_D3D_CONFIG); native Windows programs ignore them.
+        let mut children: Vec<AnyElement> = if cfg!(target_os = "windows") {
+            Vec::new()
+        } else {
+            vec![self.program_env_presets(cx)]
+        };
         if rows.is_empty() {
             children.push(muted(crate::i18n::s().program_settings.no_program_env).py(px(8.)).into_any_element());
         }
@@ -1023,6 +1029,13 @@ impl WhiskyApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
+        // Every override group is a Wine translation knob (DXVK, esync,
+        // virtual desktop, dll overrides); none of it exists for native
+        // Windows programs.
+        if cfg!(target_os = "windows") {
+            let _ = (settings, window);
+            return Vec::new();
+        }
         vec![
             self.program_graphics_section(settings, cx),
             self.program_sync_section(settings, cx),
@@ -1756,7 +1769,7 @@ impl WhiskyApp {
                 .child(crate::i18n::s().program_settings.shortcut_location)
                 .child(Input::new(&input))
                 .into_any_element(),
-            muted(if cfg!(target_os = "linux") { crate::i18n::s().program_settings.shortcut_desc_linux } else { crate::i18n::s().program_settings.shortcut_desc_mac })
+            muted(if cfg!(target_os = "linux") { crate::i18n::s().program_settings.shortcut_desc_linux } else if cfg!(target_os = "windows") { crate::i18n::s().program_settings.shortcut_desc_windows } else { crate::i18n::s().program_settings.shortcut_desc_mac })
                 .into_any_element(),
         ];
         if let Some(path) = &self.program_settings.shortcut_path {
@@ -1854,7 +1867,9 @@ impl WhiskyApp {
                                     this.choose_scan_roots(cx);
                                 })),
                         )
-                        .child(muted(crate::i18n::s().dialogs.multi_select_bottle_tip).text_size(px(11.)))
+                        .when(cfg!(not(target_os = "windows")), |d| {
+                            d.child(muted(crate::i18n::s().dialogs.multi_select_bottle_tip).text_size(px(11.)))
+                        })
                         .into_any_element(),
                 );
                 rows.push(
@@ -2003,7 +2018,9 @@ impl WhiskyApp {
                             })),
                     ),
             )
-            .child(muted(crate::i18n::s().library.container_prefix(&container)).text_size(px(10.)))
+            .when(cfg!(not(target_os = "windows")), |d| {
+                d.child(muted(crate::i18n::s().library.container_prefix(&container)).text_size(px(10.)))
+            })
             .into_any_element()
     }
 
@@ -2113,7 +2130,9 @@ impl WhiskyApp {
                             })),
                     ),
             )
-            .child(muted(crate::i18n::s().library.container_prefix(&container)).text_size(px(10.)))
+            .when(cfg!(not(target_os = "windows")), |d| {
+                d.child(muted(crate::i18n::s().library.container_prefix(&container)).text_size(px(10.)))
+            })
             .into_any_element()
     }
 

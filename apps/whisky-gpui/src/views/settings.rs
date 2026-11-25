@@ -431,10 +431,12 @@ impl WhiskyApp {
                 self.library_prefs_section(cx),
                 self.translation_entry_section(cx),
                 self.metadata_section(cx),
+                #[cfg(not(target_os = "windows"))]
                 self.runtime_section(cx),
                 network,
-                #[cfg(not(target_os = "linux"))]
+                #[cfg(not(any(target_os = "linux", target_os = "windows")))]
                 self.gptk_section(cx),
+                #[cfg(not(target_os = "windows"))]
                 self.engines_section(cx),
             ],
         )
@@ -507,6 +509,7 @@ impl WhiskyApp {
                     cx,
                 ),
                 terminal,
+                #[cfg(not(target_os = "windows"))]
                 row()
                     .py(px(10.))
                     .gap(px(16.))
@@ -773,6 +776,7 @@ impl WhiskyApp {
         let s = &crate::i18n::s().settings;
         let mut content = vec![
             self.toggle("offline", s.offline_mode, s.offline_mode_desc, cx),
+            #[cfg(not(target_os = "windows"))]
             self.toggle(
                 "updates",
                 s.check_updates,

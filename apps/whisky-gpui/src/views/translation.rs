@@ -107,12 +107,13 @@ impl WhiskyApp {
     fn translation_header(&self, cx: &Context<Self>) -> AnyElement {
         let page = &self.translation_page;
         let context_badge = page.context.as_ref().map(|(container, game_id, title)| {
-            pill_badge(
-                format!("{title} · {game_id}（{container}）"),
-                badge_bg(),
-                badge_text(),
-                None,
-            )
+            // Windows has exactly one container; its wire path is noise there.
+            let label = if cfg!(target_os = "windows") {
+                format!("{title} · {game_id}")
+            } else {
+                format!("{title} · {game_id}（{container}）")
+            };
+            pill_badge(label, badge_bg(), badge_text(), None)
         });
         let tab = page.tab;
 

@@ -17,7 +17,7 @@ use std::{
 };
 
 pub mod mock;
-pub use mock::{BridgeFault, MockBridgeServer, MockBridgeState, MockResponse};
+pub use mock::{BridgeFault, MockBridgeServer, MockBridgeState, MockFaultAction, MockResponse};
 
 pub const PROTOCOL_VERSION: u32 = 1;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
@@ -116,14 +116,23 @@ impl Read for ChannelReader {
     }
 }
 
+/// An in-process bridge server: same request/reply shape as the wire
+/// protocol, without a child process. Implemented by the mock used in tests
+/// and by the native backend on platforms with no Swift helper.
+pub trait InProcessServer: Send + Sync {
+    fn process_request(&self, request_bytes: &[u8]) -> Result<MockResponse, MockFaultAction>;
+    fn mark_closed(&self);
+    fn is_closed(&self) -> bool;
+}
+
 /// Internal execution backend for the bridge client.
 pub enum ClientBackend {
     Process {
         child: Child,
         input: Option<ChildStdin>,
     },
-    Mock {
-        server: Arc<MockBridgeServer>,
+    InProcess {
+        server: Arc<dyn InProcessServer>,
         closed: Arc<AtomicBool>,
         response_tx: Option<mpsc::Sender<Vec<u8>>>,
     },
@@ -253,6 +262,15 @@ impl Client {
         server: Arc<MockBridgeServer>,
         timeout: Duration,
     ) -> Result<Self, Error> {
+        Self::new_inprocess(server, timeout)
+    }
+
+    /// Spawns an in-process client backed by any [`InProcessServer`], used on
+    /// platforms where the bridge service is implemented natively in Rust.
+    pub fn new_inprocess(
+        server: Arc<dyn InProcessServer>,
+        timeout: Duration,
+    ) -> Result<Self, Error> {
         if timeout.is_zero() {
             return Err(Error::Transport("Call timeout must be positive".into()));
         }
@@ -277,7 +295,7 @@ impl Client {
         let closed = Arc::new(AtomicBool::new(false));
 
         let mut client = Self {
-            backend: ClientBackend::Mock {
+            backend: ClientBackend::InProcess {
                 server,
                 closed,
                 response_tx: Some(mock_tx),
@@ -319,7 +337,7 @@ impl Client {
     pub fn is_closed(&self) -> bool {
         match &self.backend {
             ClientBackend::Process { input, .. } => input.is_none(),
-            ClientBackend::Mock {
+            ClientBackend::InProcess {
                 closed,
                 response_tx,
                 ..
@@ -362,7 +380,7 @@ impl Client {
                     return Err(Error::Closed);
                 }
             }
-            ClientBackend::Mock {
+            ClientBackend::InProcess {
                 closed,
                 response_tx,
                 ..
@@ -399,7 +417,7 @@ impl Client {
                     return Err(Error::Transport(e.to_string()));
                 }
             }
-            ClientBackend::Mock {
+            ClientBackend::InProcess {
                 server,
                 closed,
                 response_tx,
@@ -498,7 +516,7 @@ impl Client {
                 let _ = child.kill();
                 let _ = child.wait();
             }
-            ClientBackend::Mock {
+            ClientBackend::InProcess {
                 server,
                 closed,
                 response_tx,

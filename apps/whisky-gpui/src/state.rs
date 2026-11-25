@@ -76,6 +76,17 @@ pub(crate) enum SettingsSection {
 }
 
 impl SettingsSection {
+    // Windows has no Wine runtime to manage, so the Runtime section is
+    // absent there.
+    #[cfg(target_os = "windows")]
+    pub(crate) const ALL: [Self; 5] = [
+        Self::General,
+        Self::Library,
+        Self::Translation,
+        Self::Metadata,
+        Self::Network,
+    ];
+    #[cfg(not(target_os = "windows"))]
     pub(crate) const ALL: [Self; 6] = [
         Self::General,
         Self::Library,
@@ -1768,10 +1779,19 @@ impl WhiskyApp {
                         .find(|e| e.id == entry_id)
                         .map(|e| e.title.as_str())
                         .unwrap_or(strings.state.fallback_game);
-                    self.show_notice(
-                        crate::i18n::s().state.notice_launching_with_backend(&backend_label, title),
-                        cx,
-                    );
+                    // Windows has exactly one execution path; a backend
+                    // suffix would invent a distinction that does not exist.
+                    if cfg!(target_os = "windows") {
+                        self.show_notice(
+                            crate::i18n::s().state.notice_launching(title),
+                            cx,
+                        );
+                    } else {
+                        self.show_notice(
+                            crate::i18n::s().state.notice_launching_with_backend(&backend_label, title),
+                            cx,
+                        );
+                    }
                 }
             }
             BridgeEvent::ProgramRunStarted {
@@ -3516,6 +3536,12 @@ impl WhiskyApp {
             let path = self.bottles[index].path.clone();
             self.pending.insert(index);
             self.bridge.load_entries(&path);
+            // Windows never selects a bottle — the sidebar has none — so the
+            // single native container's runtime session is bound here, or no
+            // card would ever show a running state.
+            if cfg!(target_os = "windows") && self.configured.ensure(&path) {
+                self.bridge.configure_runtime(&path);
+            }
         }
     }
 
@@ -8577,6 +8603,10 @@ impl WhiskyApp {
 
     /// Badge text showing the backend reported by the launch service.
     pub(crate) fn runtime_badge_label(&self, index: usize, base: &str) -> String {
+        // One native execution path on Windows: no backend badge suffix.
+        if cfg!(target_os = "windows") {
+            return base.to_owned();
+        }
         match self
             .game(index)
             .and_then(|g| self.active_backends.get(&g.id))

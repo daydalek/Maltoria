@@ -854,6 +854,9 @@ impl WhiskyApp {
             .key_focus("sidebar-rail-launchers")
             .tab_index(1),
         );
+        // Windows has no container layer: the native backend runs programs
+        // directly, so the bottle affordances only exist on macOS/Linux.
+        if cfg!(not(target_os = "windows")) {
         // The expanded "Bottles" caption becomes a hairline at rail width.
         entries = entries.child(div().h(px(1.)).w(px(24.)).my(px(5.)).bg(rgba(divider())));
         // One container affordance: left-click reopens the active bottle,
@@ -886,6 +889,7 @@ impl WhiskyApp {
             )
             .context_menu(self.container_menu(cx)),
         );
+        }
         let rail_tags = crate::library_view::collect_tag_counts(games, self.show_hidden());
         if !rail_tags.is_empty() || self.tag_filter.is_active() {
             let tag_tip = if self.tag_filter.is_active() {
@@ -996,6 +1000,7 @@ impl WhiskyApp {
             .key_focus("sidebar-expanded-launchers")
             .tab_index(1),
         );
+        if cfg!(not(target_os = "windows")) {
         entries = entries.child(
             muted(lib.bottles_section)
                 .text_size(px(11.))
@@ -1029,6 +1034,7 @@ impl WhiskyApp {
                 )
                 .context_menu(self.bottle_menu(index, cx)),
             );
+        }
         }
         let sidebar_tags = crate::library_view::collect_tag_counts(games, self.show_hidden());
         if !sidebar_tags.is_empty() || self.tag_filter.is_active() {
@@ -1345,11 +1351,21 @@ impl WhiskyApp {
                     .into_any_element()
             })
             .when(!inline_settings && !inline_capture, |d| {
+                // On Windows there is nothing to create: games come from scan
+                // folders, so the add affordance opens the scan sheet instead.
                 d.child(
                     round_button("add", "plus")
-                        .tooltip(text_tip(crate::i18n::s().library.create_bottle_btn))
+                        .tooltip(text_tip(if cfg!(target_os = "windows") {
+                            crate::i18n::s().library.manage_scan_folders_btn.to_owned()
+                        } else {
+                            crate::i18n::s().library.create_bottle_btn.to_owned()
+                        }))
                         .on_click(cx.listener(|this, _, _, cx| {
-                            this.open_preview_sheet(crate::state::PreviewSheet::CreateBottle, cx)
+                            if cfg!(target_os = "windows") {
+                                this.open_preview_sheet(crate::state::PreviewSheet::Scan, cx)
+                            } else {
+                                this.open_preview_sheet(crate::state::PreviewSheet::CreateBottle, cx)
+                            }
                         }))
                         .key_focus("toolbar-add"),
                 )
@@ -2663,7 +2679,9 @@ impl WhiskyApp {
                 .child(badge("package", "galgame"))
                 .child(badge("star", "8 / 10"));
         } else {
-            if g.bottle > 0 {
+            // Windows entries all live in the one virtual native container;
+            // badging it adds noise without information.
+            if g.bottle > 0 && cfg!(not(target_os = "windows")) {
                 badges = badges.child(badge("package", self.bottle_name_at(g.bottle)));
             }
             if let Some(year) = g.year() {
@@ -2922,15 +2940,17 @@ impl WhiskyApp {
                                                                             },
                                                                         )),
                                                                 )
-                                                                .child(
-                                                                    Button::new("detail-game-config")
-                                                                        .label(crate::i18n::s().library.gamedb_recommended_ellipsis)
-                                                                        .on_click(cx.listener(
-                                                                            move |this, _, _, cx| {
-                                                                                this.open_game_info(index, cx);
-                                                                            },
-                                                                        )),
-                                                                )
+                                                                .when(cfg!(not(target_os = "windows")), |row| {
+                                                                    row.child(
+                                                                        Button::new("detail-game-config")
+                                                                            .label(crate::i18n::s().library.gamedb_recommended_ellipsis)
+                                                                            .on_click(cx.listener(
+                                                                                move |this, _, _, cx| {
+                                                                                    this.open_game_info(index, cx);
+                                                                                },
+                                                                            )),
+                                                                    )
+                                                                })
                                                                 .child(
                                                                     Button::new("detail-translation")
                                                                         .label(crate::i18n::s().library.game_translation_capture_ellipsis)
