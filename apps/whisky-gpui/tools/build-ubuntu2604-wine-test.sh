@@ -27,7 +27,7 @@ Options:
   --wine PATH             Wine runtime directory containing bin/wine, a
                           .tar.gz containing it, or the Wine repository root.
                           Default: search $WHISKY_WINE_REPO and
-                          ../ge-proton-macos-wine-poc.
+                          ../ge-proton-macos-wine.
   --output DIR            Output root. Default:
                           <repo>/build/portability/ubuntu-26.04-wine-test
   --smoke                 After assembly, run Wine --version, wine cmd /c ver,
@@ -39,7 +39,7 @@ Examples:
   bash apps/whisky-gpui/tools/build-ubuntu2604-wine-test.sh \
     --wine /path/to/wine-linux-x86_64.tar.gz
 
-  WHISKY_WINE_REPO=/path/to/ge-proton-macos-wine-poc \
+  WHISKY_WINE_REPO=/path/to/ge-proton-macos-wine \
     bash apps/whisky-gpui/tools/build-ubuntu2604-wine-test.sh --smoke
 EOF
 }
@@ -237,10 +237,10 @@ resolve_wine() {
         candidates+=("$WHISKY_WINE_REPO")
     fi
     candidates+=(
-        "$repo_root/../ge-proton-macos-wine-poc"
+        "$repo_root/../ge-proton-macos-wine"
         "$repo_root/../wine-macos-ge-proton-poc"
         "$repo_root/../codes/wine-macos-ge-proton-poc"
-        "$HOME/codes/ge-proton-macos-wine-poc"
+        "$HOME/codes/ge-proton-macos-wine"
         "$HOME/codes/wine-macos-ge-proton-poc"
     )
 
@@ -253,7 +253,7 @@ resolve_wine() {
         fi
     done
     die "No Wine Linux artifact found. Pass --wine <runtime-dir-or-tar.gz>. " \
-        "The local Wine repository is expected at $repo_root/../ge-proton-macos-wine-poc."
+        "The local Wine repository is expected at $repo_root/../ge-proton-macos-wine."
 }
 
 elf_arch() {

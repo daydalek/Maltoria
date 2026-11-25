@@ -86,7 +86,7 @@ rm -rf ~/.local/share/whisky
 本项目遵循 **[GNU General Public License v3.0 (GPL-3.0-or-later)](./LICENSE)** 开源许可证发布。完整第三方声明与版本固定记录见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)，许可证原文与构建归档说明见 [ThirdParty/](ThirdParty/)。
 
 - **应用源码归属 (Application Source)**：本仓库（[daydalek/Maltoria](https://github.com/daydalek/Maltoria)）fork 自 **[frankea/Whisky](https://github.com/frankea/Whisky)**，最初由 **[Isaac Marovitz](https://github.com/IsaacMarovitz)** 创建于 **[whisky-app/whisky](https://github.com/whisky-app/whisky)**。
-- **Wine 运行库归属 (Wine Runtime Source)**：配套 Wine 运行库由 **[daydalek/ge-proton-macos-wine-poc](https://github.com/daydalek/ge-proton-macos-wine-poc)** 构建并发布，基于 **CodeWeavers CrossOver Wine 26.3 开源核心** 与 **GE-Proton** 多媒体补丁移植。
+- **Wine 运行库归属 (Wine Runtime Source)**：配套 Wine 运行库由 **[daydalek/ge-proton-macos-wine](https://github.com/daydalek/ge-proton-macos-wine)** 构建并发布，基于 **CodeWeavers CrossOver Wine 26.3 开源核心** 与 **GE-Proton** 多媒体补丁移植。
 
 ### Credits & Acknowledgments（第三方组件与致谢）
 
@@ -106,7 +106,7 @@ Maltoria 得以实现，离不开以下优秀开源项目、协议标准与社�
 
 #### Wine 运行库、图形转换与辅助工具 (Wine Runtime, Graphics & Utilities)
 
-- **[CodeWeavers CrossOver](https://www.codeweavers.com/crossover)** & **[WineHQ](https://www.winehq.org/)**（`LGPL-2.1-or-later`）、**[GE-Proton](https://github.com/GloriousEggroll/proton-ge-custom)** by GloriousEggroll — 经由 **[daydalek/ge-proton-macos-wine-poc](https://github.com/daydalek/ge-proton-macos-wine-poc)** 移植构建的 Wine 运行库核心与多媒体兼容补丁（Upstream Wine core and GE-Proton patches）。
+- **[CodeWeavers CrossOver](https://www.codeweavers.com/crossover)** & **[WineHQ](https://www.winehq.org/)**（`LGPL-2.1-or-later`）、**[GE-Proton](https://github.com/GloriousEggroll/proton-ge-custom)** by GloriousEggroll — 经由 **[daydalek/ge-proton-macos-wine](https://github.com/daydalek/ge-proton-macos-wine)** 移植构建的 Wine 运行库核心与多媒体兼容补丁（Upstream Wine core and GE-Proton patches）。
 - **[DXVK-macOS](https://github.com/Gcenx/DXVK-macOS)**（Gcenx, doitsujin）、**[DXMT](https://github.com/3Shain/dxmt)**（3Shain）、**[MoltenVK](https://github.com/KhronosGroup/MoltenVK)**（KhronosGroup）、**[msync](https://github.com/marzent/wine-msync)**（marzent）& **Apple D3DMetal** — Direct3D 到 Vulkan/Metal 的图形转换层、着色器翻译与内核同步机制（Direct3D translation layers, Vulkan-over-Metal, and synchronization primitives）。
 - **[Winetricks](https://github.com/Winetricks/winetricks)**（Dan Kegel, Austin English et al., `LGPL-2.1+`）& **[cabextract / libmspack](https://www.cabextract.org.uk/)**（Stuart Caie, `GPL-2.0+`）— Windows 运行库组件安装脚本与 Microsoft Cabinet 压缩包解压工具（Runtime dependency installer and CAB archive extractor）。
 

@@ -82,7 +82,7 @@ final class WineManifestFetchTests: XCTestCase {
         config.protocolClasses = [ManifestStubProtocol.self]
         let session = URLSession(configuration: config)
         defer { session.invalidateAndCancel() }
-        let asset = "https://github.com/daydalek/ge-proton-macos-wine-poc/releases/download/v0.1.0/Libraries.tar.gz"
+        let asset = "https://github.com/daydalek/ge-proton-macos-wine/releases/download/v0.1.0/Libraries.tar.gz"
         func encoded(_ patch: Int) throws -> Data {
             try PropertyListEncoder().encode(WhiskyWineVersion(
                 version: SemanticVersion(11, 0, patch), sha256: String(repeating: "a", count: 64), downloadURL: asset

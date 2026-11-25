@@ -28,10 +28,10 @@ public enum DistributionConfig {
 
     /// Public static manifest maintained by the Wine release CI.
     public static let versionPlistURL =
-        "https://raw.githubusercontent.com/daydalek/ge-proton-macos-wine-poc/runtime-channel/WhiskyWineVersion.plist"
+        "https://raw.githubusercontent.com/daydalek/ge-proton-macos-wine/runtime-channel/WhiskyWineVersion.plist"
 
     /// GE-patched macOS Wine releases used by this fork.
-    public static let wineRepository = "daydalek/ge-proton-macos-wine-poc"
+    public static let wineRepository = "daydalek/ge-proton-macos-wine"
 
     /// Base URL for the Wine runtime assets.
     public static let releasesBaseURL = "https://github.com/\(wineRepository)/releases/download"

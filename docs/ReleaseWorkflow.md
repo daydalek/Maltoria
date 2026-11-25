@@ -9,7 +9,7 @@ This document describes the current release paths for `daydalek/Maltoria` and it
 | Maltoria (all platforms) | `daydalek/Maltoria` | `vX.Y.Z`, from successful CI | macOS ZIP, Linux deb/rpm/AppImage |
 | macOS legacy stream | `daydalek/Maltoria` | `vn-vX.Y.Z`, `app-vX.Y.Z` | `Maltoria-X.Y.Z-arm64.zip` |
 | Whisky Linux GPUI | `daydalek/Maltoria` | `linux-vX.Y.Z` | deb, rpm and AppImage |
-| Wine Libraries | `daydalek/ge-proton-macos-wine-poc` | `vX.Y.Z` | `Libraries.tar.gz` |
+| Wine Libraries | `daydalek/ge-proton-macos-wine` | `vX.Y.Z` | `Libraries.tar.gz` |
 
 The app workflow publishes prereleases with ad-hoc signatures. Users download and replace the app manually. The current Wine runtime requires macOS 27+ on Apple Silicon with Rosetta 2; the app target itself has a macOS 15.0 deployment target.
 
@@ -102,11 +102,11 @@ The empty Sparkle appcast is not used.
 
 ## Wine Libraries release
 
-Wine is built and published in [daydalek/ge-proton-macos-wine-poc](https://github.com/daydalek/ge-proton-macos-wine-poc). Its release workflow and `scripts/ci/build-release.sh` define the build inputs and packaging steps.
+Wine is built and published in [daydalek/ge-proton-macos-wine](https://github.com/daydalek/ge-proton-macos-wine). Its release workflow and `scripts/ci/build-release.sh` define the build inputs and packaging steps.
 
 The current build compiles the locked CrossOver Wine 26.3 source with the GE multimedia port and compatibility patches, builds the locked dependencies, and assembles the Whisky Libraries tree with digest-pinned DXVK-macOS 1.10.3 and MoltenVK. The distributed tree contains `Wine/`, `DXVK/`, `GE-Media/`, and `WhiskyWineVersion.plist` under `Libraries/`.
 
-1. Update and validate the source locks, dependency locks and patch series in the Wine repository as required.
+1. Update and validate the maintained Wine source tree, source locks, dependency locks and license inventory in the Wine repository as required.
 2. Run its source checks. Branch pushes and pull requests run source checks; `v*` tag pushes and full manual runs also build Libraries on the configured macOS 27+ runner with Rosetta 2.
 3. Push a `vX.Y.Z` release tag in the Wine repository. The workflow builds, verifies, checks archive digests, publishes a prerelease and refreshes the public runtime channel.
 4. Inspect the published assets and reports. Record target-device game playback acceptance separately from static build checks.
@@ -128,7 +128,7 @@ The `libraries_only` manual option selects a legacy released-runtime packaging c
 
 The manifest records the exact release asset `downloadURL`, the archive SHA-256, runtime version and component metadata. Formal releases and prereleases can supply channel updates.
 
-The runtime version is generated as `11.0.(GITHUB_RUN_NUMBER + 1)` and is independent of the public release tag. The app compares this runtime version for update prompts. Normal checks share a one-hour in-process manifest cache; setup and explicit retries request fresh metadata. The app validates the manifest URL and SHA-256 and verifies the downloaded archive before installing it.
+The runtime version is generated as `11.0.(POC_RUNTIME_VERSION_BASE + GITHUB_RUN_NUMBER)` and is independent of the public release tag. The migration base continues the published `11.0.x` sequence rather than restarting it. The app compares this runtime version for update prompts. Normal checks share a one-hour in-process manifest cache; setup and explicit retries request fresh metadata. The app validates the manifest URL and SHA-256 and verifies the downloaded archive before installing it.
 
 The shared runtime installs at `~/Library/Application Support/com.daydalek.Maltoria/Libraries/`.
 
@@ -140,8 +140,8 @@ The shared runtime installs at `~/Library/Application Support/com.daydalek.Malto
 | --- | --- |
 | App downloads | `https://github.com/daydalek/Maltoria/releases` |
 | App ZIP example | `https://github.com/daydalek/Maltoria/releases/download/vn-vX.Y.Z/Whisky-X.Y.Z-arm64.zip` |
-| Active Wine manifest | `https://raw.githubusercontent.com/daydalek/ge-proton-macos-wine-poc/runtime-channel/WhiskyWineVersion.plist` |
-| Wine archive example | `https://github.com/daydalek/ge-proton-macos-wine-poc/releases/download/vX.Y.Z/Libraries.tar.gz` |
+| Active Wine manifest | `https://raw.githubusercontent.com/daydalek/ge-proton-macos-wine/runtime-channel/WhiskyWineVersion.plist` |
+| Wine archive example | `https://github.com/daydalek/ge-proton-macos-wine/releases/download/vX.Y.Z/Libraries.tar.gz` |
 | Configured Sparkle feed | `https://daydalek.github.io/Maltoria/appcast.xml` |
 
 `dist/pages/WhiskyWineVersion.plist` is a static Pages file. The app's active Wine update source is the `runtime-channel` URL defined in `DistributionConfig`.
