@@ -29,7 +29,7 @@
 ```
 
 ### Critical Architecture Constraints
-1. **Linux Compatibility & Isolation**: The Wine core (`ge-proton-macos-wine-poc`) is multi-platform and supports Linux builds. Therefore, all Darwin/Mach headers (`<mach/mach.h>`, `<mach/mach_vm.h>`) and Mach VM aliasing logic (`mach_vm_remap`) are strictly encapsulated within `#ifdef __APPLE__` blocks. Existing Linux code paths remain 100% regression-free.
+1. **Linux Compatibility & Isolation**: The Wine core (`ge-proton-macos-wine`) is multi-platform and supports Linux builds. Therefore, all Darwin/Mach headers (`<mach/mach.h>`, `<mach/mach_vm.h>`) and Mach VM aliasing logic (`mach_vm_remap`) are strictly encapsulated within `#ifdef __APPLE__` blocks. Existing Linux code paths remain 100% regression-free.
 2. **Headless Testing Constraint**: Automated testing MUST NOT repeatedly launch the game GUI window or disrupt user desktop focus. Unit tests, driver interface tests, and boundary checks are strictly headless CLI probes or static analysis.
 
 ### Root Cause Analysis & Unifying Theory
@@ -53,7 +53,7 @@
 | 1 | Vulkan 32-bit Low Address Mapping | Alias >4GB MoltenVK host memory into <4GB virtual address space via `mach_vm_remap` strictly guarded with `#ifdef __APPLE__` in `win32u_vkMapMemory2KHR` | M1 | Survey (Line B) & User Req | **DONE** |
 | 2 | Vulkan 32-bit Memory Free/Unmap Hygiene | Properly clean up mapped virtual memory in `win32u_vkUnmapMemory2KHR` and `win32u_vkFreeMemory` without invalid extension flags | M1 | Survey (Line B) | **DONE** |
 | 3 | Linux Build Zero-Regression | Ensure all macOS Mach headers/logic are guarded with `#ifdef __APPLE__` and Linux code paths remain intact | M1 | User Req | **DONE** |
-| 4 | Fast Incremental Wine Build & Deploy | Compile `win32u.so` in `ge-proton-macos-wine-poc/work/metalfx/build` and hot-deploy to Whisky runtime | M1 | Survey (Env) | **DONE** |
+| 4 | Fast Incremental Wine Build & Deploy | Compile `win32u.so` in `ge-proton-macos-wine/work/metalfx/build` and hot-deploy to Whisky runtime | M1 | Survey (Env) | **DONE** |
 | 5 | DXVK D3D11 32-bit Device Creation | Verify DXVK 1.10.3 initializes D3D_FEATURE_LEVEL_11_0 cleanly when memory mapping succeeds | M2 | Survey (Line A) | **DONE** |
 | 6 | WineD3D MoltenVK Feature Level Support | Documented fallback handling and relaxed geometryShader requirements | M2 | Survey (Line A) | **DONE** |
 | 7 | End-to-End Headless & Final Verification | Verify elimination of `80004005` and `0x00000050` crash via headless test runner and single silent validation | M3 | Survey (Env) & User Req | **DONE** |
@@ -92,10 +92,10 @@
 ## Code Layout
 
 ### Source Repositories & Build Trees
-- Wine Source Code: `../ge-proton-macos-wine-poc/work/metalfx/fresh/sources/wine` (sibling checkout)
+- Wine Source Code: `../ge-proton-macos-wine/work/metalfx/fresh/sources/wine` (sibling checkout)
   - Target Vulkan Thunk: `dlls/win32u/vulkan.c`
   - Target WineD3D Feature Level: `dlls/wined3d/adapter_vk.c`
-- Wine Build Tree: `../ge-proton-macos-wine-poc/work/metalfx/build`
+- Wine Build Tree: `../ge-proton-macos-wine/work/metalfx/build`
   - Unix Graphics Module: `dlls/win32u/win32u.so`
   - WineD3D Module: `dlls/wined3d/wined3d.so` and `dlls/wined3d/i386-windows/wined3d.dll`
 - Whisky Runtime Deployment:

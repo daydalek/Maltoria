@@ -18,7 +18,7 @@ Steam 及游戏应完整退出后重新启动，以继承新的启动环境。
 `patches/moltenvk/0001-mvk-config-external-memory-host.patch`，作用是隐藏
 `VK_EXT_external_memory_host` 扩展，使 Wine 选择其它映射路径。
 
-当前 ge-proton-macos-wine-poc 的 shadow-import 构建脚本引入 shadow-import 补丁。
+当前 ge-proton-macos-wine 的 shadow-import 构建脚本引入 shadow-import 补丁。
 2026-10-31 检查本机已安装 dylib，发现 shadow-import 配置字符串；旧变量的配置
 字符串缺失。旧界面选项在当前运行库中的有效性因而缺乏支持，应退出日常设置界面。
 旧字段的序列化和启动环境逻辑继续保留，为旧运行库、既有 Bottle 和回滚提供兼容。
@@ -28,7 +28,7 @@ Steam 及游戏应完整退出后重新启动，以继承新的启动环境。
 缓冲实现。支持旧变量的运行库关闭导入后，shadow-import 的适用前提随之消失。
 当前运行库优先验证“内存导入兼容”开关。
 
-本机 Aokana 对照日志位于 ge-proton-macos-wine-poc 的
+本机 Aokana 对照日志位于 ge-proton-macos-wine 的
 `outputs/aokana-investigation-20261031`：开启 shadow-import 后记录了 1066 次
 Vulkan 画面提交和零次设备丢失。具体画面内容及主菜单交互仍需用户验收。
 

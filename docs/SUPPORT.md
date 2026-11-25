@@ -36,7 +36,7 @@ This is a volunteer, single-maintainer project, so please calibrate accordingly:
 - **A good report gets a faster fix.** Always include: Whisky version (**Whisky → About**), macOS
   version, the graphics backend, and — for crashes/freezes — the diagnostic export from
   **Bottle Configuration → View Diagnostics**. Reports missing these usually stall waiting on info.
-- **Wine-layer limits:** Whisky configures and wraps our [patched Wine runtime](https://github.com/daydalek/ge-proton-macos-wine-poc). Some
+- **Wine-layer limits:** Whisky configures and wraps our [patched Wine runtime](https://github.com/daydalek/ge-proton-macos-wine). Some
   incompatibilities (anti-cheat, kernel drivers, and certain OS-version regressions) are genuinely
   outside what this app can fix — those get documented rather than "fixed."
 - **English, please:** so any maintainer or contributor can read and act on the report.

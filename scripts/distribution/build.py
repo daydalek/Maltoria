@@ -132,7 +132,7 @@ def parser():
                         help='应用 build number；macOS Wine 的独立运行库版本计数器，默认 1')
     result.add_argument('--jobs', type=positive, default=4)
     result.add_argument('--wine-repo', type=Path, default=Path(os.environ.get(
-        'WHISKY_WINE_REPO', str(ROOT.parent / 'ge-proton-macos-wine-poc'))))
+        'WHISKY_WINE_REPO', str(ROOT.parent / 'ge-proton-macos-wine'))))
     result.add_argument('--output', type=Path, help='本次任务的全新输出目录')
     result.add_argument('--work-dir', type=Path, help='Linux Wine 增量构建目录；macOS Wine 使用全新目录')
     result.add_argument('--archive-cache', type=Path, help='Wine 已校验下载的缓存目录')

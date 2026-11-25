@@ -14,7 +14,7 @@ import tempfile
 import threading
 import time
 
-REPO = 'daydalek/ge-proton-macos-wine-poc'
+REPO = 'daydalek/ge-proton-macos-wine'
 ARCHIVE = 'wine-linux-amd64.tar.gz'
 
 

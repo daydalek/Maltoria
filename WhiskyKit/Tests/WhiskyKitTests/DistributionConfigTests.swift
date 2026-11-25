@@ -34,7 +34,7 @@ final class DistributionConfigTests: XCTestCase {
     // MARK: - Version Plist URL Tests
 
     func testVersionPlistURL() {
-        let expectedURL = "https://raw.githubusercontent.com/daydalek/ge-proton-macos-wine-poc"
+        let expectedURL = "https://raw.githubusercontent.com/daydalek/ge-proton-macos-wine"
             + "/runtime-channel/WhiskyWineVersion.plist"
         XCTAssertEqual(DistributionConfig.versionPlistURL, expectedURL)
     }
@@ -47,7 +47,7 @@ final class DistributionConfigTests: XCTestCase {
     // MARK: - Releases Base URL Tests
 
     func testReleasesBaseURL() {
-        let expectedURL = "https://github.com/daydalek/ge-proton-macos-wine-poc/releases/download"
+        let expectedURL = "https://github.com/daydalek/ge-proton-macos-wine/releases/download"
         XCTAssertEqual(DistributionConfig.releasesBaseURL, expectedURL)
     }
 
@@ -72,7 +72,7 @@ final class DistributionConfigTests: XCTestCase {
     func testLibrariesURLWithStandardVersion() {
         let version = "2.5.0"
         let url = DistributionConfig.librariesURL(version: version)
-        let expectedURL = "https://github.com/daydalek/ge-proton-macos-wine-poc/releases/download"
+        let expectedURL = "https://github.com/daydalek/ge-proton-macos-wine/releases/download"
             + "/v2.5.0/Libraries.tar.gz"
 
         XCTAssertEqual(url, expectedURL)
@@ -81,7 +81,7 @@ final class DistributionConfigTests: XCTestCase {
     func testLibrariesURLWithSingleDigitVersion() {
         let version = "1.0.0"
         let url = DistributionConfig.librariesURL(version: version)
-        let expectedURL = "https://github.com/daydalek/ge-proton-macos-wine-poc/releases/download"
+        let expectedURL = "https://github.com/daydalek/ge-proton-macos-wine/releases/download"
             + "/v1.0.0/Libraries.tar.gz"
 
         XCTAssertEqual(url, expectedURL)
@@ -90,7 +90,7 @@ final class DistributionConfigTests: XCTestCase {
     func testLibrariesURLWithMultiDigitVersion() {
         let version = "10.20.30"
         let url = DistributionConfig.librariesURL(version: version)
-        let expectedURL = "https://github.com/daydalek/ge-proton-macos-wine-poc/releases/download"
+        let expectedURL = "https://github.com/daydalek/ge-proton-macos-wine/releases/download"
             + "/v10.20.30/Libraries.tar.gz"
 
         XCTAssertEqual(url, expectedURL)
@@ -116,7 +116,7 @@ final class DistributionConfigTests: XCTestCase {
         let url = DistributionConfig.librariesURL(version: version)
 
         // Verify the URL follows the expected pattern
-        let pattern = "^https://github\\.com/daydalek/ge-proton-macos-wine-poc/releases/download/"
+        let pattern = "^https://github\\.com/daydalek/ge-proton-macos-wine/releases/download/"
             + "v\\d+\\.\\d+\\.\\d+/Libraries\\.tar\\.gz$"
         guard let regex = try? NSRegularExpression(pattern: pattern) else {
             XCTFail("Invalid regex pattern: \(pattern)")
@@ -171,7 +171,7 @@ final class DistributionConfigTests: XCTestCase {
         )
         XCTAssertEqual(
             expectedURL,
-            "https://raw.githubusercontent.com/daydalek/ge-proton-macos-wine-poc"
+            "https://raw.githubusercontent.com/daydalek/ge-proton-macos-wine"
                 + "/runtime-channel/WhiskyWineVersion.plist",
             "WhiskyWineInstaller should use GitHub Pages URL"
         )
@@ -225,7 +225,7 @@ final class DistributionConfigTests: XCTestCase {
         let downloadURLString = DistributionConfig.librariesURL(version: versionString)
 
         // Verify the complete URL
-        let expectedURL = "https://github.com/daydalek/ge-proton-macos-wine-poc/releases/download"
+        let expectedURL = "https://github.com/daydalek/ge-proton-macos-wine/releases/download"
             + "/v2.5.0/Libraries.tar.gz"
         XCTAssertEqual(downloadURLString, expectedURL)
 

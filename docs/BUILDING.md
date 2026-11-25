@@ -72,12 +72,12 @@ Docker 任务将内部构建记录放在 `<output>/task/`，最终应用位于 `
 
 ## Wine
 
-默认发现 Whisky 的同级 `ge-proton-macos-wine-poc` 仓库。
+默认发现 Whisky 的同级 `ge-proton-macos-wine` 仓库。
 可通过 `--wine-repo /path/to/wine-recipe` 或 `WHISKY_WINE_REPO` 设置路径。
 计划和构建会记录 Wine 配方仓库 commit，既有源码锁和下载哈希继续由 Wine 配方校验。
 
 ```bash
-./build.sh plan wine-linux-amd64 --wine-repo ../ge-proton-macos-wine-poc --json
+./build.sh plan wine-linux-amd64 --wine-repo ../ge-proton-macos-wine --json
 ./build.sh run wine-linux-amd64 --jobs 4
 
 # Apple Silicon：先构建/静态校验，记录 compile-only 产物
@@ -97,7 +97,7 @@ Wine 增量工作目录按配方摘要自动分组。已有缓存保留，变化
 同目录采用排他锁；并发任务会得到明确错误。
 原生 Linux 可用 `--work-dir` 选择已有目录、`--archive-cache` 复用校验过的下载；
 Docker 模式自动管理 `/cache/work` 目录和其中的下载。
-macOS Wine 完整发布配方要求新的工作目录，版本计数沿用其 `11.0.(build-number + 1)` 规则。
+macOS Wine 完整发布配方要求新的工作目录；本地构建把 `--build-number` 作为 `GITHUB_RUN_NUMBER`，版本计数沿用 Wine 仓库的 `11.0.(POC_RUNTIME_VERSION_BASE + GITHUB_RUN_NUMBER)` 规则。
 
 ## 验证构建工具
 

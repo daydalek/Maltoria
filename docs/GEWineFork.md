@@ -1,13 +1,13 @@
 # Whisky GE Wine fork
 
 This fork keeps Whisky's UI, bottle management and `Libraries.tar.gz` installer.
-Its Wine runtime comes from `daydalek/ge-proton-macos-wine-poc`, using the `media`
+Its Wine runtime comes from `daydalek/ge-proton-macos-wine`, using the `media`
 variant with GE-Proton's multimedia patches and the macOS adaptations.
 
 ## Release contract
 
 Publish these assets in a published release (stable or prerelease) in
-<https://github.com/daydalek/ge-proton-macos-wine-poc/releases>:
+<https://github.com/daydalek/ge-proton-macos-wine/releases>:
 
 | Asset | Purpose |
 | --- | --- |
@@ -24,7 +24,7 @@ local integration uses `11.0.1`, which also upgrades the locally installed
 The app fetches the public static manifest at:
 
 ```text
-https://raw.githubusercontent.com/daydalek/ge-proton-macos-wine-poc/runtime-channel/WhiskyWineVersion.plist
+https://raw.githubusercontent.com/daydalek/ge-proton-macos-wine/runtime-channel/WhiskyWineVersion.plist
 ```
 
 The channel publisher runs with an authenticated CI token, checks complete release
@@ -49,7 +49,7 @@ Build the `media` stage and dependencies in the core repository first, then:
 
 ```sh
 python3 scripts/assemble-ge-runtime.py \
-  --poc /path/to/ge-proton-macos-wine-poc \
+  --poc /path/to/ge-proton-macos-wine \
   --base-libraries '/path/to/existing/Libraries' \
   --version 11.0.1 \
   --output build/ge-runtime/11.0.1

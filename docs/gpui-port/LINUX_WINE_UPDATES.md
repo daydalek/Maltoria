@@ -7,8 +7,8 @@ the install/update action. Backend jobs remain pollable and cancellable.
 
 ## Publisher and release selection
 
-The producer is [daydalek/ge-proton-macos-wine-poc](https://github.com/daydalek/ge-proton-macos-wine-poc),
-whose [Linux contract](https://github.com/daydalek/ge-proton-macos-wine-poc/blob/codex/linux-support/README.linux.md#frontend-runtime-contract)
+The producer is [daydalek/ge-proton-macos-wine](https://github.com/daydalek/ge-proton-macos-wine),
+whose [Linux contract](https://github.com/daydalek/ge-proton-macos-wine/blob/main/README.linux.md#frontend-runtime-contract)
 declares these assets and entrypoints:
 
 | Item | Contract |

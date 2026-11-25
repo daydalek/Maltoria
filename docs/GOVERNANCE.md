@@ -9,5 +9,5 @@ to [our Issues](https://github.com/daydalek/Maltoria/issues); see [SUPPORT.md](S
 
 Version tags trigger GitHub-hosted builds and publish an ad-hoc signed app ZIP.
 App upgrades are installed from Releases. The Wine runtime has its own build and
-release pipeline in [ge-proton-macos-wine-poc](https://github.com/daydalek/ge-proton-macos-wine-poc).
+release pipeline in [ge-proton-macos-wine](https://github.com/daydalek/ge-proton-macos-wine).
 The maintainer controls releases and repository access.

@@ -67,7 +67,7 @@ struct LinuxWineRelease: Decodable, Sendable {
         case tagName = "tag_name"
     }
 
-    static let repository = "daydalek/ge-proton-macos-wine-poc"
+    static let repository = "daydalek/ge-proton-macos-wine"
     static let endpoint: URL = {
         guard let url = URL(string: "https://api.github.com/repos/\(repository)/releases?per_page=100") else {
             preconditionFailure("The built-in Linux Wine endpoint must be a URL")

@@ -25,7 +25,7 @@ final class WineDistributionTests: XCTestCase {
         let manifest = WhiskyWineVersion(
             version: SemanticVersion(11, 0, 1),
             downloadURL:
-            "https://github.com/daydalek/ge-proton-macos-wine-poc/releases/download/v0.1.0/Libraries.tar.gz"
+            "https://github.com/daydalek/ge-proton-macos-wine/releases/download/v0.1.0/Libraries.tar.gz"
         )
         XCTAssertTrue(try DistributionConfig.librariesURL(for: manifest).path.contains("/v0.1.0/"))
         let decoded = try PropertyListDecoder().decode(
@@ -36,10 +36,10 @@ final class WineDistributionTests: XCTestCase {
 
     func testArchiveURLValidation() throws {
         for value in [
-            "http://github.com/daydalek/ge-proton-macos-wine-poc/releases/download/v1/Libraries.tar.gz",
+            "http://github.com/daydalek/ge-proton-macos-wine/releases/download/v1/Libraries.tar.gz",
             "https://example.com/Libraries.tar.gz",
             "https://github.com/other/repo/releases/download/v1/Libraries.tar.gz",
-            "https://github.com/daydalek/ge-proton-macos-wine-poc/releases/download/v1/Other.tar.gz"
+            "https://github.com/daydalek/ge-proton-macos-wine/releases/download/v1/Other.tar.gz"
         ] {
             let manifest = WhiskyWineVersion(version: SemanticVersion(1, 0, 0), downloadURL: value)
             XCTAssertThrowsError(try DistributionConfig.librariesURL(for: manifest))
@@ -58,14 +58,14 @@ final class WineDistributionTests: XCTestCase {
     func testURLConstructionEdgeCases() {
         // Test with zero version
         let zeroURL = DistributionConfig.librariesURL(version: "0.0.0")
-        let expectedZeroURL = "https://github.com/daydalek/ge-proton-macos-wine-poc/releases/download"
+        let expectedZeroURL = "https://github.com/daydalek/ge-proton-macos-wine/releases/download"
             + "/v0.0.0/Libraries.tar.gz"
         XCTAssertEqual(zeroURL, expectedZeroURL)
         XCTAssertNotNil(URL(string: zeroURL))
 
         // Test with large version numbers
         let largeURL = DistributionConfig.librariesURL(version: "999.999.999")
-        let expectedLargeURL = "https://github.com/daydalek/ge-proton-macos-wine-poc/releases/download"
+        let expectedLargeURL = "https://github.com/daydalek/ge-proton-macos-wine/releases/download"
             + "/v999.999.999/Libraries.tar.gz"
         XCTAssertEqual(largeURL, expectedLargeURL)
         XCTAssertNotNil(URL(string: largeURL))

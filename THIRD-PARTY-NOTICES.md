@@ -130,7 +130,7 @@ describe data fetched at runtime.
 
 Wine, CrossOver-derived Wine code, GE-Proton patches, DXVK, DXMT, MoltenVK,
 msync, and other runtime libraries are distributed through
-<https://github.com/daydalek/ge-proton-macos-wine-poc>. Their applicable licenses,
+<https://github.com/daydalek/ge-proton-macos-wine>. Their applicable licenses,
 patches, notices, and corresponding source belong with each runtime release.
 Consult that release's source and license materials for its exact payload.
 Apple's D3DMetal/Game Porting Toolkit components are imported under Apple's
