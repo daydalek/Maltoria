@@ -105,7 +105,7 @@ public struct LinuxLaunchConfiguration: Sendable, Equatable {
     }
 
     // One flat branch per launch setting; splitting it would hide the mapping.
-    // swiftlint:disable:next cyclomatic_complexity
+    // swiftlint:disable:next cyclomatic_complexity function_body_length
     static func compose(
         values: [String: ConfigurationValue],
         bottleEnvironment: [String: String],

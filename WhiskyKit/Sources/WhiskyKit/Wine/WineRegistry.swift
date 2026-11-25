@@ -376,6 +376,8 @@ public extension Wine {
     /// from the launch path, and only when the marker file shows they changed.
     /// A missing marker on factory settings is stamped without booting
     /// wineserver, since a fresh prefix already behaves that way.
+    // The registry update is a single cohesive transaction.
+    // swiftlint:disable:next function_body_length
     @MainActor
     static func syncInputRegistry(bottle: Bottle, disableMouseCapture: Bool? = nil) async {
         var desired = InputRegistryState.desired(for: bottle)

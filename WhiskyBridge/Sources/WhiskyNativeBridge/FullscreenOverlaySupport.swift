@@ -116,6 +116,7 @@ enum FullscreenOverlaySupport {
             deliverImmediately: true
         )
     }
+
     /// Wine's `winemac.drv` captures displays with `CGShieldingWindowLevel()` and places
     /// fullscreen windows at `CGShieldingWindowLevel() + 1` or `+ 2`. Using the maximum
     /// WindowServer level keeps our subtitle and capture HUD panels above them without
