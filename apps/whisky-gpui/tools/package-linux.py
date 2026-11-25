@@ -244,7 +244,7 @@ def main():
     copy_upscaler_resources(args.upscaler, output)
     (output / 'README.txt').write_text(
         'Maltoria Linux file and host services\n\n'
-        'Target: Ubuntu 24.04 or compatible systems, ' + architecture + '.\n'
+        'Target: glibc 2.34 or newer systems, ' + architecture + '.\n'
         'Install the packages in share/whisky-runtime-packages.txt using your system package manager.\n'
         'Launch ./Maltoria or bin/whisky-gpui. The entire directory can be moved together.\n'
         'Settings can install or refresh the desktop entry at its current location.\n'
@@ -265,7 +265,7 @@ def main():
     application_version = os.environ.get('WHISKY_LINUX_VERSION') or tomllib.loads(
         (ROOT / 'apps/whisky-gpui/Cargo.toml').read_text())['package']['version']
     manifest = dict(formatVersion=1, applicationVersion=application_version,
-                    architecture=architecture, platform='linux', distribution='ubuntu-24.04',
+                    architecture=architecture, platform='linux', distribution='rhel9',
                     sourceCommit=command('git', '-C', ROOT, 'rev-parse', 'HEAD'),
                     sourceTreeDirty=bool(command('git', '-C', ROOT, 'status', '--porcelain')),
                     sourceSnapshotSha256=digest(output / 'share/whisky/sources/application.tar.gz'),

@@ -30,7 +30,7 @@ class ElfAuditTests(unittest.TestCase):
 
     def test_empty_payload_fails(self):
         with tempfile.TemporaryDirectory() as folder:
-            self.assertFalse(elf.audit(Path(folder), '2.39', shutil.which('readelf'))['passed'])
+            self.assertFalse(elf.audit(Path(folder), '2.34', shutil.which('readelf'))['passed'])
 
 
 if __name__ == '__main__':

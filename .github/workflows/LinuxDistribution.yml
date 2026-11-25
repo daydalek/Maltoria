@@ -41,12 +41,12 @@ jobs:
     needs: native
     if: ${{ !cancelled() && (needs.native.result == 'success' || (inputs.use_existing_native && needs.native.result == 'skipped')) }}
     runs-on: ubuntu-24.04
-    container: swift:6.4.0-noble
+    container: almalinux:9
     timeout-minutes: 90
     outputs:
       version: ${{ steps.version.outputs.value }}
     env:
-      CC: /usr/bin/clang-21
+      CC: /usr/bin/clang
       CXX: /usr/bin/clang++
       WHISKY_LINUX_BUILD_CACHE: /tmp/whisky-compile-cache
       CARGO_HOME: /root/.cargo
@@ -57,6 +57,10 @@ jobs:
       GIT_CONFIG_KEY_0: safe.directory
       GIT_CONFIG_VALUE_0: '*'
     steps:
+      # The almalinux:9 image ships without git; install it before checkout so the
+      # checkout keeps repository metadata (source packaging runs git ls-files).
+      - name: Install git for checkout
+        run: dnf -y install git tar gzip
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
@@ -95,8 +99,15 @@ jobs:
       - name: Install the fixed build toolchain
         run: |
           bash apps/whisky-gpui/tools/install-linux-deps.sh
+          curl --proto '=https' --tlsv1.2 -sSfL \
+            https://download.swift.org/swift-6.4.0-release/ubi9/swift-6.4.0-RELEASE/swift-6.4.0-RELEASE-ubi9.tar.gz \
+            -o /tmp/swift.tar.gz
+          mkdir -p /opt/swift
+          tar xzf /tmp/swift.tar.gz --strip-components=1 -C /opt/swift
+          rm /tmp/swift.tar.gz
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /tmp/rustup.sh
           sh /tmp/rustup.sh -y --profile minimal --default-toolchain 1.99.1
+          echo /opt/swift/usr/bin >> "$GITHUB_PATH"
           echo /root/.cargo/bin >> "$GITHUB_PATH"
       - name: Download pinned LunaHook payloads
         uses: actions/download-artifact@v4
@@ -146,8 +157,11 @@ jobs:
     # An explicit status check allows downstream jobs to run in that case.
     if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-24.04
+    container: almalinux:9
     timeout-minutes: 35
     steps:
+      - name: Install git for checkout
+        run: dnf -y install git tar gzip
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
@@ -161,9 +175,7 @@ jobs:
           path: ~/.cache/whisky-packaging-tools
           key: appimage-tools-${{ runner.arch }}-${{ hashFiles('scripts/distribution/appimage-tools.json') }}
       - name: Install package builders and the declared runtime libraries
-        run: |
-          sudo bash apps/whisky-gpui/tools/install-linux-runtime-deps.sh
-          sudo apt-get install -y --no-install-recommends rpm dpkg-dev patchelf binutils squashfs-tools file
+        run: bash apps/whisky-gpui/tools/install-linux-deps.sh
       - name: Generate and inspect all three formats
         env:
           PACKAGE_VERSION: ${{ needs.build.outputs.version }}

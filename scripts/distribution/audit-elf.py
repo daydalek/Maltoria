@@ -43,7 +43,7 @@ def audit(root, maximum, readelf):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('root', type=Path)
-    parser.add_argument('--glibc-max', default='2.39')
+    parser.add_argument('--glibc-max', default='2.34')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     if not re.fullmatch(r'\d+(?:\.\d+)+', args.glibc_max):

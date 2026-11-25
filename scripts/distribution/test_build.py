@@ -151,7 +151,7 @@ class BuildTests(unittest.TestCase):
         build_cmd = docker['steps'][0]['command']
         run_cmd = docker['steps'][1]['command']
         self.assertIn('linux/arm64', build_cmd)
-        self.assertTrue(any(':ubuntu24-arm64-' in token for token in build_cmd))
+        self.assertTrue(any(':el9-arm64-' in token for token in build_cmd))
         self.assertIn('linux/arm64', run_cmd)
         self.assertIn('whisky-linux-arm64', run_cmd)
         with self.assertRaises(ValueError):

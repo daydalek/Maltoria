@@ -254,18 +254,25 @@ def portable_libraries(bundle):
                     queue.append(path)
     provenance = {}
     # Image decoders are loaded with dlopen and need their own dependency closure.
-    multiarch = run('dpkg-architecture', '-qDEB_HOST_MULTIARCH').strip()
-    gdk = Path('/usr/lib') / multiarch / 'gdk-pixbuf-2.0'
+    libdir = Path('/usr/lib') / run('dpkg-architecture', '-qDEB_HOST_MULTIARCH').strip() \
+        if shutil.which('dpkg-architecture') else Path('/usr/lib64')
+    gdk = libdir / 'gdk-pixbuf-2.0'
     loaders = list(gdk.glob('*/loaders/*.so'))
     loader_dir = bundle / 'lib/pixbuf-loaders'
     loader_dir.mkdir()
     query = list(gdk.glob('gdk-pixbuf-query-loaders'))
+    if not query:
+        # RHEL family names the query tool gdk-pixbuf-query-loaders-64 and keeps it in PATH.
+        query = [Path(tool) for tool in
+                 (shutil.which('gdk-pixbuf-query-loaders'), shutil.which('gdk-pixbuf-query-loaders-64')) if tool]
     if not loaders or len(query) != 1:
         raise ValueError('Install GdkPixbuf image loaders and query tool before packaging')
     tools = bundle / 'tools'
     tools.mkdir()
     for source in loaders + query:
-        target = (loader_dir if source in loaders else tools) / source.name
+        # Launchers look up the canonical tool name regardless of the host's -64 suffix.
+        name = source.name if source in loaders else 'gdk-pixbuf-query-loaders'
+        target = (loader_dir if source in loaders else tools) / name
         shutil.copyfile(source, target)
         target.chmod(0o755)
         queue.append(target)
@@ -273,14 +280,17 @@ def portable_libraries(bundle):
     gio = bundle / 'lib/gio/modules'
     gio.mkdir(parents=True)
     for name in ('libgiognutls.so', 'libdconfsettings.so'):
-        source = Path('/usr/lib') / multiarch / 'gio/modules' / name
+        source = libdir / 'gio/modules' / name
         if source.is_file():
             target = gio / name
             shutil.copyfile(source, target)
             target.chmod(0o644)
             queue.append(target)
             provenance[str(source)] = digest(source)
-    run('gio-querymodules', gio)
+    gio_query = shutil.which('gio-querymodules') or shutil.which('gio-querymodules-64')
+    if not gio_query:
+        raise ValueError('Install the GIO module query tool before packaging')
+    run(gio_query, gio)
     visited = set()
     bundled_swift = {p.name for p in (bundle / 'lib/swift').iterdir()}
     while queue:
@@ -322,23 +332,38 @@ def portable_libraries(bundle):
         else:
             candidates.append('/usr' + source)
         owner = None
-        for candidate in candidates:
-            try:
-                owner = run('dpkg-query', '-S', candidate, stderr=subprocess.DEVNULL).split(': /', 1)[0].splitlines()[0]
-                break
-            except subprocess.CalledProcessError:
-                continue
+        fields = None
+        if shutil.which('dpkg-query'):
+            for candidate in candidates:
+                try:
+                    owner = run('dpkg-query', '-S', candidate, stderr=subprocess.DEVNULL).split(': /', 1)[0].splitlines()[0]
+                    break
+                except subprocess.CalledProcessError:
+                    continue
+            if owner is not None:
+                fields = run('dpkg-query', '-W', '-f=${source:Package}\t${source:Version}\t${Version}', owner).split('\t')
+        if owner is None and shutil.which('rpm'):
+            for candidate in candidates:
+                try:
+                    owner = run('rpm', '-qf', candidate, stderr=subprocess.DEVNULL).splitlines()[0]
+                    break
+                except subprocess.CalledProcessError:
+                    continue
+            if owner is not None:
+                fields = run('rpm', '-q', '--queryformat', '%{SOURCERPM}\t%{VERSION}-%{RELEASE}\t%{VERSION}-%{RELEASE}',
+                             owner).split('\t')
         if owner is None:
             raise ValueError('Portable dependency has no distro source record: ' + source)
         if owner in packages:
             continue
-        fields = run('dpkg-query', '-W', '-f=${source:Package}\t${source:Version}\t${Version}', owner).split('\t')
         package = owner.split(':')[0]
-        copyright_file = Path('/usr/share/doc') / package / 'copyright'
-        if copyright_file.is_file():
-            shutil.copyfile(copyright_file, notices / (package + '.copyright'))
-        packages[owner] = dict(source=fields[0], sourceVersion=fields[1], binaryVersion=fields[2],
-            sourceIndex='https://archive.ubuntu.com/ubuntu/pool/')
+        for copyright_file in (Path('/usr/share/doc') / package / 'copyright',
+                               *sorted((Path('/usr/share/licenses') / package).glob('*'))):
+            if copyright_file.is_file():
+                shutil.copyfile(copyright_file, notices / (package + '.copyright'))
+                break
+        packages[owner] = dict(source=fields[0].replace('.src.rpm', ''), sourceVersion=fields[1],
+            binaryVersion=fields[2], sourceIndex='distro package metadata')
     report = dict(files=provenance, packages=packages, hostLibraries=DEPENDENCIES['hostLibraries'],
                   baseline=DEPENDENCIES['baseline'])
     (bundle / 'share/portable-dependencies.json').write_text(json.dumps(report, indent=2) + '\n')
@@ -448,10 +473,10 @@ def main():
             spec = importlib.util.spec_from_file_location('elf_audit', HERE / 'audit-elf.py')
             audit = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(audit)
-            abi = audit.audit(bundle, '2.39', shutil.which('readelf'))
+            abi = audit.audit(bundle, '2.34', shutil.which('readelf'))
             (output / 'elf-abi.json').write_text(json.dumps(abi, indent=2) + '\n')
             if not abi['passed']:
-                raise ValueError('Input payload exceeds GLIBC 2.39 baseline')
+                raise ValueError('Input payload exceeds GLIBC 2.34 baseline')
             for format in dict.fromkeys(args.formats):
                 if format == 'appimage':
                     path, closure = appimage(bundle, manifest, args.version, output, workspace, args.tool_cache)

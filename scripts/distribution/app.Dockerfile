@@ -1,16 +1,20 @@
 # syntax=docker/dockerfile:1
-# Ubuntu 24.04 ABI baseline; native amd64 builders are preferred for release CI.
-FROM swift:6.4.0-noble
+# RHEL 9 family (glibc 2.34) ABI baseline; native amd64 builders are preferred for release CI.
+FROM almalinux:9
 COPY install-deps.sh /tmp/install-linux-deps.sh
-RUN bash /tmp/install-linux-deps.sh && rm /tmp/install-linux-deps.sh \
-    && apt-get install -y --no-install-recommends cmake ninja-build libwebp-dev rpm dpkg-dev squashfs-tools file \
-    && rm -rf /var/lib/apt/lists/*
+RUN bash /tmp/install-linux-deps.sh && rm /tmp/install-linux-deps.sh
+# Official UBI9 Swift toolchain, same version family as the previous noble image.
+ARG TARGETARCH
+RUN case "${TARGETARCH:-amd64}" in amd64) variant=ubi9 ;; arm64) variant=ubi9-aarch64 ;; *) echo "unsupported arch $TARGETARCH" >&2; exit 1 ;; esac \
+    && curl --proto '=https' --tlsv1.2 -sSfL \
+      "https://download.swift.org/swift-6.4.0-release/$variant/swift-6.4.0-RELEASE/swift-6.4.0-RELEASE-$variant.tar.gz" \
+      -o /tmp/swift.tar.gz \
+    && mkdir -p /opt/swift && tar xzf /tmp/swift.tar.gz --strip-components=1 -C /opt/swift \
+    && rm /tmp/swift.tar.gz
+ENV PATH=/opt/swift/usr/bin:$PATH
 ENV RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /tmp/rustup.sh \
     && sh /tmp/rustup.sh -y --profile minimal --default-toolchain 1.99.1 \
     && rm /tmp/rustup.sh
-# The swift:6.4.0-noble image ships clang-21 without the clang++-21 driver name;
-# the name selects C++ mode, so the C++ link picks up libstdc++/libm.
-RUN ln -sf /usr/bin/clang-21 /usr/bin/clang++-21
-ENV PATH=/opt/cargo/bin:$PATH CC=/usr/bin/clang-21 CXX=/usr/bin/clang++-21
+ENV PATH=/opt/cargo/bin:$PATH CC=/usr/bin/clang CXX=/usr/bin/clang++
 WORKDIR /workspace

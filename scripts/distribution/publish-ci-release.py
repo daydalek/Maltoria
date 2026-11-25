@@ -252,8 +252,8 @@ def publish(repository, run_id):
             + (changes + '\n\n' if changes else '')
             + '### Downloads\n\n'
             '- macOS: Apple Silicon ZIP, ad-hoc signed.\n'
-            '- Linux amd64: deb (Ubuntu 24.04), rpm (Fedora 44), and AppImage.\n'
-            '- Linux baseline: glibc 2.39 or newer; Wine downloads separately.\n'
+            '- Linux amd64: deb (Debian/Ubuntu), rpm (Fedora/openSUSE/RHEL), and AppImage.\n'
+            '- Linux baseline: glibc 2.34 or newer; Wine downloads separately.\n'
             '- Sources, package reports and platform-specific SHA256SUMS are attached.\n\n'
             f'Source: `{commit}`\n\nVerified CI: {run["html_url"]}\n'
         )
