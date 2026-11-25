@@ -368,6 +368,8 @@ public extension Wine {
         )
     }
 
+    // The registry update is a single cohesive transaction.
+    // swiftlint:disable function_body_length
     /// Brings the bottle's Mac Driver input registry values in line with its
     /// input settings.
     ///
@@ -436,6 +438,7 @@ public extension Wine {
             )
         }
     }
+    // swiftlint:enable function_body_length
 }
 
 /// The Mac Driver input registry values Whisky last wrote into a bottle, kept
