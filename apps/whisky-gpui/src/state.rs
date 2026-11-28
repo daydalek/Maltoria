@@ -1055,6 +1055,14 @@ pub(crate) struct LegacyFullscreenPrompt {
     pub(crate) enable: bool,
 }
 
+#[cfg(target_os = "windows")]
+fn windows_folder_picker_start() -> String {
+    std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "C:\\".into())
+}
+
 impl WhiskyApp {
     pub(crate) fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let (bridge, bridge_events) = BridgeSupervisor::start();
@@ -8032,6 +8040,9 @@ impl WhiskyApp {
             return;
         };
         self.scan_root_picker = Some(container.clone());
+        #[cfg(target_os = "windows")]
+        let start = windows_folder_picker_start();
+        #[cfg(not(target_os = "windows"))]
         let start = format!("{container}/drive_c");
         self.bridge.choose_folders("scan-roots", &start);
         cx.notify();
@@ -8048,6 +8059,9 @@ impl WhiskyApp {
             return;
         };
         self.scan_root_picker = Some(container.clone());
+        #[cfg(target_os = "windows")]
+        let start = windows_folder_picker_start();
+        #[cfg(not(target_os = "windows"))]
         let start = std::env::var_os("HOME")
             .map(|home| home.to_string_lossy().into_owned())
             .unwrap_or_else(|| format!("{container}/drive_c"));
@@ -8062,7 +8076,7 @@ impl WhiskyApp {
             self.show_notice(crate::i18n::s().state.enter_folder_path, cx);
             return;
         }
-        if !path.starts_with('/') {
+        if !std::path::Path::new(path).is_absolute() {
             self.show_notice(crate::i18n::s().state.enter_absolute_path, cx);
             return;
         }

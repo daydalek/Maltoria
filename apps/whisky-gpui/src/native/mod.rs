@@ -31,6 +31,7 @@ pub(crate) const METHODS: &[&str] = &[
     "workspace.containers",
     "library.entries",
     "library.scan",
+    "library.page",
     "library.edit",
     "library.tags.rename",
     "library.tags.delete",
@@ -179,9 +180,9 @@ impl NativeServer {
             "system.open" => system::open(params),
             "system.reveal" => system::reveal(params),
             "system.files" => system::files(params),
-            "system.choosePath" | "system.chooseFolder" | "system.chooseFolders" => {
-                system::choose_path(params)
-            }
+            "system.choosePath" => system::choose_path(params),
+            "system.chooseFolder" => system::choose_folder(params),
+            "system.chooseFolders" => system::choose_folders(params),
             "preferences.schema" => Ok(self.store.preferences_schema()),
             "preferences.read" => Ok(self.store.preferences_read()),
             "preferences.write" => Ok(json!({})),
@@ -200,6 +201,7 @@ impl NativeServer {
             "folders.automaticMetadata" => self.store.folders_automatic_metadata(params),
             "library.entries" => Ok(library::entries(&self.store, params)),
             "library.scan" => library::start_scan(&self.store, &self.jobs, params),
+            "library.page" => library::page(&self.store, params),
             "library.edit" => self.store.library_edit(params),
             "library.tags.rename" | "library.tags.delete" => self.store.library_tags(method, params),
             "entry.rating" => self.store.entry_rating(params),

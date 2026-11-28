@@ -577,6 +577,8 @@ fn spawn_helper(inner: &Arc<Mutex<CaptureInner>>, arch: &str) -> Result<(), Stri
     let port = listener.local_addr().map_err(|error| error.to_string())?.port();
     let token = random_token();
     let session = format!("capture-{}", random_token());
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     let child = std::process::Command::new(&helper_exe)
         .env("MALTORIA_HOOK_PORT", port.to_string())
         .env("MALTORIA_HOOK_TOKEN", &token)
@@ -584,6 +586,7 @@ fn spawn_helper(inner: &Arc<Mutex<CaptureInner>>, arch: &str) -> Result<(), Stri
         .current_dir(&root)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
         .spawn()
         .map_err(|error| format!("cannot start helper: {error}"))?;
     eprintln!("capture[{:.3}]: helper spawned {} port {port}", log_secs(), helper_exe.display());

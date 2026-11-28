@@ -339,14 +339,17 @@ fn attach_shared_window_actions<V: Render + 'static>(
         }))
 }
 
-#[cfg(target_os = "linux")]
-fn wrap_linux_client_titlebar(
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+fn wrap_platform_titlebar(
     title: impl Into<SharedString>,
     root: Div,
     window: &Window,
     on_close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> AnyElement {
+    #[cfg(target_os = "linux")]
     let client_titlebar = matches!(window.window_decorations(), Decorations::Client { .. });
+    #[cfg(target_os = "windows")]
+    let client_titlebar = true;
     if client_titlebar {
         col()
             .size_full()
@@ -380,7 +383,7 @@ impl Render for SettingsWindow {
             let active_section = app.settings_section;
             let provider_count = app.translation_page.providers.len();
             let (grad_start, grad_end) = sidebar_gradient();
-            let sidebar_top_pad = if fullscreen { 14. } else { 52. };
+            let sidebar_top_pad = if fullscreen || cfg!(target_os = "windows") { 14. } else { 52. };
 
             let nav_rows: Vec<AnyElement> = SettingsSection::ALL
                 .into_iter()
@@ -562,9 +565,9 @@ impl Render for SettingsWindow {
         }))
         .child(content);
 
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
         {
-            wrap_linux_client_titlebar(
+            wrap_platform_titlebar(
                 crate::i18n::s().windows.settings_title,
                 root,
                 window,
@@ -575,7 +578,7 @@ impl Render for SettingsWindow {
                 }),
             )
         }
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(any(target_os = "linux", target_os = "windows")))]
         {
             root
         }
@@ -637,9 +640,9 @@ impl Render for CaptureWindow {
         }))
         .child(content);
 
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
         {
-            wrap_linux_client_titlebar(
+            wrap_platform_titlebar(
                 crate::i18n::s().windows.capture_title,
                 root,
                 window,
@@ -650,7 +653,7 @@ impl Render for CaptureWindow {
                 }),
             )
         }
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(any(target_os = "linux", target_os = "windows")))]
         {
             root
         }

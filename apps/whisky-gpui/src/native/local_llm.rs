@@ -5,6 +5,7 @@
 //! stay identical across platforms.
 
 use std::io::Read;
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
@@ -18,6 +19,7 @@ const RUNTIME_SIZE: u64 = 24_812_775;
 const RUNTIME_SHA256: &str = "a99b3f8d90956610186232815f43414967d3ded08dd509b0e5f26c9459742647";
 const IDLE_TIMEOUT_SECS: u64 = 300;
 const HEALTH_TIMEOUT_SECS: u64 = 120;
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 struct ModelEntry {
     id: &'static str,
@@ -223,6 +225,7 @@ fn extract_zip(zip: &Path, dest: &Path) -> Result<(), String> {
         .arg(dest)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
         .status()
         .map_err(|error| format!("tar failed to start: {error}"))?;
     if !status.success() {
@@ -547,6 +550,7 @@ pub(crate) fn ensure_server(store: &Store, model_id: &str) -> Result<(String, St
         ])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
         .spawn()
         .map_err(|error| ("local_start_failed".into(), format!("cannot start llama-server: {error}")))?;
     {

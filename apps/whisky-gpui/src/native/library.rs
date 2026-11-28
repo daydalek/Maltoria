@@ -332,28 +332,20 @@ pub(crate) fn entries(store: &Store, _params: &Value) -> Value {
 }
 
 pub(crate) fn start_scan(
-    store: &Store,
+    store: &Arc<Store>,
     jobs: &Arc<Mutex<JobStore>>,
     _params: &Value,
 ) -> Result<Value, (String, String)> {
     let (id, state) = JobStore::start(jobs, "library.scan");
-    let store_root = store.root.clone();
-    let roots = {
-        let document = store.document.lock().unwrap();
-        document.roots.clone()
-    };
+    let store = Arc::clone(store);
     // The scan itself is cheap filesystem walking; run it on a worker thread
-    // so large trees never stall the bridge dispatch.
+    // so large trees never stall the bridge dispatch. Its total must match
+    // `library.entries` exactly because the frontend paginates that count.
     std::thread::spawn(move || {
-        let total: usize = roots
-            .iter()
-            .map(|root| {
-                std::fs::read_dir(root)
-                    .map(|read| read.flatten().filter(|entry| entry.path().is_dir()).count())
-                    .unwrap_or(0)
-            })
-            .sum();
-        let _ = store_root;
+        let total = entries(&store, &json!({}))
+            .as_array()
+            .map(Vec::len)
+            .unwrap_or(0);
         crate::native::jobs::JobStore::finish(
             &state,
             json!({
@@ -363,6 +355,39 @@ pub(crate) fn start_scan(
         );
     });
     Ok(json!({ "jobID": id }))
+}
+
+/// `library.page`: stable-offset pagination over the native catalogue. The
+/// snapshot id is accepted for protocol compatibility; native scans are small
+/// enough that the catalogue is regenerated deterministically for each page.
+pub(crate) fn page(store: &Store, params: &Value) -> Result<Value, (String, String)> {
+    let offset = params
+        .get("offset")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let limit = params
+        .get("limit")
+        .and_then(Value::as_u64)
+        .unwrap_or(100)
+        .clamp(1, 100) as usize;
+    let all = entries(store, params);
+    let all = all.as_array().cloned().unwrap_or_default();
+    let total = all.len();
+    let offset = offset as usize;
+    if offset > total {
+        return Err((
+            "invalid_params".into(),
+            format!("library.page offset {offset} exceeds total {total}"),
+        ));
+    }
+    let end = (offset + limit).min(total);
+    let page_entries = all[offset..end].to_vec();
+    let next_offset = (end < total).then_some(end as u64);
+    Ok(json!({
+        "entries": page_entries,
+        "total": total,
+        "nextOffset": next_offset,
+    }))
 }
 
 pub(crate) fn programs_list(store: &Store) -> Value {

@@ -142,40 +142,87 @@ pub(crate) fn choose_path(params: &Value) -> Result<Value, (String, String)> {
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_owned();
+    let start = params.get("path").and_then(Value::as_str).unwrap_or("");
     let folder_mode = mode.contains("folder") || mode == "directory";
-    let picked = pick_path(folder_mode);
+    let picked = pick_path(folder_mode, start);
     Ok(json!({
         "purpose": purpose,
         "path": picked,
     }))
 }
 
+pub(crate) fn choose_folder(params: &Value) -> Result<Value, (String, String)> {
+    let start = params.get("path").and_then(Value::as_str).unwrap_or("");
+    Ok(json!({
+        "path": pick_path(true, start),
+    }))
+}
+
+/// The managed folder browser is single-select, but `system.chooseFolders`
+/// still answers the protocol's array shape; callers can repeat the picker to
+/// add more roots.
+pub(crate) fn choose_folders(params: &Value) -> Result<Value, (String, String)> {
+    let start = params.get("path").and_then(Value::as_str).unwrap_or("");
+    let paths = pick_path(true, start).into_iter().collect::<Vec<_>>();
+    Ok(json!({ "paths": paths }))
+}
+
 #[cfg(target_os = "windows")]
-fn pick_path(folder: bool) -> Option<String> {
+fn powershell_string(raw: &str) -> String {
+    format!("'{}'", raw.replace('\'', "''"))
+}
+
+#[cfg(target_os = "windows")]
+fn pick_path(folder: bool, start: &str) -> Option<String> {
     // PowerShell hosts the shell common dialogs; no extra crate needed.
-    // STA is required for the folder browser.
+    // STA is required for the folder browser. Force UTF-8 so non-ASCII paths
+    // survive the pipe on systems whose OEM code page is not UTF-8.
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+    let start = normalize_path(start);
+    let initial = (!start.is_empty()).then(|| powershell_string(&start));
     let script = if folder {
-        "Add-Type -AssemblyName System.Windows.Forms; \
-         $d = New-Object System.Windows.Forms.FolderBrowserDialog; \
-         if ($d.ShowDialog() -eq 'OK') { $d.SelectedPath }".to_owned()
+        let selected = initial
+            .as_ref()
+            .map(|path| format!("$d.SelectedPath = {path};"))
+            .unwrap_or_default();
+        format!(
+            "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; \
+             Add-Type -AssemblyName System.Windows.Forms; \
+             $d = New-Object System.Windows.Forms.FolderBrowserDialog; \
+             $d.ShowNewFolderButton = $true; {selected} \
+             if ($d.ShowDialog() -eq 'OK') {{ $d.SelectedPath }}"
+        )
     } else {
-        "Add-Type -AssemblyName System.Windows.Forms; \
-         $d = New-Object System.Windows.Forms.OpenFileDialog; \
-         $d.Filter = 'Programs (*.exe)|*.exe|All files (*.*)|*.*'; \
-         if ($d.ShowDialog() -eq 'OK') { $d.FileName }".to_owned()
+        let initial_directory = initial
+            .as_ref()
+            .map(|path| format!("$d.InitialDirectory = {path};"))
+            .unwrap_or_default();
+        format!(
+            "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; \
+             Add-Type -AssemblyName System.Windows.Forms; \
+             $d = New-Object System.Windows.Forms.OpenFileDialog; \
+             $d.Filter = 'Programs (*.exe)|*.exe|All files (*.*)|*.*'; {initial_directory} \
+             if ($d.ShowDialog() -eq 'OK') {{ $d.FileName }}"
+        )
     };
     let output = std::process::Command::new("powershell")
         .args(["-NoProfile", "-STA", "-Command", &script])
+        .creation_flags(CREATE_NO_WINDOW)
         .output()
         .ok()?;
     if !output.status.success() {
         return None;
     }
-    let text = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    let text = String::from_utf8_lossy(&output.stdout)
+        .trim_start_matches('\u{feff}')
+        .trim()
+        .to_owned();
     (!text.is_empty()).then(|| normalize_path(&text))
 }
 
 #[cfg(not(target_os = "windows"))]
-fn pick_path(_folder: bool) -> Option<String> {
+fn pick_path(_folder: bool, _start: &str) -> Option<String> {
     None
 }

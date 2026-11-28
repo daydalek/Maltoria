@@ -1,5 +1,7 @@
 //! Application entry, root view composition, and visual-test capture hook.
 
+#![cfg_attr(all(target_os = "windows", not(test)), windows_subsystem = "windows")]
+
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -108,7 +110,9 @@ impl Render for WhiskyApp {
         let wh = f32::from(window.viewport_size().height);
         #[cfg(target_os = "linux")]
         let client_titlebar = matches!(window.window_decorations(), Decorations::Client { .. });
-        #[cfg(target_os = "linux")]
+        #[cfg(target_os = "windows")]
+        let client_titlebar = true;
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
         let wh = wh
             - if client_titlebar {
                 f32::from(gpui_kit::component::TITLE_BAR_HEIGHT)
@@ -460,7 +464,7 @@ impl Render for WhiskyApp {
         if self.scroll_needs_measurement.get() {
             window.request_animation_frame();
         }
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
         {
             col()
                 .size_full()
@@ -475,7 +479,7 @@ impl Render for WhiskyApp {
                 })
                 .child(div().relative().flex_1().min_h_0().child(root))
         }
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(any(target_os = "linux", target_os = "windows")))]
         root
     }
 }
