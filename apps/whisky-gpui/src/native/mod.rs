@@ -73,6 +73,7 @@ pub(crate) const METHODS: &[&str] = &[
     "system.chooseFolder",
     "system.chooseFolders",
     "metadata.search",
+    "metadata.sync",
     "runtime.launch",
     "translation.settings/get",
     "translation.settings/save",
@@ -224,6 +225,20 @@ impl NativeServer {
                 let (job_id, state) = crate::native::jobs::JobStore::start(&jobs, "metadata.search");
                 std::thread::spawn(move || {
                     let outcome = crate::native_metadata::search(&params);
+                    match outcome {
+                        Ok(result) => crate::native::jobs::JobStore::finish(&state, result),
+                        Err((_, message)) => crate::native::jobs::JobStore::fail(&state, message),
+                    }
+                });
+                Ok(json!({ "jobID": job_id }))
+            }
+            "metadata.sync" => {
+                let jobs = Arc::clone(&self.jobs);
+                let store = Arc::clone(&self.store);
+                let params = params.clone();
+                let (job_id, state) = crate::native::jobs::JobStore::start(&jobs, "metadata.sync");
+                std::thread::spawn(move || {
+                    let outcome = crate::native_metadata::sync(&store, &params, &state);
                     match outcome {
                         Ok(result) => crate::native::jobs::JobStore::finish(&state, result),
                         Err((_, message)) => crate::native::jobs::JobStore::fail(&state, message),

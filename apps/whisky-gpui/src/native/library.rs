@@ -238,12 +238,35 @@ fn folder_entry(store: &Store, document: &Document, folder: &str) -> Value {
         .cloned()
         .flatten()
         .filter(|path| !path.is_empty());
-    let executable = chosen.or_else(|| {
-        find_executables(folder).first().map(|(path, _)| path.clone())
-    });
+    let needs_executable = chosen.is_none();
+    let executable = chosen.or_else(|| Some(folder.to_owned()));
     let overrides = document.entries.get(&id).cloned().unwrap_or_else(|| json!({}));
     let metadata = load_metadata(store, &id);
     let cover = load_cover(store, &id);
+    let launch_options = document
+        .launch_options
+        .get(&id)
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    let multi_executable = launch_options
+        .get("multiExecutable")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let launch_executables: Vec<String> = launch_options
+        .get("executables")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+    let last_executable = launch_options
+        .get("lastExecutable")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
     let custom_name = overrides
         .get("customName")
         .and_then(Value::as_str)
@@ -262,7 +285,10 @@ fn folder_entry(store: &Store, document: &Document, folder: &str) -> Value {
         "folder": folder,
         "gameDirectory": folder,
         "source": "folder",
-        "needsExecutable": false,
+        "needsExecutable": needs_executable,
+        "multiExecutable": multi_executable,
+        "launchExecutables": launch_executables,
+        "lastExecutable": last_executable,
         "hidden": hidden,
         "isLauncher": false,
         "tags": overrides.get("tags").cloned().unwrap_or_else(|| json!([])),
@@ -477,8 +503,9 @@ pub(crate) fn launch(
         .or_else(|| params.get("entryID"))
         .and_then(Value::as_str)
         .map(str::to_owned);
-    // Folder entries carry the folder instead of an exe: resolve the chosen
-    // or first candidate.
+    let explicit_launch_choice = executable.is_some();
+    // Folder entries carry the folder instead of an exe: resolve only the
+    // executable the user has explicitly recorded.
     let (executable, entry_id) = match (executable, entry_id) {
         (Some(exe), id) => (exe, id),
         (None, Some(id)) if id.starts_with("folder:") => {
@@ -487,12 +514,10 @@ pub(crate) fn launch(
                 let document = store.document.lock().unwrap();
                 document.executables.get(&folder).cloned().flatten()
             };
-            let exe = chosen
-                .or_else(|| find_executables(&folder).first().map(|(path, _)| path.clone()));
-            let Some(exe) = exe else {
+            let Some(exe) = chosen else {
                 return Err((
                     "no_executable".into(),
-                    format!("No executable found in {folder}"),
+                    format!("No executable has been selected for {folder}"),
                 ));
             };
             (exe, Some(id))
@@ -560,6 +585,31 @@ pub(crate) fn launch(
         )
     })?;
     let pid = child.id();
+    if explicit_launch_choice && let Some(entry_id) = entry_id.as_deref() {
+        let mut document = store.document.lock().unwrap();
+        let multi_executable = document
+            .launch_options
+            .get(entry_id)
+            .and_then(|options| options.get("multiExecutable"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        if multi_executable {
+            let options = document
+                .launch_options
+                .entry(entry_id.to_owned())
+                .or_insert_with(|| json!({}));
+            let allowed = options
+                .get("executables")
+                .and_then(Value::as_array)
+                .is_none_or(|items| {
+                    items.iter().filter_map(Value::as_str).any(|item| item == executable)
+                });
+            if allowed {
+                options["lastExecutable"] = json!(executable);
+                store.save(&document);
+            }
+        }
+    }
     let entry = entry_id.unwrap_or_else(|| format!("pinned:{executable}"));
     let name = Path::new(&executable)
         .file_name()

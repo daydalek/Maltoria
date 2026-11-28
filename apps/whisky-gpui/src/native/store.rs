@@ -43,6 +43,10 @@ pub(crate) struct Document {
     pub(crate) executables: BTreeMap<String, Option<String>>,
     pub(crate) known_folders: Vec<String>,
     pub(crate) automatic_metadata: bool,
+    /// Whether the user explicitly changed automatic metadata. Legacy Windows
+    /// stores wrote `false` before scraping existed; those unmigrated values
+    /// are treated as the macOS default (`true`) rather than as consent.
+    pub(crate) automatic_metadata_touched: bool,
     pub(crate) include_pinned_and_steam: bool,
     /// Folders the user hid from the grid.
     pub(crate) hidden_folders: Vec<String>,
@@ -67,12 +71,16 @@ impl Document {
     fn load(root: &Path) -> Self {
         let Ok(data) = fs::read(root.join("library.json")) else {
             return Self {
+                automatic_metadata: true,
+                automatic_metadata_touched: true,
                 include_pinned_and_steam: true,
                 ..Self::default()
             };
         };
         let Ok(value) = serde_json::from_slice::<Value>(&data) else {
             return Self {
+                automatic_metadata: true,
+                automatic_metadata_touched: true,
                 include_pinned_and_steam: true,
                 ..Self::default()
             };
@@ -145,8 +153,20 @@ impl Document {
             excluded_folders: strings("excludedFolders"),
             executables,
             known_folders: strings("knownFolders"),
-            automatic_metadata: value
-                .get("automaticMetadata")
+            automatic_metadata: if value
+                .get("automaticMetadataTouched")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
+                value
+                    .get("automaticMetadata")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(true)
+            } else {
+                true
+            },
+            automatic_metadata_touched: value
+                .get("automaticMetadataTouched")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
             include_pinned_and_steam: value
@@ -173,6 +193,7 @@ impl Document {
             "executables": self.executables,
             "knownFolders": self.known_folders,
             "automaticMetadata": self.automatic_metadata,
+            "automaticMetadataTouched": self.automatic_metadata_touched,
             "includePinnedAndSteam": self.include_pinned_and_steam,
             "hiddenFolders": self.hidden_folders,
             "pinned": self.pinned,
@@ -235,23 +256,75 @@ impl Store {
     pub(crate) fn preferences_schema(&self) -> Value {
         json!({
             "booleans": {
-                "libraryMixedCoverLayout": false,
-                "librarySingleLineTitles": false,
+                "offlineMode": false,
+                "killOnTerminate": true,
+                "showMenuBarExtra": false,
+                "libraryOnboardingCompleted": false,
+                "checkWhiskyWineUpdates": true,
+                "checkMaltoriaAppUpdates": false,
                 "libraryRefreshAfterExit": true,
-                "showHiddenEntries": false,
-                "automaticMetadata": true,
+                "libraryDetailBlurredBackground": true,
+                "librarySingleLineTitles": false,
+                "libraryCenterWideCoverText": false,
+                "libraryMixedCoverLayout": true,
+                "libraryBlurredCoverFill": true,
+                "libraryMetadataScrapeCharacters": true,
+                "libraryBackdropFill": true,
             },
             "strings": {
+                "preferredTerminal": "terminal",
+                "preferredLinuxTerminal": "auto",
                 "libraryCoverFillStyle": "blurred",
+                "libraryDisplayMode": "covers",
+                "librarySort": "recent",
+                "libraryDetailLayoutStyle": "hero",
+                "libraryCoverUpscale": "off",
+                "libraryCoverUpscaleEngine": "realcugan",
+                "libraryMetadataEnabledSources": "bangumi,vndb,steam,ymgal,nextmoe",
+                "libraryMetadataDefaultSource": "bangumi",
+                "libraryMetadataBasicSource": "inherit",
+                "libraryMetadataSummarySource": "inherit",
+                "libraryMetadataCoverSource": "inherit",
+                "libraryMetadataCharactersSource": "inherit",
+                "librarySidebarMode": "expanded",
+                "librarySidebarCollapsedStyle": "icons",
+                "telemetryConsent": "undecided",
             },
-            "numbers": {},
-            "paths": []
+            "numbers": {
+                "libraryCoverWidth": 0,
+                "libraryBackdropBlur": 2,
+            },
+            "paths": ["defaultBottleLocation"]
         })
     }
 
     pub(crate) fn preferences_read(&self) -> Value {
+        let mut values = self.preferences_schema();
+        for section in ["booleans", "strings", "numbers"] {
+            let Some(defaults) = values
+                .get(section)
+                .cloned()
+                .and_then(|value| value.as_object().cloned())
+            else {
+                continue;
+            };
+            for (key, fallback) in defaults {
+                values.as_object_mut().unwrap().insert(key, fallback);
+            }
+            values.as_object_mut().unwrap().remove(section);
+        }
+        values.as_object_mut().unwrap().remove("paths");
         let document = self.document.lock().unwrap();
-        Value::Object(document.preferences.clone().into_iter().collect())
+        for (key, value) in &document.preferences {
+            values[key] = value.clone();
+        }
+        if !document.preferences.contains_key("defaultBottleLocation") {
+            let default = std::env::var("USERPROFILE")
+                .map(|home| format!("{}\\Bottles", home))
+                .unwrap_or_else(|_| "C:\\Bottles".into());
+            values["defaultBottleLocation"] = json!(default);
+        }
+        values
     }
 
     pub(crate) fn preferences_set(&self, params: &Value) -> Result<Value, (String, String)> {
@@ -267,7 +340,8 @@ impl Store {
             document.preferences.insert(key.to_owned(), value);
         }
         self.save(&document);
-        Ok(json!({}))
+        drop(document);
+        Ok(self.preferences_read())
     }
 
     pub(crate) fn preferences_set_many(&self, params: &Value) -> Result<Value, (String, String)> {
@@ -282,7 +356,8 @@ impl Store {
             }
         }
         self.save(&document);
-        Ok(json!({}))
+        drop(document);
+        Ok(self.preferences_read())
     }
 
     pub(crate) fn folders_read(&self) -> Value {
@@ -398,6 +473,7 @@ impl Store {
         self.mutate_folders(move |document| {
             if let Some(name) = params.get("automaticMetadata").and_then(Value::as_bool) {
                 document.automatic_metadata = name;
+                document.automatic_metadata_touched = true;
             }
             if let Some(include) = params.get("includePinnedAndSteam").and_then(Value::as_bool) {
                 document.include_pinned_and_steam = include;
@@ -433,6 +509,7 @@ impl Store {
                 .and_then(Value::as_bool)
             {
                 document.automatic_metadata = enabled;
+                document.automatic_metadata_touched = true;
             }
         })
     }
@@ -492,19 +569,50 @@ impl Store {
         let mut document = self.document.lock().unwrap();
         let options = document
             .launch_options
-            .entry(id)
+            .entry(id.clone())
             .or_insert_with(|| json!({}));
         if let Some(source) = params.get("options").and_then(Value::as_object) {
             for (key, value) in source {
                 options[key] = value.clone();
             }
         }
-        for key in ["arguments", "environment", "workingDirectory"] {
+        for key in [
+            "arguments",
+            "environment",
+            "workingDirectory",
+            "multiExecutable",
+            "executables",
+            "lastExecutable",
+        ] {
             if let Some(value) = params.get(key) {
                 options[key] = value.clone();
             }
         }
-        let reply = options.clone();
+        let multi_executable = options
+            .get("multiExecutable")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let executables = options
+            .get("executables")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let last_executable = options
+            .get("lastExecutable")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        let reply = json!({
+            "entryID": id,
+            "multiExecutable": multi_executable,
+            "executables": executables,
+            "lastExecutable": last_executable,
+        });
         self.save(&document);
         Ok(reply)
     }

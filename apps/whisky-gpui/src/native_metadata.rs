@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
 
-use crate::native::jobs::JobStore;
+use crate::native::jobs::JobState;
 use crate::native::store::Store;
 
 fn agent() -> ureq::Agent {
@@ -158,16 +158,7 @@ fn search_bangumi(query: &str) -> Result<Vec<Value>, String> {
 
 /// Steam store search + appdetails for the top hits.
 fn search_steam(query: &str) -> Result<Vec<Value>, String> {
-    let encoded = query
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '~') {
-                c.to_string()
-            } else {
-                format!("%{:02X}", c as u32)
-            }
-        })
-        .collect::<String>();
+    let encoded = urlencoding(query);
     let reply = get_json(&format!(
         "https://store.steampowered.com/api/storesearch/?term={encoded}&l=schinese&cc=cn"
     ))?;
@@ -397,6 +388,294 @@ pub(crate) fn search(params: &Value) -> Result<Value, (String, String)> {
         }
     }
     Ok(json!({ "results": results }))
+}
+
+fn save_matched_snapshot(store: &Store, entry_id: &str, snapshot: &Value) -> Result<(), (String, String)> {
+    let source = snapshot
+        .get("source")
+        .and_then(Value::as_str)
+        .ok_or_else(|| ("invalid_metadata".into(), "metadata match has no source".into()))?;
+    let source_id = snapshot
+        .get("sourceID")
+        .and_then(Value::as_str)
+        .ok_or_else(|| ("invalid_metadata".into(), "metadata match has no source id".into()))?;
+    let mut record = load_record(store, entry_id);
+    record["defaultSource"] = json!(source);
+    record["bindings"][source] = json!(source_id);
+    record["snapshots"][source] = snapshot.clone();
+    let dir = store.metadata_dir(entry_id);
+    std::fs::create_dir_all(&dir).map_err(|error| ("write_failed".into(), error.to_string()))?;
+    let data = serde_json::to_vec_pretty(&record)
+        .map_err(|error| ("encode_failed".into(), error.to_string()))?;
+    std::fs::write(record_path(store, entry_id), data)
+        .map_err(|error| ("write_failed".into(), error.to_string()))?;
+    resolve_record(store, entry_id, &record);
+    Ok(())
+}
+
+fn metadata_normalized(text: &str) -> String {
+    text.chars()
+        .flat_map(char::to_lowercase)
+        .map(|c| {
+            if ('\u{ff01}'..='\u{ff5e}').contains(&c) {
+                char::from_u32(c as u32 - 0xfee0).unwrap_or(c)
+            } else {
+                c
+            }
+        })
+        .filter(|c| c.is_alphanumeric())
+        .collect()
+}
+
+fn strip_outer_once(text: &str, open: char, close: char) -> Option<String> {
+    let text = text.trim();
+    if text.starts_with(open) {
+        let rest = &text[open.len_utf8()..];
+        if let Some(index) = rest.find(close) {
+            return Some(rest[index + close.len_utf8()..].trim().to_owned());
+        }
+    }
+    if text.ends_with(close) {
+        let body = &text[..text.len() - close.len_utf8()];
+        if let Some(index) = body.rfind(open) {
+            return Some(body[..index].trim().to_owned());
+        }
+    }
+    None
+}
+
+fn clean_metadata_query(name: &str) -> String {
+    let mut cleaned = name.trim().to_owned();
+    for _ in 0..4 {
+        let before = cleaned.clone();
+        for (open, close) in [('[', ']'), ('【', '】'), ('(', ')'), ('（', '）')] {
+            if let Some(stripped) = strip_outer_once(&cleaned, open, close)
+                && !stripped.is_empty()
+            {
+                cleaned = stripped;
+            }
+        }
+        if cleaned == before {
+            break;
+        }
+    }
+    const SUFFIXES: &[&str] = &[
+        "汉化硬盘版", "汉化版", "漢化版", "官中版", "简体中文", "繁体中文", "简中", "繁中",
+        "中文", "steam版", "dl版", "pc版", "windows版", "免安装版", "免安装", "硬盘版",
+        "全语音版", "全语音", "完整版", "完全版", "体验版", "試玩版", "试玩版",
+    ];
+    loop {
+        let lower = cleaned.to_lowercase();
+        let mut removed = false;
+        for suffix in SUFFIXES {
+            let suffix = suffix.to_lowercase();
+            if lower.ends_with(&suffix) {
+                let end = cleaned.len() - suffix.len();
+                cleaned = cleaned[..end].trim_end_matches([' ', '-', '_', '—', '–']).to_owned();
+                removed = true;
+                break;
+            }
+        }
+        if !removed {
+            break;
+        }
+    }
+    cleaned.trim().to_owned()
+}
+
+fn metadata_search_queries(name: &str) -> Vec<String> {
+    let cleaned = clean_metadata_query(name);
+    let mut queries = Vec::new();
+    let mut push = |candidate: &str| {
+        let candidate = candidate.trim();
+        if candidate.chars().count() >= 2
+            && queries.len() < 3
+            && !queries.iter().any(|existing: &String| existing == candidate)
+        {
+            queries.push(candidate.to_owned());
+        }
+    };
+    push(&cleaned);
+    for separator in ['/', '／'] {
+        if let Some((left, right)) = cleaned.split_once(separator) {
+            push(left);
+            push(right);
+        }
+    }
+    for (open, close) in [('(', ')'), ('（', '）')] {
+        if cleaned.ends_with(close)
+            && let Some(index) = cleaned.rfind(open)
+        {
+            push(&cleaned[..index]);
+            push(&cleaned[index + open.len_utf8()..cleaned.len() - close.len_utf8()]);
+        }
+    }
+    queries
+}
+
+fn exact_metadata_match(query: &str, game: &Value) -> bool {
+    let needles: Vec<String> = metadata_search_queries(query)
+        .iter()
+        .map(|query| metadata_normalized(query))
+        .filter(|needle| !needle.is_empty())
+        .collect();
+    !needles.is_empty() && ["title", "originalTitle"].iter().any(|key| {
+        game.get(*key)
+            .and_then(Value::as_str)
+            .is_some_and(|title| {
+                let title = metadata_normalized(title);
+                needles.iter().any(|needle| title == *needle)
+            })
+    })
+}
+
+fn fuzzy_metadata_score(query: &str, game: &Value) -> f64 {
+    let needles: Vec<String> = metadata_search_queries(query)
+        .iter()
+        .map(|query| metadata_normalized(query))
+        .filter(|needle| !needle.is_empty())
+        .collect();
+    let mut best: f64 = 0.0;
+    for key in ["title", "originalTitle"] {
+        if let Some(title) = game.get(key).and_then(Value::as_str) {
+            let haystack = metadata_normalized(title);
+            if haystack.is_empty() {
+                continue;
+            }
+            let haystack_len = haystack.chars().count() as f64;
+            for needle in &needles {
+                let needle_len = needle.chars().count() as f64;
+                let score = if haystack == *needle {
+                    1.0
+                } else if haystack.starts_with(needle) || needle.starts_with(&haystack) {
+                    needle_len.min(haystack_len) / needle_len.max(haystack_len)
+                } else {
+                    0.0
+                };
+                best = best.max(score);
+            }
+        }
+    }
+    best
+}
+
+fn automatic_metadata_candidate(name: &str, sources: &[String]) -> Option<Value> {
+    let queries = metadata_search_queries(name);
+    let mut fuzzy: Vec<Value> = Vec::new();
+    for source in sources {
+        let mut games = Vec::new();
+        for query in queries.iter().take(2) {
+            if let Ok(mut found) = search_source(source, query) {
+                games.append(&mut found);
+            }
+            if games.iter().any(|game| exact_metadata_match(name, game)) {
+                break;
+            }
+        }
+        if let Some(exact) = games.iter().find(|game| exact_metadata_match(name, game)) {
+            return Some(exact.clone());
+        }
+        fuzzy.append(&mut games);
+    }
+    let mut scored: Vec<(f64, &Value)> = fuzzy
+        .iter()
+        .map(|game| (fuzzy_metadata_score(name, game), game))
+        .filter(|(score, _)| *score >= 0.92)
+        .collect();
+    scored.sort_by(|left, right| right.0.total_cmp(&left.0));
+    scored.first().map(|(_, game)| (*game).clone())
+}
+
+/// `metadata.sync`: match folder entries that do not yet have metadata. The
+/// frontend passes sources in preference order; unlike the manual search sheet
+/// this job stops at the first provider hit, mirroring the Swift automatic
+/// sync. Progress carries each refreshed entry so the grid updates card by card.
+pub(crate) fn sync(
+    store: &Arc<Store>,
+    params: &Value,
+    state: &Arc<Mutex<JobState>>,
+) -> Result<Value, (String, String)> {
+    let automatic = params["automatic"].as_bool().unwrap_or(false);
+    let include_characters = params["includeCharacters"].as_bool().unwrap_or(true);
+    let automatic_enabled = store.document.lock().unwrap().automatic_metadata;
+    if automatic && !automatic_enabled {
+        return Ok(json!({ "matched": 0, "failed": 0, "scanned": 0 }));
+    }
+    let sources: Vec<String> = params
+        .get("sources")
+        .and_then(Value::as_array)
+        .map(|items| items.iter().filter_map(Value::as_str).map(str::to_owned).collect())
+        .filter(|list: &Vec<String>| !list.is_empty())
+        .unwrap_or_else(|| {
+            ["bangumi", "vndb", "steam", "ymgal", "nextmoe"]
+                .iter().map(|source| source.to_string()).collect()
+        });
+    let entries = crate::native::library::entries(store, &json!({}))
+        .as_array().cloned().unwrap_or_default();
+    let folder_entries: Vec<Value> = entries
+        .into_iter()
+        .filter(|entry| entry.get("source").and_then(Value::as_str) == Some("folder"))
+        .collect();
+    let scanned = folder_entries.len() as u64;
+    let mut matched = 0_u64;
+    let mut failed = 0_u64;
+
+    let pending_entries: Vec<Value> = folder_entries
+        .into_iter()
+        .filter(|entry| {
+            entry
+                .get("id")
+                .and_then(Value::as_str)
+                .is_some_and(|entry_id| !store.metadata_dir(entry_id).join("metadata.json").is_file())
+        })
+        .collect();
+    // Match up to four folders at once, as the Swift backend does; applying
+    // the finished snapshots stays sequential so the store is never written
+    // concurrently.
+    for chunk in pending_entries.chunks(4) {
+        if state.lock().unwrap().cancel {
+            break;
+        }
+        let candidates: Vec<Option<Value>> = std::thread::scope(|scope| {
+            let handles: Vec<_> = chunk
+                .iter()
+                .map(|entry| {
+                    let entry_id = entry.get("id").and_then(Value::as_str).unwrap_or("");
+                    let name = entry.get("name").and_then(Value::as_str).unwrap_or(entry_id);
+                    let sources = &sources;
+                    scope.spawn(move || automatic_metadata_candidate(name, sources))
+                })
+                .collect();
+            handles
+                .into_iter()
+                .map(|handle| handle.join().unwrap_or(None))
+                .collect()
+        });
+        for (entry, candidate) in chunk.iter().zip(candidates) {
+            let Some(entry_id) = entry.get("id").and_then(Value::as_str) else { continue };
+            let Some(candidate) = candidate else { continue };
+            let source = candidate.get("source").and_then(Value::as_str).unwrap_or("");
+            let source_id = candidate.get("sourceID").and_then(Value::as_str).unwrap_or("");
+            let snapshot = fetch_snapshot(source, source_id, include_characters).unwrap_or(candidate);
+            match save_matched_snapshot(store, entry_id, &snapshot) {
+                Ok(()) => {
+                    matched += 1;
+                    let refreshed = crate::native::library::entries(store, &json!({}))
+                        .as_array().cloned().unwrap_or_default()
+                        .into_iter()
+                        .find(|row| row.get("id").and_then(Value::as_str) == Some(entry_id));
+                    if let Some(refreshed) = refreshed {
+                        state.lock().unwrap().progress = json!({
+                            "entryID": entry_id,
+                            "entry": refreshed,
+                        });
+                    }
+                }
+                Err(_) => failed += 1,
+            }
+        }
+    }
+    Ok(json!({ "matched": matched, "failed": failed, "scanned": scanned }))
 }
 
 fn normalize_metadata(candidate: &Value) -> Value {
@@ -939,4 +1218,29 @@ pub(crate) fn cover(store: &Store, method: &str, params: &Value) -> Result<Value
     let target = dir.join(format!("cover.{extension}"));
     std::fs::copy(source, &target).map_err(|error| ("copy_failed".into(), error.to_string()))?;
     Ok(json!({ "imported": true }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn metadata_queries_strip_release_noise() {
+        assert_eq!(clean_metadata_query("[ゆずソフト] 千恋万花 汉化硬盘版"), "千恋万花");
+        assert_eq!(clean_metadata_query("千恋万花 (Senren Banka)"), "千恋万花");
+    }
+
+    #[test]
+    fn exact_match_normalizes_punctuation() {
+        let game = json!({"title":"千恋＊万花","originalTitle":"Senren * Banka"});
+        assert!(exact_metadata_match("千恋万花", &game));
+    }
+
+    #[test]
+    #[ignore = "live metadata provider smoke test"]
+    fn live_automatic_candidate_senren_banka() {
+        let sources = vec!["bangumi".to_owned(), "vndb".to_owned()];
+        let candidate = automatic_metadata_candidate("千恋万花", &sources).expect("candidate");
+        assert_eq!(candidate["source"].as_str(), Some("vndb"));
+    }
 }

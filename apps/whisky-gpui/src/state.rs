@@ -1945,6 +1945,14 @@ impl WhiskyApp {
                         if onboarding {
                             self.onboarding = None;
                             self.maybe_start_tag_bar_hint(cx);
+                            // Entries often finish loading behind the welcome
+                            // sheet. Once scraping consent/preferences exist,
+                            // give those already-loaded cards their automatic
+                            // pass instead of waiting for a manual rescan.
+                            let containers: Vec<String> = self.bottle_entries.keys().cloned().collect();
+                            for container in containers {
+                                self.maybe_auto_sync_metadata(&container);
+                            }
                         }
                     }
                     Err(error) => {
@@ -3241,10 +3249,14 @@ impl WhiskyApp {
                                 );
                                 self.show_notice(message, cx);
                             }
-                            // Automatic runs already patched every matched
-                            // card through `EntrySynced`; staying silent here
-                            // also prevents the trigger loop that a
-                            // whole-bottle re-read would cause.
+                            if automatic {
+                                // Fast native jobs can finish before the next
+                                // progress poll, so progress-only patching is
+                                // not guaranteed. `auto_synced` is already set
+                                // for automatic passes, making this re-read
+                                // safe from retriggering itself.
+                                self.bridge.load_entries(&container);
+                            }
                         }
                         MetadataUpdate::Failed { reason } => {
                             if let Some(page) = self.game_info.as_mut() {

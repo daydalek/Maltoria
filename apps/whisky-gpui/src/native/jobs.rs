@@ -16,7 +16,7 @@ pub(crate) struct Job {
 
 pub(crate) struct JobState {
     pub(crate) status: &'static str,
-    pub(crate) progress: Option<f64>,
+    pub(crate) progress: Value,
     pub(crate) message: Option<String>,
     pub(crate) result: Option<Value>,
     pub(crate) error: Option<String>,
@@ -27,7 +27,7 @@ impl JobState {
     pub(crate) fn running() -> Self {
         Self {
             status: "running",
-            progress: None,
+            progress: Value::Null,
             message: None,
             result: None,
             error: None,
