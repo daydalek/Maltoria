@@ -2339,7 +2339,7 @@ impl WhiskyApp {
                 if !self.demo && let Some(container) = self.scan_root_picker.take() {
                     let paths: Vec<String> = paths
                         .into_iter()
-                        .filter(|path| path.starts_with('/'))
+                        .filter(|path| std::path::Path::new(path).is_absolute())
                         .collect();
                     if !paths.is_empty() {
                         self.folders_reload_after_write.insert(container.clone());

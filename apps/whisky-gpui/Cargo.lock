@@ -8040,6 +8040,7 @@ dependencies = [
  "ureq",
  "uuid",
  "whisky-bridge",
+ "windows 0.57.0",
  "windows-sys 0.61.2",
  "x11rb",
 ]

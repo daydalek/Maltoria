@@ -158,68 +158,87 @@ pub(crate) fn choose_folder(params: &Value) -> Result<Value, (String, String)> {
     }))
 }
 
-/// The managed folder browser is single-select, but `system.chooseFolders`
-/// still answers the protocol's array shape; callers can repeat the picker to
-/// add more roots.
+/// `system.chooseFolders`: modern multi-select folder picker reply.
 pub(crate) fn choose_folders(params: &Value) -> Result<Value, (String, String)> {
     let start = params.get("path").and_then(Value::as_str).unwrap_or("");
-    let paths = pick_path(true, start).into_iter().collect::<Vec<_>>();
-    Ok(json!({ "paths": paths }))
-}
-
-#[cfg(target_os = "windows")]
-fn powershell_string(raw: &str) -> String {
-    format!("'{}'", raw.replace('\'', "''"))
+    Ok(json!({ "paths": pick_paths(true, start, true) }))
 }
 
 #[cfg(target_os = "windows")]
 fn pick_path(folder: bool, start: &str) -> Option<String> {
-    // PowerShell hosts the shell common dialogs; no extra crate needed.
-    // STA is required for the folder browser. Force UTF-8 so non-ASCII paths
-    // survive the pipe on systems whose OEM code page is not UTF-8.
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    pick_paths(folder, start, false).into_iter().next()
+}
+
+#[cfg(target_os = "windows")]
+fn pick_paths(folder: bool, start: &str, multiple: bool) -> Vec<String> {
+    use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx, CoUninitialize};
+
+    let initialized = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+    if initialized.is_err() {
+        return Vec::new();
+    }
+    let paths = match pick_paths_com(folder, start, multiple) {
+        Ok(paths) => paths,
+        Err(error) => {
+            eprintln!("native picker failed: {error:?}");
+            Vec::new()
+        }
+    };
+    unsafe { CoUninitialize() };
+    paths
+}
+
+#[cfg(target_os = "windows")]
+fn pick_paths_com(
+    folder: bool,
+    start: &str,
+    multiple: bool,
+) -> windows::core::Result<Vec<String>> {
+    use windows::Win32::Foundation::{ERROR_CANCELLED, HWND};
+    use windows::Win32::System::Com::{CLSCTX_ALL, CoCreateInstance, CoTaskMemFree};
+    use windows::Win32::UI::Shell::{
+        FOS_ALLOWMULTISELECT, FOS_FILEMUSTEXIST, FOS_PICKFOLDERS, FileOpenDialog,
+        IFileOpenDialog, IShellItem, SHCreateItemFromParsingName, SIGDN_FILESYSPATH,
+    };
+    use windows::core::{HRESULT, HSTRING};
+
+    let dialog: IFileOpenDialog = unsafe { CoCreateInstance(&FileOpenDialog, None, CLSCTX_ALL)? };
+    let mut options = FOS_FILEMUSTEXIST;
+    if multiple {
+        options |= FOS_ALLOWMULTISELECT;
+    }
+    if folder {
+        options |= FOS_PICKFOLDERS;
+    }
+    unsafe { dialog.SetOptions(options)? };
 
     let start = normalize_path(start);
-    let initial = (!start.is_empty()).then(|| powershell_string(&start));
-    let script = if folder {
-        let selected = initial
-            .as_ref()
-            .map(|path| format!("$d.SelectedPath = {path};"))
-            .unwrap_or_default();
-        format!(
-            "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; \
-             Add-Type -AssemblyName System.Windows.Forms; \
-             $d = New-Object System.Windows.Forms.FolderBrowserDialog; \
-             $d.ShowNewFolderButton = $true; {selected} \
-             if ($d.ShowDialog() -eq 'OK') {{ $d.SelectedPath }}"
-        )
-    } else {
-        let initial_directory = initial
-            .as_ref()
-            .map(|path| format!("$d.InitialDirectory = {path};"))
-            .unwrap_or_default();
-        format!(
-            "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; \
-             Add-Type -AssemblyName System.Windows.Forms; \
-             $d = New-Object System.Windows.Forms.OpenFileDialog; \
-             $d.Filter = 'Programs (*.exe)|*.exe|All files (*.*)|*.*'; {initial_directory} \
-             if ($d.ShowDialog() -eq 'OK') {{ $d.FileName }}"
-        )
-    };
-    let output = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-STA", "-Command", &script])
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
+    if !start.is_empty() && std::path::Path::new(&start).is_dir() {
+        if let Ok(item) = unsafe {
+            SHCreateItemFromParsingName::<_, _, IShellItem>(&HSTRING::from(start.as_str()), None)
+        } {
+            let _ = unsafe { dialog.SetFolder(&item) };
+        }
     }
-    let text = String::from_utf8_lossy(&output.stdout)
-        .trim_start_matches('\u{feff}')
-        .trim()
-        .to_owned();
-    (!text.is_empty()).then(|| normalize_path(&text))
+
+    if let Err(error) = unsafe { dialog.Show(HWND::default()) } {
+        if error.code() == HRESULT::from_win32(ERROR_CANCELLED.0) {
+            return Ok(Vec::new());
+        }
+        return Err(error);
+    }
+
+    let results = unsafe { dialog.GetResults()? };
+    let count = unsafe { results.GetCount()? };
+    let mut paths = Vec::with_capacity(count as usize);
+    for index in 0..count {
+        let item = unsafe { results.GetItemAt(index)? };
+        let display = unsafe { item.GetDisplayName(SIGDN_FILESYSPATH)? };
+        let path = unsafe { display.to_string()? };
+        unsafe { CoTaskMemFree(Some(display.0.cast())) };
+        paths.push(normalize_path(&path));
+    }
+    Ok(paths)
 }
 
 #[cfg(not(target_os = "windows"))]
